@@ -1,0 +1,70 @@
+name: Frontend Issue
+description: 프론트엔드 작업 단위 이슈 (화면, API 연결, 리팩터링 등)
+title: "[type] "
+labels: []
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        간단히 작성해주세요. 필수는 `개요`와 `작업 내용`만 입력하면 됩니다.
+
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: "🧩 이슈 유형"
+      description: 가장 가까운 작업 유형을 선택해주세요.
+      options:
+        - feat
+        - fix
+        - refactor
+        - docs
+        - chore
+        - test
+    validations:
+      required: true
+
+  - type: textarea
+    id: overview
+    attributes:
+      label: "📝 개요"
+      description: 무엇을 왜 바꾸는지 한두 문장으로 작성해주세요.
+      placeholder: 예) 메인 매칭 흐름에 ready-check 단계를 추가
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: "🧭 영향 범위 (선택)"
+      description: 관련 라우트, feature, API/BFF 경로를 적어주세요.
+      placeholder: |
+        예)
+        - route: /
+        - feature: src/features/home
+        - api: /api/queue/join
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: "✅ 작업 내용"
+      description: 필요한 작업만 체크리스트로 적어주세요.
+      value: |
+        - [ ] 작업 1
+        - [ ] 작업 2
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: "🎯 기대 결과 (선택)"
+      description: 완료 후 기대하는 결과를 짧게 작성해주세요.
+      placeholder: 예) 메인에서 큐 대기 모달과 수락 모달이 정상 동작함
+
+  - type: textarea
+    id: references
+    attributes:
+      label: "🔗 참고 링크 / 메모 (선택)"
+      description: PR, 피그마, 문서, 스크린샷 링크가 있으면 남겨주세요.
