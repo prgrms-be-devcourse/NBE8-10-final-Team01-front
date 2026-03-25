@@ -23,6 +23,7 @@
 # misc
 .DS_Store
 *.pem
+LOCAL_AGENT_NOTES.md
 
 # debug
 npm-debug.log*

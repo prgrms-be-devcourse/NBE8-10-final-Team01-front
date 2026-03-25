@@ -1,5 +1,5 @@
-<!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
+# 에이전트 안내
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
+- 공유 구현 메모는 [docs/frontend-wireframe.md](/Users/chan/IdeaProjects/NBE8-10-final-Team01-front/docs/frontend-wireframe.md)에 둔다.
+- 로컬 전용 작업 메모는 `LOCAL_AGENT_NOTES.md`에 둔다.
+- `LOCAL_AGENT_NOTES.md`는 `.gitignore`로 관리한다.
