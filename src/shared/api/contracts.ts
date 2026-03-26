@@ -124,6 +124,32 @@ export interface BattleResultResponse {
   participants: BattleResultParticipant[];
 }
 
+export interface MyBattleResultItem {
+  roomId: number;
+  problemId: number;
+  problemTitle: string;
+  finalRank: number;
+  scoreDelta: number;
+  solved: boolean;
+  finishTime: string | null;
+  playedAt: string;
+}
+
+export interface PageInfo {
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  hasNext: boolean;
+}
+
+export interface MyBattleResultsData {
+  battleResults: MyBattleResultItem[];
+  pageInfo: PageInfo;
+}
+
+export type MyBattleResultsResponse = RsData<MyBattleResultsData | null>;
+
 export interface RoomListResponse {
   roomId: number;
   status: string;
