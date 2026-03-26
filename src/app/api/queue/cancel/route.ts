@@ -10,7 +10,6 @@ import {
 import {
   FRONTEND_ACCESS_TOKEN_COOKIE,
   getSessionMemberFromToken,
-  parseMatchedRoomId,
 } from "@/shared/auth/session";
 
 function unauthorizedResponse() {
@@ -52,7 +51,6 @@ export async function DELETE() {
       category: body?.category ?? "",
       difficulty: body?.difficulty ?? "",
       waitingCount: body?.waitingCount ?? 0,
-      matchedRoomId: body?.message ? parseMatchedRoomId(body.message) : null,
     };
 
     return NextResponse.json(result);

@@ -55,7 +55,11 @@ export interface QueueStatusResponse {
   category: string;
   difficulty: string;
   waitingCount: number;
-  matchedRoomId: number | null;
+}
+
+export interface MatchStatusResponse {
+  status: "IDLE" | "SEARCHING" | "MATCHED";
+  roomId: number | null;
 }
 
 export interface ParticipantInfo {

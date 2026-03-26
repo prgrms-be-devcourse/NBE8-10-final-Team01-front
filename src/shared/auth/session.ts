@@ -66,14 +66,3 @@ export function extractAccessTokenFromSetCookie(
 
   return decodeURIComponent(matched[1]);
 }
-
-export function parseMatchedRoomId(message: string): number | null {
-  const matched = message.match(/roomId=(\d+)/);
-
-  if (!matched?.[1]) {
-    return null;
-  }
-
-  const roomId = Number(matched[1]);
-  return Number.isFinite(roomId) ? roomId : null;
-}
