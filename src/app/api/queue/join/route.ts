@@ -14,7 +14,6 @@ import {
 import {
   FRONTEND_ACCESS_TOKEN_COOKIE,
   getSessionMemberFromToken,
-  parseMatchedRoomId,
 } from "@/shared/auth/session";
 
 function unauthorizedResponse() {
@@ -64,7 +63,6 @@ export async function POST(request: Request) {
             category: queueState.category ?? payload.category,
             difficulty: queueState.difficulty ?? payload.difficulty,
             waitingCount: queueState.waitingCount,
-            matchedRoomId: null,
           } satisfies QueueStatusResponse,
           { status: 409 },
         );
@@ -97,7 +95,6 @@ export async function POST(request: Request) {
       category: body?.category ?? payload.category,
       difficulty: body?.difficulty ?? payload.difficulty,
       waitingCount: body?.waitingCount ?? 0,
-      matchedRoomId: body?.message ? parseMatchedRoomId(body.message) : null,
     };
 
     return NextResponse.json(result);

@@ -1,40 +1,6 @@
 import type { Difficulty } from "@/shared/api/contracts";
 
-export type MatchTicketStatus = "MATCH_FOUND" | "ACCEPTED" | "READY_TO_ENTER";
-
-export interface MatchTicketState {
-  ticketId: string;
-  roomId: number;
-  category: string;
-  difficulty: string;
-  maxPlayers: number;
-  acceptedMemberIds: number[];
-  deadlineAt: string;
-  status: MatchTicketStatus;
-}
-
-export type ReadyCheckMessage =
-  | {
-      type: "MATCH_FOUND";
-      ticket: MatchTicketState;
-    }
-  | {
-      type: "ACCEPTED";
-      ticketId: string;
-      roomId: number;
-      memberId: number;
-      acceptedMemberIds: number[];
-      maxPlayers: number;
-    }
-  | {
-      type: "DECLINED";
-      ticketId: string;
-      memberId: number;
-      acceptedMemberIds: number[];
-    };
-
-export const READY_CHECK_TIMEOUT_MS = 15_000;
-export const READY_CHECK_CHANNEL = "algo-battle-ready-check";
+export const SEARCH_POLL_INTERVAL_MS = 1_000;
 
 export const queueCategories: Array<{
   value:
@@ -96,39 +62,6 @@ export function getQueueCategoryLabel(category: string | null) {
   return queueCategories.find((item) => item.value === category)?.label ?? category;
 }
 
-export function createMatchTicket(params: {
-  roomId: number;
-  category: string;
-  difficulty: string;
-  maxPlayers?: number;
-}) {
-  const maxPlayers = params.maxPlayers ?? 4;
-
-  return {
-    ticketId: `ticket-${params.roomId}`,
-    roomId: params.roomId,
-    category: params.category,
-    difficulty: params.difficulty,
-    maxPlayers,
-    acceptedMemberIds: [],
-    deadlineAt: new Date(Date.now() + READY_CHECK_TIMEOUT_MS).toISOString(),
-    status: "MATCH_FOUND",
-  } satisfies MatchTicketState;
-}
-
-export function acceptMatchTicket(ticket: MatchTicketState, memberId: number) {
-  const acceptedMemberIds = ticket.acceptedMemberIds.includes(memberId)
-    ? ticket.acceptedMemberIds
-    : [...ticket.acceptedMemberIds, memberId];
-
-  return {
-    ...ticket,
-    acceptedMemberIds,
-    status:
-      acceptedMemberIds.length >= ticket.maxPlayers ? "READY_TO_ENTER" : "ACCEPTED",
-  } satisfies MatchTicketState;
-}
-
 export function formatClock(totalSeconds: number) {
   const safeSeconds = Math.max(0, totalSeconds);
   const minutes = Math.floor(safeSeconds / 60);
@@ -143,8 +76,4 @@ export function getElapsedSeconds(startedAt: string | null, now: number) {
   }
 
   return Math.floor((now - new Date(startedAt).getTime()) / 1000);
-}
-
-export function getCountdownSeconds(deadlineAt: string, now: number) {
-  return Math.max(0, Math.ceil((new Date(deadlineAt).getTime() - now) / 1000));
 }

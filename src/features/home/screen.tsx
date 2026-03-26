@@ -7,24 +7,27 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import type {
   ApiErrorResponse,
   Difficulty,
+  MatchStatusResponse,
   QueueStateResponse,
   QueueStatusResponse,
   SessionResponse,
 } from "@/shared/api/contracts";
-import { ApiCallout, MetricCard, MetricGrid, PageHero, Panel, StatusPill } from "@/shared/ui";
+import {
+  ApiCallout,
+  MetricCard,
+  MetricGrid,
+  PageHero,
+  Panel,
+  StatusPill,
+} from "@/shared/ui";
 
 import {
-  acceptMatchTicket,
-  createMatchTicket,
   dashboardMenus,
   difficultyOptions,
-  getCountdownSeconds,
   getElapsedSeconds,
   getQueueCategoryLabel,
   queueCategories,
-  READY_CHECK_CHANNEL,
-  type MatchTicketState,
-  type ReadyCheckMessage,
+  SEARCH_POLL_INTERVAL_MS,
 } from "./data";
 import QueueModal from "./queue-modal";
 
@@ -33,6 +36,11 @@ const defaultQueueState: QueueStateResponse = {
   category: null,
   difficulty: null,
   waitingCount: 0,
+};
+
+const defaultMatchState: MatchStatusResponse = {
+  status: "IDLE",
+  roomId: null,
 };
 
 async function readSession() {
@@ -52,20 +60,20 @@ async function readQueueState() {
   const response = await fetch("/api/queue/me", { cache: "no-store" });
 
   if (!response.ok) {
-    return defaultQueueState;
+    return null;
   }
 
   return (await response.json()) as QueueStateResponse;
 }
 
-function broadcastReadyCheckMessage(message: ReadyCheckMessage) {
-  if (typeof window === "undefined" || !("BroadcastChannel" in window)) {
-    return;
+async function readMatchState() {
+  const response = await fetch("/api/matches/me", { cache: "no-store" });
+
+  if (!response.ok) {
+    return null;
   }
 
-  const channel = new BroadcastChannel(READY_CHECK_CHANNEL);
-  channel.postMessage(message);
-  channel.close();
+  return (await response.json()) as MatchStatusResponse;
 }
 
 export default function HomeScreen() {
@@ -75,31 +83,16 @@ export default function HomeScreen() {
     member: null,
   });
   const [queueState, setQueueState] = useState(defaultQueueState);
+  const [matchState, setMatchState] = useState(defaultMatchState);
   const [category, setCategory] = useState<(typeof queueCategories)[number]["value"]>("dp");
   const [difficulty, setDifficulty] = useState<Difficulty>("EASY");
   const [queueStartedAt, setQueueStartedAt] = useState<string | null>(null);
-  const [matchTicket, setMatchTicket] = useState<MatchTicketState | null>(null);
   const [feedback, setFeedback] = useState("메인에서 바로 매칭을 시작하는 구조를 기본값으로 둡니다.");
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(0);
   const [isPending, startTransition] = useTransition();
 
-  const sessionRef = useRef(session);
-  const queueStateRef = useRef(queueState);
-  const matchTicketRef = useRef(matchTicket);
-  const suppressQueueDropNoticeRef = useRef(false);
-
-  useEffect(() => {
-    sessionRef.current = session;
-  }, [session]);
-
-  useEffect(() => {
-    queueStateRef.current = queueState;
-  }, [queueState]);
-
-  useEffect(() => {
-    matchTicketRef.current = matchTicket;
-  }, [matchTicket]);
+  const redirectingRoomIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -116,219 +109,106 @@ export default function HomeScreen() {
       const nextSession = await readSession();
       setSession(nextSession);
 
-      if (nextSession.authenticated) {
-        const nextQueueState = await readQueueState();
-        setQueueState(nextQueueState);
+      if (!nextSession.authenticated) {
+        setQueueState(defaultQueueState);
+        setMatchState(defaultMatchState);
+        setQueueStartedAt(null);
+        return;
+      }
 
-        if (nextQueueState.inQueue) {
-          setQueueStartedAt(new Date().toISOString());
-        }
+      const [nextQueueState, nextMatchState] = await Promise.all([
+        readQueueState(),
+        readMatchState(),
+      ]);
 
-        if (nextQueueState.inQueue && nextQueueState.category === "RANDOM") {
-          setError(
-            "이전 요청으로 전체(무작위) 큐에 들어가 있습니다. 큐를 취소한 뒤 구체 카테고리로 다시 시작해주세요.",
-          );
-        }
+      const resolvedMatchState = nextMatchState ?? defaultMatchState;
+      const resolvedQueueState =
+        nextQueueState ??
+        (resolvedMatchState.status === "SEARCHING"
+          ? {
+              ...defaultQueueState,
+              inQueue: true,
+            }
+          : defaultQueueState);
 
-        if (nextQueueState.inQueue && nextQueueState.category === "GRAPH") {
-          setError(
-            "이전 요청으로 GRAPH 큐에 들어가 있습니다. 큐를 취소한 뒤 새 그래프 카테고리로 다시 시작해주세요.",
-          );
-        }
+      setQueueState(resolvedQueueState);
+      setMatchState(resolvedMatchState);
+
+      if (resolvedMatchState.status === "MATCHED" && resolvedMatchState.roomId !== null) {
+        redirectingRoomIdRef.current = resolvedMatchState.roomId;
+        setError(null);
+        setFeedback(`roomId ${resolvedMatchState.roomId} 배틀룸으로 이동합니다.`);
+        router.push(`/battle/rooms/${resolvedMatchState.roomId}`);
+        return;
+      }
+
+      if (resolvedMatchState.status === "SEARCHING" || resolvedQueueState.inQueue) {
+        setQueueStartedAt((current) => current ?? new Date().toISOString());
+        setFeedback("플레이어를 찾는 중입니다. /matches/me가 MATCHED를 반환하면 배틀룸으로 이동합니다.");
       }
     })();
-  }, []);
+  }, [router]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !("BroadcastChannel" in window)) {
+    if (!session.authenticated || matchState.status !== "SEARCHING") {
       return;
     }
 
-    const channel = new BroadcastChannel(READY_CHECK_CHANNEL);
+    let active = true;
 
-    const handleMessage = (event: MessageEvent<ReadyCheckMessage>) => {
-      const message = event.data;
-      const currentSession = sessionRef.current;
-      const currentQueueState = queueStateRef.current;
-      const currentTicket = matchTicketRef.current;
+    const poll = async () => {
+      const nextMatchState = await readMatchState();
 
-      if (!currentSession.member) {
+      if (!active || !nextMatchState) {
         return;
       }
 
-      if (message.type === "MATCH_FOUND") {
-        if (currentTicket?.ticketId === message.ticket.ticketId) {
-          return;
-        }
-
-        const isSameQueue =
-          currentQueueState.inQueue &&
-          currentQueueState.category === message.ticket.category &&
-          currentQueueState.difficulty === message.ticket.difficulty;
-
-        if (!isSameQueue) {
-          return;
-        }
-
-        suppressQueueDropNoticeRef.current = true;
-        setQueueState(defaultQueueState);
-        setMatchTicket(message.ticket);
+      if (nextMatchState.status === "MATCHED" && nextMatchState.roomId !== null) {
+        setMatchState(nextMatchState);
+        redirectingRoomIdRef.current = nextMatchState.roomId;
         setError(null);
-        setFeedback("매칭이 성사됐습니다. 15초 안에 준비 완료를 눌러주세요.");
+        setFeedback(`roomId ${nextMatchState.roomId} 배틀룸으로 이동합니다.`);
+        router.push(`/battle/rooms/${nextMatchState.roomId}`);
         return;
       }
 
-      if (!currentTicket || currentTicket.ticketId !== message.ticketId) {
-        return;
-      }
+      if (nextMatchState.status === "SEARCHING") {
+        setMatchState(nextMatchState);
 
-      if (message.type === "ACCEPTED") {
-        const nextTicket = {
-          ...currentTicket,
-          acceptedMemberIds: message.acceptedMemberIds,
-          status:
-            message.acceptedMemberIds.length >= message.maxPlayers
-              ? "READY_TO_ENTER"
-              : "ACCEPTED",
-        } satisfies MatchTicketState;
-
-        setMatchTicket(nextTicket);
-        setError(null);
-        setFeedback(
-          nextTicket.status === "READY_TO_ENTER"
-            ? "전원 수락 완료. 배틀룸으로 이동합니다."
-            : `${message.acceptedMemberIds.length}/${message.maxPlayers}명이 준비 완료했습니다.`,
-        );
-        return;
-      }
-
-      if (message.type === "DECLINED") {
-        const selfMemberId = currentSession.member.memberId;
-        const selfAccepted = currentTicket.acceptedMemberIds.includes(selfMemberId);
-        const selfDeclined = message.memberId === selfMemberId;
-
-        setMatchTicket(null);
-        setError(null);
-
-        if (selfDeclined || !selfAccepted) {
-          setQueueState(defaultQueueState);
-          setQueueStartedAt(null);
-          setFeedback("수락을 완료하지 않아 큐에서 제외되었습니다.");
-          return;
-        }
-
-        // TODO(front-backend): 서버에서 ready-check 실패 후 남은 인원을 다시 큐에 넣고 waitingCount를 내려줘야 한다.
-        setQueueState({
-          inQueue: true,
-          category: currentTicket.category,
-          difficulty: currentTicket.difficulty,
-          waitingCount: message.acceptedMemberIds.length,
-        });
-        setQueueStartedAt(new Date().toISOString());
-        setFeedback("한 명이 수락하지 않아 남은 인원으로 다시 큐를 찾습니다.");
-      }
-    };
-
-    channel.addEventListener("message", handleMessage);
-
-    return () => {
-      channel.removeEventListener("message", handleMessage);
-      channel.close();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!session.authenticated || !queueState.inQueue || matchTicket) {
-      return;
-    }
-
-    const intervalId = window.setInterval(() => {
-      void (async () => {
         const nextQueueState = await readQueueState();
 
-        if (!nextQueueState.inQueue) {
-          if (suppressQueueDropNoticeRef.current) {
-            suppressQueueDropNoticeRef.current = false;
-          } else {
-            setError(
-              "큐는 종료됐지만 ready-check 정보는 아직 프론트 브로드캐스트 임시 구조에 의존합니다. 백엔드에 내 매칭 방 조회 API가 붙으면 이 경로는 교체됩니다.",
-            );
-            setFeedback("큐 상태가 종료되었습니다.");
-          }
+        if (!active) {
+          return;
         }
 
-        setQueueState(nextQueueState);
-      })();
-    }, 3000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [matchTicket, queueState.inQueue, session.authenticated]);
-
-  useEffect(() => {
-    if (!matchTicket || matchTicket.status === "READY_TO_ENTER") {
-      return;
-    }
-
-    const remainingSeconds = getCountdownSeconds(matchTicket.deadlineAt, now);
-
-    if (remainingSeconds > 0 || !session.member) {
-      return;
-    }
-
-    const memberId = session.member.memberId;
-
-    const timeoutId = window.setTimeout(() => {
-      const selfAccepted = matchTicket.acceptedMemberIds.includes(memberId);
-
-      setMatchTicket(null);
-      setError(null);
-
-      if (selfAccepted) {
-        // TODO(front-backend): 수락 제한 시간이 지나면 서버가 남은 인원을 다시 큐에 올리고 새 ticket을 만들어줘야 한다.
-        setQueueState({
-          inQueue: true,
-          category: matchTicket.category,
-          difficulty: matchTicket.difficulty,
-          waitingCount: matchTicket.acceptedMemberIds.length,
-        });
-        setQueueStartedAt(new Date().toISOString());
-        setFeedback("한 명이 확인하지 않아 남은 인원으로 다시 큐를 찾습니다.");
+        setQueueState(
+          nextQueueState ??
+            ({
+              ...defaultQueueState,
+              inQueue: true,
+            } satisfies QueueStateResponse),
+        );
+        setQueueStartedAt((current) => current ?? new Date().toISOString());
         return;
       }
 
+      setMatchState(nextMatchState);
       setQueueState(defaultQueueState);
       setQueueStartedAt(null);
-      setFeedback("수락 시간이 지나 큐에서 제외되었습니다.");
-    }, 0);
+      setFeedback("큐 상태가 종료되었습니다.");
+    };
+
+    void poll();
+
+    const intervalId = window.setInterval(() => {
+      void poll();
+    }, SEARCH_POLL_INTERVAL_MS);
 
     return () => {
-      window.clearTimeout(timeoutId);
+      active = false;
+      window.clearInterval(intervalId);
     };
-  }, [matchTicket, now, session.member]);
-
-  useEffect(() => {
-    if (
-      !matchTicket ||
-      matchTicket.status !== "READY_TO_ENTER" ||
-      !session.member ||
-      !matchTicket.acceptedMemberIds.includes(session.member.memberId)
-    ) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setFeedback(`roomId ${matchTicket.roomId} 배틀룸으로 이동합니다.`);
-      setMatchTicket(null);
-      setQueueStartedAt(null);
-      router.push(`/battle/rooms/${matchTicket.roomId}`);
-    }, 700);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [matchTicket, router, session.member]);
+  }, [matchState.status, router, session.authenticated]);
 
   function handleProtectedMove(href: string) {
     if (!session.authenticated) {
@@ -352,13 +232,12 @@ export default function HomeScreen() {
       return;
     }
 
-    if (queueState.inQueue || matchTicket) {
-      setFeedback("이미 큐 또는 수락 모달이 진행 중입니다.");
+    if (matchState.status === "SEARCHING") {
+      setFeedback("이미 큐가 진행 중입니다.");
       return;
     }
 
     setError(null);
-    setQueueStartedAt(new Date().toISOString());
 
     startTransition(() => {
       void (async () => {
@@ -373,33 +252,30 @@ export default function HomeScreen() {
           }),
         });
 
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-          setQueueStartedAt(null);
-          setError(payload?.message ?? "큐 참가 요청에 실패했습니다.");
+        const payload = (await response.json().catch(() => null)) as
+          | QueueStatusResponse
+          | ApiErrorResponse
+          | null;
+
+        if (response.status === 409 && payload && "category" in payload) {
+          setQueueState({
+            inQueue: true,
+            category: payload.category,
+            difficulty: payload.difficulty,
+            waitingCount: payload.waitingCount,
+          });
+          setMatchState({
+            status: "SEARCHING",
+            roomId: null,
+          });
+          setQueueStartedAt((current) => current ?? new Date().toISOString());
+          setFeedback(payload.message);
           return;
         }
 
-        const payload = (await response.json()) as QueueStatusResponse;
-        setFeedback(payload.message);
-
-        if (payload.matchedRoomId) {
-          const nextTicket = createMatchTicket({
-            roomId: payload.matchedRoomId,
-            category: payload.category,
-            difficulty: payload.difficulty,
-          });
-
-          suppressQueueDropNoticeRef.current = true;
-          setQueueState(defaultQueueState);
-          setMatchTicket(nextTicket);
-          setFeedback("매칭이 성사됐습니다. 15초 안에 준비 완료를 눌러주세요.");
-
-          // TODO(front-backend): /api/matchmaking/me 또는 내 매칭 방 조회 API가 생기면 이 브로드캐스트 임시 동기화를 제거한다.
-          broadcastReadyCheckMessage({
-            type: "MATCH_FOUND",
-            ticket: nextTicket,
-          });
+        if (!response.ok || !payload || !("category" in payload)) {
+          setQueueStartedAt(null);
+          setError(payload && "message" in payload ? payload.message : "큐 참가 요청에 실패했습니다.");
           return;
         }
 
@@ -409,13 +285,32 @@ export default function HomeScreen() {
           difficulty: payload.difficulty,
           waitingCount: payload.waitingCount,
         });
+        setMatchState({
+          status: "SEARCHING",
+          roomId: null,
+        });
+        setQueueStartedAt(new Date().toISOString());
+        setFeedback(payload.message);
+
+        const nextMatchState = await readMatchState();
+
+        if (nextMatchState?.status === "MATCHED" && nextMatchState.roomId !== null) {
+          setMatchState(nextMatchState);
+          redirectingRoomIdRef.current = nextMatchState.roomId;
+          setError(null);
+          setFeedback(`roomId ${nextMatchState.roomId} 배틀룸으로 이동합니다.`);
+          router.push(`/battle/rooms/${nextMatchState.roomId}`);
+        }
       })();
     });
   }
 
   function handleCancelMatch() {
+    if (matchState.status !== "SEARCHING") {
+      return;
+    }
+
     setError(null);
-    suppressQueueDropNoticeRef.current = true;
 
     startTransition(() => {
       void (async () => {
@@ -423,70 +318,25 @@ export default function HomeScreen() {
           method: "DELETE",
         });
 
+        const payload = (await response.json().catch(() => null)) as
+          | QueueStatusResponse
+          | ApiErrorResponse
+          | null;
+
         if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-          setError(payload?.message ?? "큐 취소 요청에 실패했습니다.");
+          setError(payload && "message" in payload ? payload.message : "큐 취소 요청에 실패했습니다.");
           return;
         }
 
-        const payload = (await response.json()) as QueueStatusResponse;
-        setFeedback(payload.message);
         setQueueState(defaultQueueState);
+        setMatchState(defaultMatchState);
         setQueueStartedAt(null);
+        setFeedback(payload && "message" in payload ? payload.message : "큐 취소가 완료되었습니다.");
       })();
     });
   }
 
-  function handleAcceptMatch() {
-    if (!matchTicket || !session.member) {
-      return;
-    }
-
-    const nextTicket = acceptMatchTicket(matchTicket, session.member.memberId);
-    setMatchTicket(nextTicket);
-    setError(null);
-    setFeedback(
-      nextTicket.status === "READY_TO_ENTER"
-        ? "전원 수락 완료. 배틀룸으로 이동합니다."
-        : `${nextTicket.acceptedMemberIds.length}/${nextTicket.maxPlayers}명이 준비 완료했습니다.`,
-    );
-
-    // TODO(front-backend): POST /api/matchmaking/{ticketId}/accept 응답으로 acceptedCount, deadlineAt, roomId를 받아야 한다.
-    broadcastReadyCheckMessage({
-      type: "ACCEPTED",
-      ticketId: nextTicket.ticketId,
-      roomId: nextTicket.roomId,
-      memberId: session.member.memberId,
-      acceptedMemberIds: nextTicket.acceptedMemberIds,
-      maxPlayers: nextTicket.maxPlayers,
-    });
-  }
-
-  function handleDeclineMatch() {
-    if (!matchTicket || !session.member) {
-      return;
-    }
-
-    setMatchTicket(null);
-    setQueueState(defaultQueueState);
-    setQueueStartedAt(null);
-    setError(null);
-    setFeedback("수락을 거절해 큐에서 제외되었습니다.");
-
-    // TODO(front-backend): POST /api/matchmaking/{ticketId}/decline 후 서버가 남은 인원을 다시 큐에 넣어야 한다.
-    broadcastReadyCheckMessage({
-      type: "DECLINED",
-      ticketId: matchTicket.ticketId,
-      memberId: session.member.memberId,
-      acceptedMemberIds: matchTicket.acceptedMemberIds.filter(
-        (memberId) => memberId !== session.member?.memberId,
-      ),
-    });
-  }
-
   function handleLogout() {
-    suppressQueueDropNoticeRef.current = true;
-
     startTransition(() => {
       void (async () => {
         await fetch("/api/auth/logout", { method: "POST" });
@@ -495,49 +345,38 @@ export default function HomeScreen() {
           member: null,
         });
         setQueueState(defaultQueueState);
+        setMatchState(defaultMatchState);
         setQueueStartedAt(null);
-        setMatchTicket(null);
+        redirectingRoomIdRef.current = null;
         setFeedback("로그아웃되었습니다.");
         router.refresh();
       })();
     });
   }
 
-  const activeCategoryLabel = getQueueCategoryLabel(
-    matchTicket?.category ?? queueState.category ?? category,
-  );
-  const activeDifficultyLabel = matchTicket?.difficulty ?? queueState.difficulty ?? difficulty;
-  const hasAccepted = Boolean(
-    matchTicket && session.member && matchTicket.acceptedMemberIds.includes(session.member.memberId),
-  );
+  const isSearching = session.authenticated && matchState.status === "SEARCHING";
+  const waitingCount = Math.max(queueState.waitingCount, isSearching ? 1 : 0);
+  const activeCategoryLabel = getQueueCategoryLabel(queueState.category ?? category);
+  const activeDifficultyLabel = queueState.difficulty ?? difficulty;
   const queueElapsedSeconds = getElapsedSeconds(queueStartedAt, now);
-  const readyCountdownSeconds = matchTicket ? getCountdownSeconds(matchTicket.deadlineAt, now) : 0;
-  const queueStatusValue = matchTicket
-    ? matchTicket.status === "READY_TO_ENTER"
-      ? "입장 준비 완료"
-      : "수락 확인 중"
-    : queueState.inQueue
-      ? "대기 중"
-      : "대기 전";
-  const queueStatusHint = matchTicket
-    ? `${matchTicket.acceptedMemberIds.length}/${matchTicket.maxPlayers} 수락`
-    : queueState.inQueue
-      ? `${queueState.waitingCount}명 대기`
-      : "메인에서 바로 시작";
+  const queueStatusValue = isSearching ? "대기 중" : "대기 전";
+  const queueStatusHint = isSearching
+    ? `${waitingCount}명 대기`
+    : "메인에서 바로 시작";
 
   return (
     <div className="space-y-8">
       <PageHero
         eyebrow="Main"
-        title="메인에서 큐를 잡고, 수락 확인 뒤 배틀룸으로 이동"
-        description="비로그인 사용자는 서비스 구조를 볼 수 있고, 실제 매칭 시작이나 보호 화면 진입 시 `/login`으로 이동합니다. 로그인 후에는 메인에서 큐 대기, 수락 모달, 배틀룸 진입까지 이어집니다."
+        title="메인에서 큐를 잡고, 매칭 성사 뒤 배틀룸으로 이동"
+        description="비로그인 사용자는 서비스 구조를 볼 수 있고, 실제 매칭 시작이나 보호 화면 진입 시 `/login`으로 이동합니다. 로그인 후에는 메인에서 큐 대기, `/matches/me` 폴링, 배틀룸 진입까지 이어집니다."
         actions={
           <>
             <StatusPill tone={session.authenticated ? "success" : "warn"}>
               {session.authenticated ? "로그인 상태" : "게스트 상태"}
             </StatusPill>
-            <StatusPill>4 player queue</StatusPill>
-            <StatusPill>Ready check</StatusPill>
+            <StatusPill>4인 매칭</StatusPill>
+            <StatusPill>매칭 상태 폴링</StatusPill>
           </>
         }
       />
@@ -609,7 +448,7 @@ export default function HomeScreen() {
         <MetricCard
           label="카테고리"
           value={activeCategoryLabel}
-          hint="같은 조건의 4명이 모이면 수락 모달 표시"
+          hint="같은 조건의 4명이 모이면 즉시 방을 배정합니다."
         />
         <MetricCard
           label="난이도"
@@ -619,7 +458,10 @@ export default function HomeScreen() {
       </MetricGrid>
 
       <div className="grid gap-6 xl:grid-cols-[0.85fr_1.3fr_0.85fr]">
-        <Panel title="사이드 메뉴" description="팀이 페이지별로 나눠 작업할 수 있도록 진입점을 분리합니다.">
+        <Panel
+          title="사이드 메뉴"
+          description="팀이 페이지별로 나눠 작업할 수 있도록 진입점을 분리합니다."
+        >
           <div className="space-y-3">
             {dashboardMenus.map((menu) => {
               const href =
@@ -694,23 +536,25 @@ export default function HomeScreen() {
               </div>
             </fieldset>
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={handleStartMatch}
-                disabled={isPending || queueState.inQueue || matchTicket !== null}
+                disabled={isPending || isSearching}
                 className="rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-500"
               >
-                {isPending ? "처리 중..." : queueState.inQueue || matchTicket ? "큐 진행 중" : "매칭 시작"}
+                {isSearching ? "큐 진행 중" : isPending ? "처리 중..." : "매칭 시작"}
               </button>
-              <button
-                type="button"
-                onClick={handleCancelMatch}
-                disabled={isPending || !queueState.inQueue}
-                className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:text-zinc-400"
-              >
-                큐 취소
-              </button>
+              {isSearching ? (
+                <button
+                  type="button"
+                  onClick={handleCancelMatch}
+                  disabled={isPending}
+                  className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:text-zinc-400"
+                >
+                  큐 취소
+                </button>
+              ) : null}
             </div>
 
             <div
@@ -737,13 +581,9 @@ export default function HomeScreen() {
               최근 score 추이: API 준비 전
             </div>
             <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3">
-              {matchTicket
-                ? `현재 상태: ${matchTicket.acceptedMemberIds.length}/${matchTicket.maxPlayers} 수락 / ${activeCategoryLabel} / ${activeDifficultyLabel}`
-                : `현재 큐: ${
-                    queueState.inQueue
-                      ? `${getQueueCategoryLabel(queueState.category)} / ${queueState.difficulty} / ${queueState.waitingCount}명 대기`
-                      : "대기 중 아님"
-                  }`}
+              {isSearching
+                ? `현재 큐: ${activeCategoryLabel} / ${activeDifficultyLabel} / ${waitingCount}명 대기`
+                : `현재 큐: 대기 중 아님`}
             </div>
           </div>
         </Panel>
@@ -753,7 +593,7 @@ export default function HomeScreen() {
         title="현재 연결 포인트"
         description="메인과 인증 흐름에서 이미 실제 API로 연결된 지점"
       >
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-4 lg:grid-cols-4">
           <ApiCallout
             method="POST"
             path="/api/auth/login"
@@ -769,23 +609,24 @@ export default function HomeScreen() {
             path="/api/queue/me"
             note="현재 로그인 사용자의 큐 상태를 메인 진입 시 바로 조회한다."
           />
+          <ApiCallout
+            method="GET"
+            path="/api/matches/me"
+            note="매칭 성사 여부와 roomId는 이 API를 폴링해서 확인한다."
+          />
         </div>
       </Panel>
 
       <QueueModal
+        isOpen={isSearching}
         categoryLabel={activeCategoryLabel}
         difficultyLabel={activeDifficultyLabel}
         error={error}
         feedback={feedback}
-        hasAccepted={hasAccepted}
         isPending={isPending}
         queueElapsedSeconds={queueElapsedSeconds}
-        queueState={queueState}
-        readyCountdownSeconds={readyCountdownSeconds}
-        ticket={matchTicket}
-        onAccept={handleAcceptMatch}
+        waitingCount={waitingCount}
         onCancel={handleCancelMatch}
-        onDecline={handleDeclineMatch}
       />
     </div>
   );
