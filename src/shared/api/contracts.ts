@@ -94,6 +94,28 @@ export interface ProblemDetailResponse {
   memoryLimitMb: number;
 }
 
+export interface ProblemSummaryResponse {
+  problemId: number;
+  title: string;
+  difficulty: string;
+  difficultyRating: number;
+  timeLimitMs: number;
+  memoryLimitMb: number;
+}
+
+export interface ProblemPageInfo {
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  hasNext: boolean;
+}
+
+export interface ProblemListResponse {
+  problems: ProblemSummaryResponse[];
+  pageInfo: ProblemPageInfo;
+}
+
 export interface SubmitPayload {
   roomId: number;
   code: string;
