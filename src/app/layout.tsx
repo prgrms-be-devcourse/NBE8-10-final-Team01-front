@@ -24,6 +24,7 @@ export const metadata: Metadata = {
 
 const navigation = [
   { href: "/", label: "메인" },
+  { href: "/problems", label: "문제목록" },
   { href: "/login", label: "로그인" },
   { href: "/signup", label: "회원가입" },
   { href: "/mypage", label: "마이페이지" },
