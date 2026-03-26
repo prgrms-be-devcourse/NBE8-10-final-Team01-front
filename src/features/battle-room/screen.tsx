@@ -442,14 +442,14 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                   </select>
                 </label>
 
-                <label className="block space-y-2">
+                <div className="space-y-2">
                   <span className="text-sm font-medium text-zinc-700">코드</span>
                   <BattleCodeEditor
                     language={language}
                     value={code}
                     onChange={setCode}
                   />
-                </label>
+                </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <button
