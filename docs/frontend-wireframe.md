@@ -18,6 +18,132 @@
 - 백엔드 저장소의 `docs/local-db-compose-guide.md`
 - 문서 기준으로 PostgreSQL, Spring Boot, 샘플 데이터 적재가 먼저 준비되어야 실제 API 연결 검증이 가능하다.
 
+## 프론트 서브에이전트 설계 (v2)
+
+### 역할 정의
+
+- 이름: `frontend-designer`
+- 목표: 현재 코드베이스 기준으로 화면 설계와 API 연결 계획을 먼저 고정하고, 구현팀이 바로 작업 가능한 수준의 설계 산출물을 만든다.
+- 책임 범위:
+  - 라우트별 화면 구조/상태 전이 정의
+  - `src/app/api/**` BFF 경유 기준의 API 연결 매핑
+  - 백엔드 미계약 기능의 placeholder 정책 명시
+- 제외 범위:
+  - 백엔드 API 추가/수정
+  - DB 스키마 변경
+  - 기존 타 작업자 변경 롤백
+
+### 필수 입력 컨텍스트
+
+- 문서:
+  - `docs/frontend-wireframe.md`
+- 라우트 엔트리:
+  - `src/app/page.tsx`
+  - `src/app/login/page.tsx`
+  - `src/app/signup/page.tsx`
+  - `src/app/mypage/page.tsx`
+  - `src/app/spectate/page.tsx`
+  - `src/app/spectate/rooms/[roomId]/page.tsx`
+  - `src/app/battle/rooms/[roomId]/page.tsx`
+  - `src/app/battle/results/[roomId]/page.tsx`
+- 기능 화면:
+  - `src/features/home/screen.tsx`
+  - `src/features/login/screen.tsx`
+  - `src/features/signup/screen.tsx`
+  - `src/features/my-page/screen.tsx`
+  - `src/features/spectate/screen.tsx`
+  - `src/features/spectate-room/screen.tsx`
+  - `src/features/battle-room/screen.tsx`
+  - `src/features/battle-result/screen.tsx`
+- BFF/API 계약:
+  - `src/app/api/auth/*`
+  - `src/app/api/queue/*`
+  - `src/app/api/battle/rooms/*`
+  - `src/app/api/problems/[problemId]/route.ts`
+  - `src/app/api/submissions/route.ts`
+  - `src/shared/api/contracts.ts`
+  - `src/shared/api/backend.ts`
+  - `src/shared/auth/session.ts`
+- 레거시 참고:
+  - `src/app/api/matches/**`는 `/api/v1/matchs/*` 임시 중계 경로이므로 신규 핵심 플로우 기준으로 사용하지 않는다.
+
+### 작업 절차
+
+1. 설계 동결
+   - 라우트별 `브라우저 -> BFF -> 백엔드` 호출 체인을 1개로 고정한다.
+   - 화면별 인증 필요 여부와 실패 시 이동 경로를 고정한다.
+2. 화면 계약 정리
+   - 각 화면에서 쓰는 DTO를 `src/shared/api/contracts.ts` 타입명 기준으로 명시한다.
+   - 타입에 없는 필드는 사용 금지로 표시한다.
+3. 미계약 기능 처리
+   - `disabled UI`, `placeholder`, `fixture` 중 하나로 분류한다.
+   - 사용자에게 보이는 안내 문구도 같이 설계한다.
+4. 인수인계 문서화
+   - 구현자가 바로 시작할 수 있도록 파일 경로 단위 작업 목록을 남긴다.
+
+### 산출물 포맷
+
+- 필수 산출물 1: 라우트별 설계표
+  - 항목: `route`, `auth`, `bff endpoint`, `backend endpoint`, `dto`, `fallback`
+- 필수 산출물 2: 구현 백로그(우선순위 1~5)
+  - 항목: `우선순위`, `대상 파일`, `작업 내용`, `완료 조건`
+- 필수 산출물 3: 리스크/블로커
+  - 항목: `이슈`, `원인`, `임시 대응`, `백엔드 필요 계약`
+
+### 완료 기준 (DoD)
+
+- 설계표가 `src/app`, `src/features`, `src/app/api`, `src/shared/api/contracts.ts`와 충돌하지 않는다.
+- 모든 사용자 요청 경로가 프론트 BFF(`/api/**`) 기준으로 정리되어 있다.
+- 미계약 영역이 숨겨지지 않고 명시적으로 표기되어 있다.
+- 구현 백로그가 파일 경로 단위로 분해되어 바로 작업 가능하다.
+
+### 가드레일
+
+- 클라이언트에서 백엔드 직접 호출을 새로 만들지 않는다.
+- DTO 추측 필드를 추가하지 않는다.
+- `/api/matches/**`를 신규 표준 경로처럼 확장하지 않는다.
+- 미구현 기능을 완성 기능처럼 보이게 하지 않는다.
+- 다른 작업자 변경을 임의로 되돌리지 않는다.
+
+### 시작 백로그 (설계 우선)
+
+1. 인증/세션 플로우 확정
+   - 파일: `src/app/api/auth/*`, `src/shared/auth/session.ts`, `src/features/login/screen.tsx`
+2. 메인 큐 플로우 확정
+   - 파일: `src/features/home/*`, `src/app/api/queue/*`
+3. 배틀룸 화면 상태 전이 확정
+   - 파일: `src/features/battle-room/*`, `src/app/api/battle/rooms/*`, `src/app/api/problems/*`
+4. 결과/관전 화면 연결 확정
+   - 파일: `src/features/battle-result/*`, `src/features/spectate*/*`, `src/app/api/battle/rooms/[roomId]/result/route.ts`
+5. 마이페이지 placeholder 정책 확정
+   - 파일: `src/features/my-page/*`
+
+### 서브에이전트 실행 프롬프트 템플릿
+
+```text
+당신은 frontend-designer 서브에이전트입니다.
+목표: 현재 저장소에서 프론트 설계를 먼저 고정합니다.
+
+반드시 참조:
+- docs/frontend-wireframe.md
+- src/app/**/page.tsx
+- src/features/**/screen.tsx
+- src/app/api/**
+- src/shared/api/contracts.ts
+- src/shared/auth/session.ts
+
+출력 형식:
+1) 라우트별 설계표(route/auth/bff/backend/dto/fallback)
+2) 구현 백로그(우선순위 1~5, 파일 경로 포함)
+3) 리스크/블로커(임시 대응 + 필요한 백엔드 계약)
+
+규칙:
+- 브라우저는 반드시 /api/** BFF를 호출
+- contracts.ts에 없는 필드 가정 금지
+- /api/matches/**는 레거시로만 취급
+- 미계약 기능은 placeholder/disabled로 명시
+```
+
 ## 라우트와 사용자 흐름
 
 ### `/`
@@ -76,6 +202,38 @@
   - 현재 응답은 `roomId`를 별도 필드로 주지 않고 메시지에 포함하므로, 프론트는 메시지 문자열에서 `roomId`를 읽어 `/battle/rooms/[roomId]`로 이동한다.
   - `전체(무작위)`는 현재 백엔드 문제 선정기와 맞지 않아 프론트에서 비활성화한다.
   - 프론트 카테고리 값은 백엔드 실제 태그명과 맞춰야 한다. 현재 사용 값은 `dp`, `graphs`, `strings`, `greedy`, `implementation`이다.
+
+### `/problems`
+
+- 위치: 네비게이션에서 직접 진입하는 독립 라우트
+- 목적: 매칭 화면과 분리해 문제 전체를 페이지 단위로 빠르게 탐색
+- 대응 엔드포인트:
+  - `GET /api/problems?page={page}&size={size}`
+  - `GET /api/v1/problems?page={page}&size={size}`
+- 표시 DTO:
+  - `ProblemListResponse`
+  - `ProblemSummaryResponse`
+  - `ProblemPageInfo`
+- 동작:
+  - 로그인 사용자는 페이징 목록을 조회한다.
+  - 비로그인 사용자는 목록 대신 로그인 유도 화면을 표시한다.
+  - 현재 기본 페이지 사이즈는 프론트에서 `20`으로 고정한다.
+  - 페이지 이동은 `이전/다음` + 숫자 버튼(예: `1 2 3 4`)을 함께 제공한다.
+  - 목록에서 문제를 선택하면 `/problems/[problemId]`로 이동한다.
+
+### `/problems/[problemId]`
+
+- 위치: 문제 목록에서 선택 시 진입하는 개인 풀이 전용 화면
+- 목적: 멀티 룸과 분리해 문제 본문 확인 + 에디터 기반 개인 풀이 수행
+- 대응 엔드포인트:
+  - `GET /api/problems/{problemId}`
+  - `GET /api/v1/problems/{problemId}`
+- 표시 DTO:
+  - `ProblemDetailResponse`
+- 동작:
+  - 큐/매칭/소켓 없이 문제와 코드 작성에 집중한다.
+  - 코드는 브라우저 localStorage에 저장한다.
+  - Run/Submit은 솔로 전용 실행 계약이 생기기 전까지 연결하지 않는다.
 
 ### `/battle/rooms/[roomId]`
 
@@ -148,7 +306,8 @@
 
 ## 현재 백엔드 제약
 
-- 문제 목록 API가 아직 없다. 프론트는 문제 상세 단건 응답만 사용한다.
+- 문제 목록 API는 제공되지만, 현재는 페이지네이션(`page`, `size`)만 지원한다.
+- 검색, 카테고리 필터, 난이도 필터는 아직 별도 계약이 없다.
 - 큐 진입과 제출은 아직 `userId`를 쿼리 또는 본문으로 직접 받는다.
 - 큐는 현재 서비스 로직상 4명 고정으로 방을 만든다.
 - 로그인 응답 쿠키는 현재 백엔드 코드상 `Secure=true`, `Domain=localhost`로 설정돼 있어, 로컬 개발에서는 프론트 BFF 중계가 사실상 필요하다.
