@@ -20,6 +20,10 @@
 # production
 /build
 
+# IDE
+.idea/
+*.iml
+
 # misc
 .DS_Store
 *.pem

@@ -16,6 +16,7 @@ import {
   ApiCallout,
   DefinitionGrid,
   EventTimeline,
+  MathText,
   MetricCard,
   MetricGrid,
   PageHero,
@@ -388,24 +389,24 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
                         Content
                       </p>
-                      <p className="mt-2 whitespace-pre-line text-sm leading-7 text-zinc-700">
-                        {problem.content}
+                      <p className="mt-2 text-sm leading-7 text-zinc-700">
+                        <MathText>{problem.content}</MathText>
                       </p>
                     </div>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
                         Input
                       </p>
-                      <p className="mt-2 whitespace-pre-line text-sm leading-7 text-zinc-700">
-                        {problem.inputFormat}
+                      <p className="mt-2 text-sm leading-7 text-zinc-700">
+                        <MathText>{problem.inputFormat}</MathText>
                       </p>
                     </div>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
                         Output
                       </p>
-                      <p className="mt-2 whitespace-pre-line text-sm leading-7 text-zinc-700">
-                        {problem.outputFormat}
+                      <p className="mt-2 text-sm leading-7 text-zinc-700">
+                        <MathText>{problem.outputFormat}</MathText>
                       </p>
                     </div>
                   </div>
@@ -442,14 +443,14 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                   </select>
                 </label>
 
-                <label className="block space-y-2">
+                <div className="space-y-2">
                   <span className="text-sm font-medium text-zinc-700">코드</span>
                   <BattleCodeEditor
                     language={language}
                     value={code}
                     onChange={setCode}
                   />
-                </label>
+                </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <button

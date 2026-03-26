@@ -1,4 +1,5 @@
 export { ApiCallout } from "./api-callout";
+export { MathText } from "./math-text";
 export { CodeWindow } from "./code-window";
 export { DefinitionGrid } from "./definition-grid";
 export { EmptyPanel } from "./empty-panel";
