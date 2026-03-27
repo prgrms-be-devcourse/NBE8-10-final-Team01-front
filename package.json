@@ -13,7 +13,7 @@
     "@stomp/stompjs": "^7.3.0",
     "katex": "^0.16.43",
     "monaco-editor": "^0.55.1",
-    "next": "16.2.1",
+    "next": "^15.5.14",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "sockjs-client": "^1.6.1"
@@ -27,7 +27,7 @@
     "@types/sockjs-client": "^1.5.4",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
-    "eslint-config-next": "16.2.1",
+    "eslint-config-next": "^15.5.14",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
