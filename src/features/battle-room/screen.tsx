@@ -3,6 +3,8 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, useTransition } from "react";
+import { Client } from "@stomp/stompjs";
+import SockJS from "sockjs-client";
 
 import type {
   ApiErrorResponse,
@@ -176,6 +178,48 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
       })();
     });
   }, [room, roomId, session]);
+
+  // WebSocket: BATTLE_STARTED 이벤트 수신 시 방 상태 자동 갱신
+  useEffect(() => {
+    if (!session.authenticated) return;
+
+    const client = new Client({
+      webSocketFactory: () => new SockJS("/ws"),
+      reconnectDelay: 3000,
+      onConnect: () => {
+        client.subscribe(`/topic/room/${roomId}`, (message) => {
+          let payload: unknown;
+          try {
+            payload = JSON.parse(message.body) as unknown;
+          } catch {
+            console.warn("[WS] 메시지 파싱 실패:", message.body);
+            return;
+          }
+
+          if (
+            typeof payload !== "object" ||
+            payload === null ||
+            !("type" in payload) ||
+            (payload as { type: unknown }).type !== "BATTLE_STARTED"
+          ) {
+            return;
+          }
+
+          void fetch(`/api/battle/rooms/${roomId}`, { cache: "no-store" })
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data: RoomResponse | null) => {
+              if (data) {
+                setRoom(data);
+                setMessage("배틀이 시작됐습니다!");
+              }
+            });
+        });
+      },
+    });
+
+    client.activate();
+    return () => { void client.deactivate(); };
+  }, [roomId, session.authenticated]);
 
   function handleSubmit() {
     if (!room) {
