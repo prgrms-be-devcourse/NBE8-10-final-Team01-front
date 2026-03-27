@@ -188,18 +188,31 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
       reconnectDelay: 3000,
       onConnect: () => {
         client.subscribe(`/topic/room/${roomId}`, (message) => {
-          const payload = JSON.parse(message.body) as { type: string; timerEnd?: string };
-
-          if (payload.type === "BATTLE_STARTED") {
-            void fetch(`/api/battle/rooms/${roomId}`, { cache: "no-store" })
-              .then((res) => (res.ok ? res.json() : null))
-              .then((data: RoomResponse | null) => {
-                if (data) {
-                  setRoom(data);
-                  setMessage("배틀이 시작됐습니다!");
-                }
-              });
+          let payload: unknown;
+          try {
+            payload = JSON.parse(message.body) as unknown;
+          } catch {
+            console.warn("[WS] 메시지 파싱 실패:", message.body);
+            return;
           }
+
+          if (
+            typeof payload !== "object" ||
+            payload === null ||
+            !("type" in payload) ||
+            (payload as { type: unknown }).type !== "BATTLE_STARTED"
+          ) {
+            return;
+          }
+
+          void fetch(`/api/battle/rooms/${roomId}`, { cache: "no-store" })
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data: RoomResponse | null) => {
+              if (data) {
+                setRoom(data);
+                setMessage("배틀이 시작됐습니다!");
+              }
+            });
         });
       },
     });
