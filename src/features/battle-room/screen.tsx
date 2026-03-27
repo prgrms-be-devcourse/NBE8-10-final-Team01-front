@@ -13,6 +13,7 @@ import type {
   RoomResponse,
   SessionResponse,
   SubmissionResponse,
+  SubmissionWsMessage,
 } from "@/shared/api/contracts";
 import {
   ApiCallout,
@@ -196,23 +197,45 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
             return;
           }
 
-          if (
-            typeof payload !== "object" ||
-            payload === null ||
-            !("type" in payload) ||
-            (payload as { type: unknown }).type !== "BATTLE_STARTED"
-          ) {
+          if (typeof payload !== "object" || payload === null || !("type" in payload)) {
             return;
           }
 
-          void fetch(`/api/battle/rooms/${roomId}`, { cache: "no-store" })
-            .then((res) => (res.ok ? res.json() : null))
-            .then((data: RoomResponse | null) => {
-              if (data) {
-                setRoom(data);
-                setMessage("배틀이 시작됐습니다!");
-              }
-            });
+          const type = (payload as { type: unknown }).type;
+
+          if (type === "BATTLE_STARTED") {
+            void fetch(`/api/battle/rooms/${roomId}`, { cache: "no-store" })
+              .then((res) => (res.ok ? res.json() : null))
+              .then((data: RoomResponse | null) => {
+                if (data) {
+                  setRoom(data);
+                  setMessage("배틀이 시작됐습니다!");
+                }
+              });
+            return;
+          }
+
+          if (type === "SUBMISSION") {
+            const msg = payload as SubmissionWsMessage;
+            if (msg.userId === session.member?.memberId) {
+              setLatestSubmission((prev) =>
+                prev
+                  ? { ...prev, result: msg.result, passedCount: msg.passedCount, totalCount: msg.totalCount }
+                  : { submissionId: 0, result: msg.result, passedCount: msg.passedCount, totalCount: msg.totalCount },
+              );
+              setMessage(`채점 완료: ${msg.result} (${msg.passedCount}/${msg.totalCount})`);
+            }
+            return;
+          }
+
+          if (type === "PARTICIPANT_DONE") {
+            void fetch(`/api/battle/rooms/${roomId}`, { cache: "no-store" })
+              .then((res) => (res.ok ? res.json() : null))
+              .then((data: RoomResponse | null) => {
+                if (data) setRoom(data);
+              });
+            return;
+          }
         });
       },
     });

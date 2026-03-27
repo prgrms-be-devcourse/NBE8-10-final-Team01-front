@@ -147,7 +147,8 @@ export default function HomeScreen() {
         setFeedback("플레이어를 찾는 중입니다. /matches/me가 MATCHED를 반환하면 배틀룸으로 이동합니다.");
       }
     })();
-  }, [router]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!session.authenticated || matchState.status !== "SEARCHING") {
@@ -208,7 +209,8 @@ export default function HomeScreen() {
       active = false;
       window.clearInterval(intervalId);
     };
-  }, [matchState.status, router, session.authenticated]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchState.status, session.authenticated]);
 
   function handleProtectedMove(href: string) {
     if (!session.authenticated) {
