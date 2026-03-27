@@ -3,6 +3,8 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, useTransition } from "react";
+import { Client } from "@stomp/stompjs";
+import SockJS from "sockjs-client";
 
 import type {
   ApiErrorResponse,
@@ -176,6 +178,35 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
       })();
     });
   }, [room, roomId, session]);
+
+  // WebSocket: BATTLE_STARTED 이벤트 수신 시 방 상태 자동 갱신
+  useEffect(() => {
+    if (!session.authenticated) return;
+
+    const client = new Client({
+      webSocketFactory: () => new SockJS("/ws"),
+      reconnectDelay: 3000,
+      onConnect: () => {
+        client.subscribe(`/topic/room/${roomId}`, (message) => {
+          const payload = JSON.parse(message.body) as { type: string; timerEnd?: string };
+
+          if (payload.type === "BATTLE_STARTED") {
+            void fetch(`/api/battle/rooms/${roomId}`, { cache: "no-store" })
+              .then((res) => (res.ok ? res.json() : null))
+              .then((data: RoomResponse | null) => {
+                if (data) {
+                  setRoom(data);
+                  setMessage("배틀이 시작됐습니다!");
+                }
+              });
+          }
+        });
+      },
+    });
+
+    client.activate();
+    return () => { void client.deactivate(); };
+  }, [roomId, session.authenticated]);
 
   function handleSubmit() {
     if (!room) {

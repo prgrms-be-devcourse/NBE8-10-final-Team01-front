@@ -65,6 +65,7 @@ interface MathTextProps {
  * 수식이 없는 일반 텍스트는 그대로 출력합니다.
  */
 export function MathText({ children, className }: MathTextProps) {
+  if (!children) return null;
   const segments = parse(children);
 
   return (
