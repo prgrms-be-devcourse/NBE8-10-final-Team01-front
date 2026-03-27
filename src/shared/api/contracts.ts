@@ -129,6 +129,20 @@ export interface SubmissionResponse {
   totalCount: number;
 }
 
+export interface SubmissionWsMessage {
+  type: "SUBMISSION";
+  userId: number;
+  result: string;
+  passedCount: number;
+  totalCount: number;
+}
+
+export interface ParticipantDoneWsMessage {
+  type: "PARTICIPANT_DONE";
+  userId: number;
+  rank: number;
+}
+
 export interface BattleResultParticipant {
   userId: number;
   nickname: string;
