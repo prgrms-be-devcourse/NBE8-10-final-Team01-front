@@ -83,6 +83,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState<"api" | "fallback">("api");
   const hasAttemptedJoinRef = useRef(false);
+  const stompClientRef = useRef<Client | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -241,7 +242,11 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
     });
 
     client.activate();
-    return () => { void client.deactivate(); };
+    stompClientRef.current = client;
+    return () => {
+      stompClientRef.current = null;
+      void client.deactivate();
+    };
   }, [roomId, session.authenticated]);
 
   function handleSubmit() {
@@ -515,7 +520,15 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                   <BattleCodeEditor
                     language={language}
                     value={code}
-                    onChange={setCode}
+                    onChange={(newCode) => {
+                      setCode(newCode);
+                      if (stompClientRef.current?.connected && room?.status === "PLAYING") {
+                        stompClientRef.current.publish({
+                          destination: `/app/room/${roomId}/code`,
+                          body: JSON.stringify({ code: newCode }),
+                        });
+                      }
+                    }}
                   />
                 </div>
 

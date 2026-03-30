@@ -160,6 +160,12 @@ export interface SubmissionWsMessage {
   totalCount: number;
 }
 
+export interface CodeUpdateWsMessage {
+  type: "CODE_UPDATE";
+  userId: number;
+  code: string;
+}
+
 export interface ParticipantDoneWsMessage {
   type: "PARTICIPANT_DONE";
   userId: number;
