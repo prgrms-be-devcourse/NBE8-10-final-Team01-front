@@ -159,6 +159,34 @@ export interface SubmitPayload {
   language: string;
 }
 
+export interface SoloRunRequest {
+  code: string;
+  language: string;
+}
+
+export interface SoloRunResponse {
+  message: string;
+}
+
+export interface SoloSubmitRequest {
+  code: string;
+  language: string;
+}
+
+export interface SoloRunTestCaseResult {
+  input: string;
+  expectedOutput: string;
+  actualOutput: string | null;
+  status: string;
+  stderr: string | null;
+}
+
+export interface SoloRunWsMessage {
+  type: "RUN_RESULT";
+  userId: number;
+  results: SoloRunTestCaseResult[];
+}
+
 export interface SubmissionResponse {
   submissionId: number;
   result: string | null;
