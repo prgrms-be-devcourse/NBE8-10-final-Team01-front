@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
-import type { QueueStateResponse } from "@/shared/api/contracts";
+import type { MatchStateResponse } from "@/shared/api/contracts";
 import {
   fetchBackend,
   getErrorMessage,
@@ -9,17 +9,18 @@ import {
 } from "@/shared/api/backend";
 import { FRONTEND_ACCESS_TOKEN_COOKIE } from "@/shared/auth/session";
 
-const DEFAULT_REQUIRED_COUNT = 4;
-
-const inactiveQueueState: QueueStateResponse = {
-  inQueue: false,
-  category: null,
-  difficulty: null,
-  waitingCount: 0,
-  requiredCount: DEFAULT_REQUIRED_COUNT,
+const defaultMatchState: MatchStateResponse = {
+  status: "IDLE",
+  readyCheck: null,
+  room: null,
+  message: null,
 };
 
-export async function GET() {
+export async function POST(
+  _request: Request,
+  context: RouteContext<"/api/matches/[matchId]/accept">,
+) {
+  const { matchId } = await context.params;
   const cookieStore = await cookies();
   const token = cookieStore.get(FRONTEND_ACCESS_TOKEN_COOKIE)?.value;
 
@@ -28,7 +29,10 @@ export async function GET() {
   }
 
   try {
-    const response = await fetchBackend("/api/v2/queue/me", { token });
+    const response = await fetchBackend(`/api/v2/matches/${matchId}/accept`, {
+      method: "POST",
+      token,
+    });
 
     if (!response.ok) {
       return NextResponse.json(
@@ -37,19 +41,11 @@ export async function GET() {
       );
     }
 
-    const body = await readJsonBody<QueueStateResponse>(response);
-
-    return NextResponse.json(
-      body
-        ? {
-            ...body,
-            requiredCount: body.requiredCount ?? DEFAULT_REQUIRED_COUNT,
-          }
-        : inactiveQueueState,
-    );
+    const body = await readJsonBody<MatchStateResponse>(response);
+    return NextResponse.json(body ?? defaultMatchState);
   } catch {
     return NextResponse.json(
-      { message: "대기열 상태 조회에 실패했습니다." },
+      { message: "매칭 수락 요청에 실패했습니다." },
       { status: 503 },
     );
   }

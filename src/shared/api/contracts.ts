@@ -48,6 +48,7 @@ export interface QueueStateResponse {
   category: string | null;
   difficulty: string | null;
   waitingCount: number;
+  requiredCount: number;
 }
 
 export interface QueueStatusResponse {
@@ -55,11 +56,33 @@ export interface QueueStatusResponse {
   category: string;
   difficulty: string;
   waitingCount: number;
+  requiredCount: number;
 }
 
-export interface MatchStatusResponse {
-  status: "IDLE" | "SEARCHING" | "MATCHED";
-  roomId: number | null;
+export interface ReadyCheckParticipant {
+  userId: number;
+  nickname: string;
+  decision: "PENDING" | "ACCEPTED" | "DECLINED";
+}
+
+export interface ReadyCheckState {
+  matchId: number;
+  acceptedCount: number;
+  requiredCount: number;
+  acceptedByMe: boolean;
+  deadline: string;
+  participants: ReadyCheckParticipant[];
+}
+
+export interface MatchRoomInfo {
+  roomId: number;
+}
+
+export interface MatchStateResponse {
+  status: "IDLE" | "ACCEPT_PENDING" | "ROOM_READY" | "EXPIRED" | "CANCELLED";
+  readyCheck: ReadyCheckState | null;
+  room: MatchRoomInfo | null;
+  message: string | null;
 }
 
 export interface ParticipantInfo {
