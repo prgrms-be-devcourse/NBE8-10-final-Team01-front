@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type {
   ApiErrorResponse,
@@ -12,12 +12,11 @@ import type {
 import {
   DefinitionGrid,
   MathText,
-  PageHero,
   Panel,
   StatusPill,
 } from "@/shared/ui";
 
-const SoloCodeEditor = dynamic(() => import("@/features/battle-room/code-editor"), {
+const SoloCodeEditor = dynamic(() => import("@/features/problem-solo/code-editor"), {
   ssr: false,
   loading: () => (
     <div className="flex h-[26rem] items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-950 text-sm text-zinc-300">
@@ -34,13 +33,19 @@ const defaultCodeByLanguage: Record<string, string> = {
 };
 
 const fallbackLanguages = ["python3", "java", "javascript"];
+const MIN_LEFT_RATIO = 32;
+const MAX_LEFT_RATIO = 68;
+const MIN_TOP_RATIO = 28;
+const MAX_TOP_RATIO = 72;
 
-function toEditorLanguage(language: string) {
-  if (language === "python3") {
-    return "python";
-  }
+interface SoloCaseRunResult {
+  status: "api_missing";
+  verdict: string;
+  message: string;
+}
 
-  return language;
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function resolveLanguages(problem: ProblemDetailResponse | null) {
@@ -112,13 +117,15 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
   const [isProblemLoading, setIsProblemLoading] = useState(true);
   const [language, setLanguage] = useState("javascript");
   const [code, setCode] = useState(defaultCodeByLanguage.javascript);
-  const [inputMemo, setInputMemo] = useState("");
-  const [saveNotice, setSaveNotice] = useState<string | null>(null);
-
-  const storageKey = useMemo(
-    () => `solo-problem-${problemId}-language-${language}`,
-    [language, problemId],
-  );
+  const [selectedCaseIndex, setSelectedCaseIndex] = useState<number | null>(null);
+  const [runningCaseIndex, setRunningCaseIndex] = useState<number | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [caseRunResults, setCaseRunResults] = useState<Record<number, SoloCaseRunResult>>({});
+  const [submitNotice, setSubmitNotice] = useState<string | null>(null);
+  const [leftPaneRatio, setLeftPaneRatio] = useState(54);
+  const [rightTopPaneRatio, setRightTopPaneRatio] = useState(52);
+  const splitContainerRef = useRef<HTMLDivElement | null>(null);
+  const rightColumnRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -126,6 +133,34 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
       setSession(nextSession);
       setSessionLoaded(true);
     })();
+  }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 1280px)");
+    const body = document.body;
+    const html = document.documentElement;
+    const previousBodyOverflow = body.style.overflow;
+    const previousHtmlOverflow = html.style.overflow;
+
+    const syncOverflowLock = () => {
+      if (mediaQuery.matches) {
+        body.style.overflow = "hidden";
+        html.style.overflow = "hidden";
+        return;
+      }
+
+      body.style.overflow = previousBodyOverflow;
+      html.style.overflow = previousHtmlOverflow;
+    };
+
+    syncOverflowLock();
+    mediaQuery.addEventListener("change", syncOverflowLock);
+
+    return () => {
+      mediaQuery.removeEventListener("change", syncOverflowLock);
+      body.style.overflow = previousBodyOverflow;
+      html.style.overflow = previousHtmlOverflow;
+    };
   }, []);
 
   useEffect(() => {
@@ -157,17 +192,25 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
       }
 
       const nextProblem = result.data;
+      if (!nextProblem) {
+        setProblem(null);
+        setProblemError("문제 상세 응답이 비어 있습니다.");
+        setIsProblemLoading(false);
+        return;
+      }
       const nextLanguage = resolveDefaultLanguage(nextProblem);
       const nextStarterCode = resolveStarterCode(nextProblem, nextLanguage);
-      const nextStorageKey = `solo-problem-${problemId}-language-${nextLanguage}`;
-      const savedCode =
-        typeof window !== "undefined" ? window.localStorage.getItem(nextStorageKey) : null;
+      const hasSampleCase = (nextProblem.sampleCases?.length ?? 0) > 0;
 
       setProblem(nextProblem);
       setProblemError(null);
       setLanguage(nextLanguage);
-      setCode(savedCode ?? nextStarterCode);
-      setSaveNotice(null);
+      setCode(nextStarterCode);
+      setSelectedCaseIndex(hasSampleCase ? 0 : null);
+      setRunningCaseIndex(null);
+      setIsSubmitting(false);
+      setCaseRunResults({});
+      setSubmitNotice(null);
       setIsProblemLoading(false);
     })();
 
@@ -178,25 +221,106 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
 
   function handleLanguageChange(nextLanguage: string) {
     setLanguage(nextLanguage);
-    setSaveNotice(null);
-
-    if (typeof window === "undefined") {
-      setCode(resolveStarterCode(problem, nextLanguage));
-      return;
-    }
-
-    const nextStorageKey = `solo-problem-${problemId}-language-${nextLanguage}`;
-    const savedCode = window.localStorage.getItem(nextStorageKey);
-    setCode(savedCode ?? resolveStarterCode(problem, nextLanguage));
+    setCode(resolveStarterCode(problem, nextLanguage));
   }
 
-  function handleSaveCode() {
-    if (typeof window === "undefined") {
+  async function handleRunCase(caseIndex: number) {
+    setSelectedCaseIndex(caseIndex);
+    setRunningCaseIndex(caseIndex);
+    setSubmitNotice(null);
+
+    // TODO(backend): 솔로 실행 API가 추가되면 아래 fallback 대신 실제 호출로 교체합니다.
+    // 예상 형태: POST /api/problems/{problemId}/run { language, code, input }
+    await new Promise((resolve) => setTimeout(resolve, 180));
+
+    setCaseRunResults((prev) => ({
+      ...prev,
+      [caseIndex]: {
+        status: "api_missing",
+        verdict: "UNAVAILABLE",
+        message: "솔로 Run API 미연동 상태입니다. 백엔드 endpoint 추가 후 실제 결과를 표시합니다.",
+      },
+    }));
+
+    setRunningCaseIndex((current) => (current === caseIndex ? null : current));
+  }
+
+  async function handleSubmit() {
+    if (selectedCaseIndex === null) {
       return;
     }
 
-    window.localStorage.setItem(storageKey, code);
-    setSaveNotice("현재 코드가 브라우저 로컬 저장소에 저장되었습니다.");
+    setIsSubmitting(true);
+
+    // TODO(backend): 솔로 제출 API가 추가되면 아래 fallback 대신 실제 호출로 교체합니다.
+    // 예상 형태: POST /api/problems/{problemId}/submit { language, code }
+    await new Promise((resolve) => setTimeout(resolve, 220));
+
+    setSubmitNotice(
+      "솔로 Submit API 미연동 상태입니다. 현재 제출은 배틀룸(/api/submissions, roomId 기반)에서만 동작합니다.",
+    );
+    setIsSubmitting(false);
+  }
+
+  function startVerticalResize(event: React.MouseEvent<HTMLDivElement>) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const container = splitContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const onMove = (moveEvent: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      const nextRatio = ((moveEvent.clientX - rect.left) / rect.width) * 100;
+      setLeftPaneRatio(clamp(nextRatio, MIN_LEFT_RATIO, MAX_LEFT_RATIO));
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  function startHorizontalResize(event: React.MouseEvent<HTMLDivElement>) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const onMove = (moveEvent: MouseEvent) => {
+      const rect = rightColumnRef.current?.getBoundingClientRect();
+      if (!rect) {
+        return;
+      }
+
+      const nextRatio = ((moveEvent.clientY - rect.top) / rect.height) * 100;
+      setRightTopPaneRatio(clamp(nextRatio, MIN_TOP_RATIO, MAX_TOP_RATIO));
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "row-resize";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
   }
 
   if (!sessionLoaded) {
@@ -210,12 +334,12 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
   if (!session.authenticated) {
     return (
       <div className="space-y-8">
-        <PageHero
-          eyebrow="Solo"
-          title="개인 풀이는 로그인 후 이용할 수 있습니다."
-          description="문제 상세 API가 보호되어 있어 로그인 후 접근할 수 있습니다."
-          actions={<StatusPill tone="warn">로그인 필요</StatusPill>}
-        />
+        <div className="flex items-center justify-between rounded-2xl border border-zinc-300 bg-white px-4 py-3">
+          <p className="text-sm font-medium text-zinc-700">
+            개인 풀이는 로그인 후 이용할 수 있습니다.
+          </p>
+          <StatusPill tone="warn">로그인 필요</StatusPill>
+        </div>
         <Panel title="이동" description="로그인 후 다시 개인 풀이로 돌아올 수 있습니다.">
           <div className="flex flex-wrap gap-3">
             <Link
@@ -247,12 +371,12 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
 
     return (
       <div className="space-y-8">
-        <PageHero
-          eyebrow="Solo"
-          title="문제 정보를 가져오지 못했습니다."
-          description="problemId를 확인하거나 백엔드 API 상태를 점검해주세요."
-          actions={<StatusPill tone="danger">Load failed</StatusPill>}
-        />
+        <div className="flex items-center justify-between rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3">
+          <p className="text-sm font-medium text-rose-900">
+            문제 정보를 가져오지 못했습니다.
+          </p>
+          <StatusPill tone="danger">Load failed</StatusPill>
+        </div>
         <Panel title="오류" description="응답 메시지">
           <p className="text-sm leading-7 text-zinc-700">
             {problemError ?? "문제 상세 응답이 없습니다."}
@@ -264,148 +388,369 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
 
   const languages = resolveLanguages(problem);
   const sampleCases = problem.sampleCases ?? [];
+  const activeCase = selectedCaseIndex !== null ? sampleCases[selectedCaseIndex] : null;
+  const activeCaseResult = selectedCaseIndex !== null ? caseRunResults[selectedCaseIndex] : null;
 
   return (
-    <div className="space-y-8">
-      <PageHero
-        eyebrow="Solo"
-        title={`${problem.problemId}. ${problem.title}`}
-        description="이 화면은 멀티 룸과 분리된 개인 풀이 전용입니다. 큐, 참가자 상태, 소켓 이벤트 없이 문제/에디터에만 집중합니다."
-        actions={
-          <>
-            <StatusPill>{problem.difficulty}</StatusPill>
-            <StatusPill>오프라인 솔로</StatusPill>
-          </>
-        }
-      />
-
-      <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className="space-y-6">
-          <Panel title="문제 상세" description="문제 본문과 입출력 형식은 상세 API를 그대로 사용합니다.">
-            <div className="space-y-4">
-              <DefinitionGrid
-                items={[
-                  { label: "problemId", value: problem.problemId },
-                  { label: "difficulty", value: problem.difficulty },
-                  { label: "timeLimitMs", value: problem.timeLimitMs },
-                  { label: "memoryLimitMb", value: problem.memoryLimitMb },
-                ]}
-              />
-              <div className="space-y-4 rounded-2xl border border-zinc-300 bg-zinc-50 p-4">
-                <div>
+    <div className="space-y-6">
+      <div className="hidden h-[calc(100dvh-10.5rem)] min-h-0 overflow-hidden xl:block">
+        <div ref={splitContainerRef} className="flex h-full min-h-0">
+          <div className="h-full min-w-0" style={{ width: `${leftPaneRatio}%` }}>
+            <Panel
+              title="문제 상세"
+              className="flex h-full min-h-0 flex-col"
+            >
+              <div className="space-y-4 min-h-0 flex-1 overflow-y-auto pr-1">
+                <div className="rounded-2xl border border-zinc-300 bg-white p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                    Content
+                    Solo
                   </p>
-                  <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
-                    {problem.content}
-                  </MathText>
+                  <h1 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">
+                    {problem.problemId}. {problem.title}
+                  </h1>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <StatusPill>{problem.difficulty}</StatusPill>
+                    <StatusPill>오프라인 솔로</StatusPill>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                    Input
-                  </p>
-                  <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
-                    {problem.inputFormat}
-                  </MathText>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                    Output
-                  </p>
-                  <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
-                    {problem.outputFormat}
-                  </MathText>
-                </div>
-              </div>
-            </div>
-          </Panel>
-
-          <Panel title="샘플 케이스" description="백엔드 `sampleCases`를 표시합니다.">
-            <div className="space-y-3">
-              {sampleCases.length > 0 ? (
-                sampleCases.map((sampleCase, index) => (
-                  <div key={`sample-${index}`} className="rounded-2xl border border-zinc-300 bg-zinc-50 p-4">
+                <DefinitionGrid
+                  items={[
+                    { label: "problemId", value: problem.problemId },
+                    { label: "difficulty", value: problem.difficulty },
+                    { label: "timeLimitMs", value: problem.timeLimitMs },
+                    { label: "memoryLimitMb", value: problem.memoryLimitMb },
+                  ]}
+                />
+                <div className="space-y-4 rounded-2xl border border-zinc-300 bg-zinc-50 p-4">
+                  <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                      Case {index + 1}
+                      Content
                     </p>
-                    <p className="mt-2 text-sm font-semibold text-zinc-900">Input</p>
-                    <MathText className="block text-sm leading-7 text-zinc-700">
-                      {sampleCase.input || "(empty)"}
-                    </MathText>
-                    <p className="mt-2 text-sm font-semibold text-zinc-900">Output</p>
-                    <MathText className="block text-sm leading-7 text-zinc-700">
-                      {sampleCase.output || "(empty)"}
+                    <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
+                      {problem.content}
                     </MathText>
                   </div>
-                ))
-              ) : (
-                <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
-                  현재 샘플 케이스가 등록되지 않았습니다.
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                      Input
+                    </p>
+                    <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
+                      {problem.inputFormat}
+                    </MathText>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                      Output
+                    </p>
+                    <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
+                      {problem.outputFormat}
+                    </MathText>
+                  </div>
                 </div>
-              )}
-            </div>
-          </Panel>
-        </div>
+              </div>
+            </Panel>
+          </div>
 
-        <div className="space-y-6">
-          <Panel
-            title="개인 풀이 에디터"
-            description="코드는 브라우저 localStorage에 저장됩니다. 이 단계에서는 서버 제출/정산을 연결하지 않습니다."
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={startVerticalResize}
+            className="group mx-1 flex w-3 cursor-col-resize items-center justify-center"
           >
-            <div className="space-y-4">
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-zinc-700">언어</span>
-                <select
-                  value={language}
-                  onChange={(event) => handleLanguageChange(event.target.value)}
-                  className="w-full rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500"
-                >
-                  {languages.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            <div className="h-full w-px rounded bg-zinc-300 transition group-hover:bg-zinc-500" />
+          </div>
 
+          <div
+            ref={rightColumnRef}
+            className="flex h-full min-w-0 flex-col"
+            style={{ width: `${100 - leftPaneRatio}%` }}
+          >
+            <div className="min-h-0" style={{ height: `${rightTopPaneRatio}%` }}>
               <SoloCodeEditor
-                language={toEditorLanguage(language)}
+                languages={languages}
+                language={language}
+                onLanguageChange={(nextLanguage) => handleLanguageChange(nextLanguage)}
                 value={code}
                 onChange={setCode}
+                height="100%"
+                className="h-full"
               />
+            </div>
 
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={handleSaveCode}
-                  className="rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-zinc-800"
-                >
-                  코드 저장
-                </button>
-                <Link
-                  href="/problems"
-                  className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900"
-                >
-                  목록으로
-                </Link>
-              </div>
+            <div
+              role="separator"
+              aria-orientation="horizontal"
+              onMouseDown={startHorizontalResize}
+              className="group my-1 flex h-3 cursor-row-resize items-center justify-center"
+            >
+              <div className="h-px w-full rounded bg-zinc-300 transition group-hover:bg-zinc-500" />
+            </div>
 
-              <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-700">
-                {saveNotice ?? "Run/Submit은 추후 솔로 전용 실행 API가 붙을 때 연결합니다."}
+            <div className="min-h-0" style={{ height: `${100 - rightTopPaneRatio}%` }}>
+              <Panel
+                title="TestCase"
+                className="flex h-full min-h-0 flex-col"
+              >
+                <div className="space-y-4 min-h-0 flex-1 overflow-y-auto">
+                  {sampleCases.length > 0 ? (
+                    <>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-wrap gap-2">
+                          {sampleCases.map((_, index) => (
+                            <button
+                              key={`case-tab-${index}`}
+                              type="button"
+                              onClick={() => setSelectedCaseIndex(index)}
+                              className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                                selectedCaseIndex === index
+                                  ? "bg-zinc-900 text-white"
+                                  : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                              }`}
+                            >
+                              Case {index + 1}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              selectedCaseIndex !== null
+                                ? void handleRunCase(selectedCaseIndex)
+                                : null
+                            }
+                            disabled={selectedCaseIndex === null || runningCaseIndex !== null}
+                            className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-900 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:text-zinc-400"
+                          >
+                            {runningCaseIndex !== null ? "실행 중..." : "▶ Run"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleSubmit()}
+                            disabled={selectedCaseIndex === null || isSubmitting}
+                            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                          >
+                            {isSubmitting ? "제출 중..." : "Submit"}
+                          </button>
+                        </div>
+                      </div>
+
+                      {activeCase ? (
+                        <div className="grid gap-3 lg:grid-cols-[1fr_0.95fr]">
+                          <div className="space-y-3 rounded-2xl border border-zinc-300 bg-zinc-50 p-4">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                                Input
+                              </p>
+                              <MathText className="mt-2 block text-sm leading-7 text-zinc-800">
+                                {activeCase.input || "(empty)"}
+                              </MathText>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                                Output
+                              </p>
+                              <MathText className="mt-2 block text-sm leading-7 text-zinc-800">
+                                {activeCase.output || "(empty)"}
+                              </MathText>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3 rounded-2xl border border-zinc-300 bg-white p-4">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                              Result
+                            </p>
+                            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-800">
+                              {runningCaseIndex === selectedCaseIndex ? (
+                                <p className="text-zinc-600">실행 요청 중입니다...</p>
+                              ) : activeCaseResult ? (
+                                <div className="space-y-2">
+                                  <p className="font-semibold text-zinc-900">{activeCaseResult.verdict}</p>
+                                  <p className="text-zinc-700">{activeCaseResult.message}</p>
+                                </div>
+                              ) : (
+                                <p className="text-zinc-600">
+                                  아직 실행 결과가 없습니다. Run 버튼으로 해당 케이스를 실행하세요.
+                                </p>
+                              )}
+                            </div>
+                            {submitNotice ? (
+                              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                                {submitNotice}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                      실행 가능한 샘플 케이스가 없습니다.
+                    </div>
+                  )}
+                </div>
+              </Panel>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-6 xl:hidden">
+        <Panel title="문제 상세">
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-zinc-300 bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                Solo
+              </p>
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">
+                {problem.problemId}. {problem.title}
+              </h1>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <StatusPill>{problem.difficulty}</StatusPill>
+                <StatusPill>오프라인 솔로</StatusPill>
               </div>
             </div>
-          </Panel>
-
-          <Panel title="입력 메모" description="예제 입력이나 테스트 아이디어를 임시로 기록합니다.">
-            <textarea
-              value={inputMemo}
-              onChange={(event) => setInputMemo(event.target.value)}
-              rows={8}
-              placeholder="예제 입력, 풀이 메모, 반례를 적어두세요."
-              className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-3 font-mono text-sm leading-6 text-zinc-900 outline-none transition focus:border-zinc-500"
+            <DefinitionGrid
+              items={[
+                { label: "problemId", value: problem.problemId },
+                { label: "difficulty", value: problem.difficulty },
+                { label: "timeLimitMs", value: problem.timeLimitMs },
+                { label: "memoryLimitMb", value: problem.memoryLimitMb },
+              ]}
             />
-          </Panel>
-        </div>
+            <div className="space-y-4 rounded-2xl border border-zinc-300 bg-zinc-50 p-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                  Content
+                </p>
+                <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
+                  {problem.content}
+                </MathText>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                  Input
+                </p>
+                <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
+                  {problem.inputFormat}
+                </MathText>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                  Output
+                </p>
+                <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
+                  {problem.outputFormat}
+                </MathText>
+              </div>
+            </div>
+          </div>
+        </Panel>
+
+        <SoloCodeEditor
+          languages={languages}
+          language={language}
+          onLanguageChange={(nextLanguage) => handleLanguageChange(nextLanguage)}
+          value={code}
+          onChange={setCode}
+        />
+
+        <Panel title="TestCase">
+          <div className="space-y-4">
+            {sampleCases.length > 0 ? (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap gap-2">
+                    {sampleCases.map((_, index) => (
+                      <button
+                        key={`case-tab-mobile-${index}`}
+                        type="button"
+                        onClick={() => setSelectedCaseIndex(index)}
+                        className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                          selectedCaseIndex === index
+                            ? "bg-zinc-900 text-white"
+                            : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                        }`}
+                      >
+                        Case {index + 1}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        selectedCaseIndex !== null ? void handleRunCase(selectedCaseIndex) : null
+                      }
+                      disabled={selectedCaseIndex === null || runningCaseIndex !== null}
+                      className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-900 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:text-zinc-400"
+                    >
+                      {runningCaseIndex !== null ? "실행 중..." : "▶ Run"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleSubmit()}
+                      disabled={selectedCaseIndex === null || isSubmitting}
+                      className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                    >
+                      {isSubmitting ? "제출 중..." : "Submit"}
+                    </button>
+                  </div>
+                </div>
+                {activeCase ? (
+                  <div className="grid gap-3">
+                    <div className="space-y-3 rounded-2xl border border-zinc-300 bg-zinc-50 p-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                          Input
+                        </p>
+                        <MathText className="mt-2 block text-sm leading-7 text-zinc-800">
+                          {activeCase.input || "(empty)"}
+                        </MathText>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                          Output
+                        </p>
+                        <MathText className="mt-2 block text-sm leading-7 text-zinc-800">
+                          {activeCase.output || "(empty)"}
+                        </MathText>
+                      </div>
+                    </div>
+                    <div className="space-y-3 rounded-2xl border border-zinc-300 bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                        Result
+                      </p>
+                      <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-800">
+                        {runningCaseIndex === selectedCaseIndex ? (
+                          <p className="text-zinc-600">실행 요청 중입니다...</p>
+                        ) : activeCaseResult ? (
+                          <div className="space-y-2">
+                            <p className="font-semibold text-zinc-900">{activeCaseResult.verdict}</p>
+                            <p className="text-zinc-700">{activeCaseResult.message}</p>
+                          </div>
+                        ) : (
+                          <p className="text-zinc-600">
+                            아직 실행 결과가 없습니다. Run 버튼으로 해당 케이스를 실행하세요.
+                          </p>
+                        )}
+                      </div>
+                      {submitNotice ? (
+                        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                          {submitNotice}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                실행 가능한 샘플 케이스가 없습니다.
+              </div>
+            )}
+          </div>
+        </Panel>
       </div>
     </div>
   );
