@@ -9,7 +9,13 @@ import type {
   ProblemDetailResponse,
   SessionResponse,
 } from "@/shared/api/contracts";
-import { DefinitionGrid, PageHero, Panel, StatusPill } from "@/shared/ui";
+import {
+  DefinitionGrid,
+  MathText,
+  PageHero,
+  Panel,
+  StatusPill,
+} from "@/shared/ui";
 
 const SoloCodeEditor = dynamic(() => import("@/features/battle-room/code-editor"), {
   ssr: false,
@@ -21,10 +27,49 @@ const SoloCodeEditor = dynamic(() => import("@/features/battle-room/code-editor"
 });
 
 const defaultCodeByLanguage: Record<string, string> = {
-  javascript: `function solve(input) {\n  // 여기에 풀이를 작성하세요.\n  return input;\n}`,
-  java: `import java.io.*;\nimport java.util.*;\n\npublic class Main {\n  public static void main(String[] args) throws Exception {\n    BufferedReader br = new BufferedReader(new InputStreamReader(System.in));\n    // 여기에 풀이를 작성하세요.\n  }\n}`,
-  python: `def solve():\n    # 여기에 풀이를 작성하세요.\n    pass\n\nif __name__ == "__main__":\n    solve()\n`,
+  javascript: `function solve(input) {\n  // TODO: implement\n}\n`,
+  java: `import java.io.*;\nimport java.util.*;\n\npublic class Main {\n  public static void main(String[] args) throws Exception {\n    BufferedReader br = new BufferedReader(new InputStreamReader(System.in));\n    // TODO: implement\n  }\n}\n`,
+  python3: `def solve():\n    # TODO: implement\n    pass\n\nif __name__ == "__main__":\n    solve()\n`,
+  python: `def solve():\n    # TODO: implement\n    pass\n\nif __name__ == "__main__":\n    solve()\n`,
 };
+
+const fallbackLanguages = ["python3", "java", "javascript"];
+
+function toEditorLanguage(language: string) {
+  if (language === "python3") {
+    return "python";
+  }
+
+  return language;
+}
+
+function resolveLanguages(problem: ProblemDetailResponse | null) {
+  if (!problem?.supportedLanguages || problem.supportedLanguages.length === 0) {
+    return fallbackLanguages;
+  }
+
+  return problem.supportedLanguages;
+}
+
+function resolveStarterCode(problem: ProblemDetailResponse | null, language: string) {
+  const fromApi = problem?.starterCodes?.find((item) => item.language === language)?.code;
+
+  if (fromApi) {
+    return fromApi;
+  }
+
+  return defaultCodeByLanguage[language] ?? defaultCodeByLanguage.javascript;
+}
+
+function resolveDefaultLanguage(problem: ProblemDetailResponse | null) {
+  const languages = resolveLanguages(problem);
+
+  if (problem?.defaultLanguage && languages.includes(problem.defaultLanguage)) {
+    return problem.defaultLanguage;
+  }
+
+  return languages[0];
+}
 
 async function readSession() {
   const response = await fetch("/api/auth/session", { cache: "no-store" });
@@ -67,7 +112,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
   const [isProblemLoading, setIsProblemLoading] = useState(true);
   const [language, setLanguage] = useState("javascript");
   const [code, setCode] = useState(defaultCodeByLanguage.javascript);
-  const [sampleInput, setSampleInput] = useState("");
+  const [inputMemo, setInputMemo] = useState("");
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
   const storageKey = useMemo(
@@ -91,6 +136,12 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
     let active = true;
 
     void (async () => {
+      await Promise.resolve();
+
+      if (!active) {
+        return;
+      }
+
       setIsProblemLoading(true);
       const result = await readProblem(problemId);
 
@@ -105,8 +156,18 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
         return;
       }
 
-      setProblem(result.data);
+      const nextProblem = result.data;
+      const nextLanguage = resolveDefaultLanguage(nextProblem);
+      const nextStarterCode = resolveStarterCode(nextProblem, nextLanguage);
+      const nextStorageKey = `solo-problem-${problemId}-language-${nextLanguage}`;
+      const savedCode =
+        typeof window !== "undefined" ? window.localStorage.getItem(nextStorageKey) : null;
+
+      setProblem(nextProblem);
       setProblemError(null);
+      setLanguage(nextLanguage);
+      setCode(savedCode ?? nextStarterCode);
+      setSaveNotice(null);
       setIsProblemLoading(false);
     })();
 
@@ -120,13 +181,13 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
     setSaveNotice(null);
 
     if (typeof window === "undefined") {
-      setCode(defaultCodeByLanguage[nextLanguage] ?? defaultCodeByLanguage.javascript);
+      setCode(resolveStarterCode(problem, nextLanguage));
       return;
     }
 
     const nextStorageKey = `solo-problem-${problemId}-language-${nextLanguage}`;
     const savedCode = window.localStorage.getItem(nextStorageKey);
-    setCode(savedCode ?? defaultCodeByLanguage[nextLanguage] ?? defaultCodeByLanguage.javascript);
+    setCode(savedCode ?? resolveStarterCode(problem, nextLanguage));
   }
 
   function handleSaveCode() {
@@ -201,6 +262,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
     );
   }
 
+  const languages = resolveLanguages(problem);
+  const sampleCases = problem.sampleCases ?? [];
+
   return (
     <div className="space-y-8">
       <PageHero
@@ -232,27 +296,53 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
                     Content
                   </p>
-                  <p className="mt-2 whitespace-pre-line text-sm leading-7 text-zinc-700">
+                  <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
                     {problem.content}
-                  </p>
+                  </MathText>
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
                     Input
                   </p>
-                  <p className="mt-2 whitespace-pre-line text-sm leading-7 text-zinc-700">
+                  <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
                     {problem.inputFormat}
-                  </p>
+                  </MathText>
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
                     Output
                   </p>
-                  <p className="mt-2 whitespace-pre-line text-sm leading-7 text-zinc-700">
+                  <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
                     {problem.outputFormat}
-                  </p>
+                  </MathText>
                 </div>
               </div>
+            </div>
+          </Panel>
+
+          <Panel title="샘플 케이스" description="백엔드 `sampleCases`를 표시합니다.">
+            <div className="space-y-3">
+              {sampleCases.length > 0 ? (
+                sampleCases.map((sampleCase, index) => (
+                  <div key={`sample-${index}`} className="rounded-2xl border border-zinc-300 bg-zinc-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                      Case {index + 1}
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-zinc-900">Input</p>
+                    <MathText className="block text-sm leading-7 text-zinc-700">
+                      {sampleCase.input || "(empty)"}
+                    </MathText>
+                    <p className="mt-2 text-sm font-semibold text-zinc-900">Output</p>
+                    <MathText className="block text-sm leading-7 text-zinc-700">
+                      {sampleCase.output || "(empty)"}
+                    </MathText>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                  현재 샘플 케이스가 등록되지 않았습니다.
+                </div>
+              )}
             </div>
           </Panel>
         </div>
@@ -270,13 +360,19 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                   onChange={(event) => handleLanguageChange(event.target.value)}
                   className="w-full rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500"
                 >
-                  <option value="javascript">javascript</option>
-                  <option value="java">java</option>
-                  <option value="python">python</option>
+                  {languages.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
                 </select>
               </label>
 
-              <SoloCodeEditor language={language} value={code} onChange={setCode} />
+              <SoloCodeEditor
+                language={toEditorLanguage(language)}
+                value={code}
+                onChange={setCode}
+              />
 
               <div className="flex flex-wrap gap-3">
                 <button
@@ -302,8 +398,8 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
 
           <Panel title="입력 메모" description="예제 입력이나 테스트 아이디어를 임시로 기록합니다.">
             <textarea
-              value={sampleInput}
-              onChange={(event) => setSampleInput(event.target.value)}
+              value={inputMemo}
+              onChange={(event) => setInputMemo(event.target.value)}
               rows={8}
               placeholder="예제 입력, 풀이 메모, 반례를 적어두세요."
               className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-3 font-mono text-sm leading-6 text-zinc-900 outline-none transition focus:border-zinc-500"

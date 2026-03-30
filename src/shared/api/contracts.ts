@@ -92,6 +92,20 @@ export interface ProblemDetailResponse {
   outputFormat: string;
   timeLimitMs: number;
   memoryLimitMb: number;
+  supportedLanguages?: string[];
+  defaultLanguage?: string;
+  starterCodes?: ProblemStarterCode[];
+  sampleCases?: ProblemSampleCase[];
+}
+
+export interface ProblemStarterCode {
+  language: string;
+  code: string;
+}
+
+export interface ProblemSampleCase {
+  input: string;
+  output: string;
 }
 
 export interface ProblemSummaryResponse {
