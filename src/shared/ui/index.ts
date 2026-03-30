@@ -4,6 +4,7 @@ export { DefinitionGrid } from "./definition-grid";
 export { EmptyPanel } from "./empty-panel";
 export { EventTimeline } from "./event-timeline";
 export { MetricCard, MetricGrid } from "./metric";
+export { MathMarkdown } from "./math-markdown";
 export { PageHero } from "./page-hero";
 export { Panel } from "./panel";
 export { RouteCard } from "./route-card";
