@@ -1,13 +1,20 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
-import type { MatchStatusResponse } from "@/shared/api/contracts";
+import type { MatchStateResponse } from "@/shared/api/contracts";
 import {
   fetchBackend,
   getErrorMessage,
   readJsonBody,
 } from "@/shared/api/backend";
 import { FRONTEND_ACCESS_TOKEN_COOKIE } from "@/shared/auth/session";
+
+const defaultMatchState: MatchStateResponse = {
+  status: "IDLE",
+  readyCheck: null,
+  room: null,
+  message: null,
+};
 
 export async function GET() {
   const cookieStore = await cookies();
@@ -18,7 +25,7 @@ export async function GET() {
   }
 
   try {
-    const response = await fetchBackend("/api/v1/matches/me", { token });
+    const response = await fetchBackend("/api/v2/matches/me", { token });
 
     if (!response.ok) {
       return NextResponse.json(
@@ -27,13 +34,8 @@ export async function GET() {
       );
     }
 
-    const body = await readJsonBody<MatchStatusResponse>(response);
-    return NextResponse.json(
-      body ?? {
-        status: "IDLE",
-        roomId: null,
-      } satisfies MatchStatusResponse,
-    );
+    const body = await readJsonBody<MatchStateResponse>(response);
+    return NextResponse.json(body ?? defaultMatchState);
   } catch {
     return NextResponse.json(
       { message: "매칭 상태 조회에 실패했습니다." },
