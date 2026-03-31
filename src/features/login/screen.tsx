@@ -9,7 +9,6 @@ import type {
   AuthMutationResponse,
   LoginRequest,
 } from "@/shared/api/contracts";
-import { PageHero, Panel, StatusPill } from "@/shared/ui";
 
 const initialForm: LoginRequest = {
   email: "",
@@ -54,100 +53,106 @@ export default function LoginScreen() {
   }
 
   return (
-    <div className="space-y-8">
-      <PageHero
-        eyebrow="Login"
-        title="로그인 후 바로 메인에서 큐를 잡는 구조"
-        description="백엔드 로그인은 HttpOnly 쿠키를 발급합니다. 프론트는 자체 BFF를 통해 세션을 중계하고, 성공 후 메인 또는 원래 가려던 보호 화면으로 되돌립니다."
-        actions={
-          <>
-            <StatusPill tone="success">POST /api/auth/login</StatusPill>
-            <StatusPill>JWT cookie proxy</StatusPill>
-          </>
-        }
-      />
+    <form onSubmit={handleSubmit} className="h-full min-h-0">
+      <main className="flex h-full min-h-0 flex-col border-b border-zinc-700/80 bg-[#1e1f22] lg:border-b-0 lg:border-r">
+        <div className="flex h-12 items-center border-b border-zinc-700/80 bg-[#1e1f22] px-3">
+          <div className="relative flex h-10 items-center gap-2 border-r border-zinc-700/70 bg-[#1e1f22] px-3 font-mono text-xs text-zinc-200">
+            <span className="inline-flex h-4 w-4 items-center justify-center text-[#a78bfa]">
+              <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4">
+                <rect
+                  x="3.4"
+                  y="7.1"
+                  width="9.2"
+                  height="6.1"
+                  rx="1.2"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                />
+                <path
+                  d="M5.5 7.1V5.8a2.5 2.5 0 0 1 5 0v1.3"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                />
+                <circle cx="8" cy="10.2" r="0.8" fill="currentColor" />
+              </svg>
+            </span>
+            <span>login-request.json</span>
+            <span className="text-zinc-500">×</span>
+            <span className="absolute inset-x-0 bottom-0 h-[2px] bg-zinc-300" />
+          </div>
+        </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-        <Panel
-          title="로그인"
-          description="현재 백엔드 계약은 email, password 두 필드만 받습니다."
-        >
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-zinc-700">이메일</span>
-              <input
-                type="email"
-                value={form.email}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, email: event.target.value }))
-                }
-                className="w-full rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none ring-0 transition focus:border-zinc-500"
-                placeholder="duel@example.com"
-                required
-              />
-            </label>
+        <div className="flex-1 overflow-auto bg-[#1e1f22]">
+          <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
+            <div className="mb-6">
+              <h1 className="text-xl font-semibold text-zinc-100">로그인</h1>
+              <p className="mt-1 text-sm text-zinc-400">
+                이메일과 비밀번호를 입력해 계정에 로그인합니다.
+              </p>
+            </div>
 
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-zinc-700">비밀번호</span>
-              <input
-                type="password"
-                value={form.password}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, password: event.target.value }))
-                }
-                className="w-full rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none ring-0 transition focus:border-zinc-500"
-                placeholder="비밀번호를 입력하세요"
-                required
-              />
-            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="space-y-2 sm:col-span-2">
+                <span className="text-sm font-medium text-zinc-200">이메일</span>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, email: event.target.value }))
+                  }
+                  placeholder="duel@example.com"
+                  className="h-10 w-full rounded-md border border-zinc-700 bg-[#2b2d30] px-3 text-sm text-zinc-100 outline-none transition focus:border-[#4e89ff]/70"
+                  required
+                />
+              </label>
+
+              <label className="space-y-2 sm:col-span-2">
+                <span className="text-sm font-medium text-zinc-200">비밀번호</span>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, password: event.target.value }))
+                  }
+                  placeholder="비밀번호를 입력하세요"
+                  className="h-10 w-full rounded-md border border-zinc-700 bg-[#2b2d30] px-3 text-sm text-zinc-100 outline-none transition focus:border-[#4e89ff]/70"
+                  required
+                />
+              </label>
+            </div>
+
+            <div
+              className={`mt-5 rounded-md border px-3 py-2 text-sm ${
+                error
+                  ? "border-rose-400/60 bg-rose-900/25 text-rose-200"
+                  : "border-zinc-700 bg-[#2b2d30] text-zinc-300"
+              }`}
+            >
+              {error ?? message}
+            </div>
 
             <button
               type="submit"
               disabled={isPending}
-              className="inline-flex w-full items-center justify-center rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-500"
+              className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-md bg-[#9146ff] px-4 text-sm font-semibold text-white transition hover:bg-[#7f39fa] disabled:cursor-not-allowed disabled:bg-zinc-600 disabled:text-zinc-300"
             >
               {isPending ? "로그인 중..." : "로그인"}
             </button>
-          </form>
-        </Panel>
 
-        <div className="space-y-6">
-          <Panel title="다음 단계" description="로그인 이후 실제 이동 흐름">
-            <ul className="space-y-3 text-sm leading-7 text-zinc-700">
-              <li>메인 `/`에서 카테고리와 난이도를 고르고 매칭을 시작합니다.</li>
-              <li>현재 큐 API는 userId 쿼리를 요구하므로 프론트가 JWT subject를 읽어 중계합니다.</li>
-              <li>매칭 응답 메시지에 `roomId`가 포함되면 해당 배틀룸으로 자동 이동합니다.</li>
-            </ul>
-          </Panel>
-
-          <Panel title="보조 링크" description="아직 없는 기능은 명시적으로 분리합니다.">
-            <div className="flex flex-col gap-3 text-sm">
+            <div className="mt-3 text-sm text-zinc-400">
+              아직 계정이 없다면{" "}
               <Link
                 href="/signup"
-                className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 font-medium text-zinc-900 transition hover:border-zinc-500"
+                className="font-medium text-violet-300 transition hover:text-violet-200"
               >
-                회원가입 하기
+                회원가입
               </Link>
-              <div className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-3 text-zinc-600">
-                비밀번호 찾기: 백엔드 계약 준비 전
-              </div>
-              <div className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-3 text-zinc-600">
-                소셜 로그인: 추후 확장 예정
-              </div>
+              으로 이동하세요.
             </div>
-          </Panel>
-
-          <div
-            className={`rounded-2xl border px-4 py-3 text-sm ${
-              error
-                ? "border-rose-300 bg-rose-50 text-rose-900"
-                : "border-zinc-300 bg-white text-zinc-700"
-            }`}
-          >
-            {error ?? message}
           </div>
         </div>
-      </div>
-    </div>
+      </main>
+    </form>
   );
 }

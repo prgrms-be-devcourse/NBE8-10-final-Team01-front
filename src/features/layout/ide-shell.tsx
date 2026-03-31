@@ -220,7 +220,12 @@ export default function IdeShell({ children }: { children: React.ReactNode }) {
     ];
   }, [pathname]);
 
-  const isHome = pathname === "/";
+  const isFullBleedCenter =
+    pathname === "/" ||
+    pathname === "/signup" ||
+    pathname === "/login" ||
+    pathname === "/problems" ||
+    pathname === "/mypage";
 
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden bg-[#1e1f22]">
@@ -233,7 +238,7 @@ export default function IdeShell({ children }: { children: React.ReactNode }) {
         />
 
         <section className="min-h-0 overflow-hidden bg-[#1e1f22]">
-          {isHome ? (
+          {isFullBleedCenter ? (
             <div className="h-full min-h-0">{children}</div>
           ) : (
             <div className="h-full overflow-y-auto">
