@@ -18,6 +18,7 @@ import {
   StatusPill,
 } from "@/shared/ui";
 import { formatDateTime } from "@/shared/utils/format-date-time";
+import { formatRoleLabel } from "@/shared/utils/format-role-label";
 
 const PAGE_SIZE = 20;
 
@@ -317,7 +318,7 @@ export default function MyPageScreen() {
                 이메일: {session.member?.email}
               </div>
               <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3">
-                역할: {session.member?.role}
+                역할: {formatRoleLabel(session.member?.role)}
               </div>
               <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-zinc-600">
                 전적 상태: {error ?? message}

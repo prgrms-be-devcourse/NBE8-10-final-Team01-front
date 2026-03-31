@@ -8,18 +8,14 @@ import type {
   ApiErrorResponse,
   Difficulty,
   MatchStateResponse,
+  MyBattleResultItem,
+  MyBattleResultsResponse,
   QueueStateResponse,
   QueueStatusResponse,
   SessionResponse,
 } from "@/shared/api/contracts";
-import {
-  ApiCallout,
-  MetricCard,
-  MetricGrid,
-  PageHero,
-  Panel,
-  StatusPill,
-} from "@/shared/ui";
+import { StatusPill } from "@/shared/ui";
+import { formatRoleLabel } from "@/shared/utils/format-role-label";
 
 import {
   dashboardMenus,
@@ -46,6 +42,7 @@ type BusyAction =
   | null;
 
 const DEFAULT_FEEDBACK = "메인에서 바로 매칭을 시작할 수 있습니다.";
+const PREVIEW_RESULTS_SIZE = 5;
 
 const defaultQueueState: QueueStateResponse = {
   inQueue: false,
@@ -131,6 +128,21 @@ async function requestBattleRoomJoin(roomId: number) {
   return { response, payload };
 }
 
+async function readMyBattleResultsPreview(size: number) {
+  const response = await fetch(`/api/me/battle-results?page=0&size=${size}`, {
+    cache: "no-store",
+    credentials: "include",
+  });
+
+  const payload = (await response.json().catch(() => null)) as MyBattleResultsResponse | null;
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    payload,
+  };
+}
+
 function isQueueStatusResponse(
   payload: QueueStatusResponse | ApiErrorResponse | null,
 ): payload is QueueStatusResponse {
@@ -177,6 +189,9 @@ export default function HomeScreen() {
   const [pollStage, setPollStage] = useState<PollStage>("IDLE");
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const [now, setNow] = useState(Date.now());
+  const [recentResults, setRecentResults] = useState<MyBattleResultItem[]>([]);
+  const [resultsPreviewMessage, setResultsPreviewMessage] = useState("로그인 후 최근 전적을 확인할 수 있습니다.");
+  const [resultsPreviewError, setResultsPreviewError] = useState<string | null>(null);
 
   const joiningRoomIdRef = useRef<number | null>(null);
 
@@ -329,6 +344,55 @@ export default function HomeScreen() {
       active = false;
     };
   }, [applyMatchSnapshot, resetFlow]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!session.authenticated) {
+      setRecentResults([]);
+      setResultsPreviewError(null);
+      setResultsPreviewMessage("로그인 후 최근 전적을 확인할 수 있습니다.");
+      return () => {
+        active = false;
+      };
+    }
+
+    setResultsPreviewError(null);
+    setResultsPreviewMessage("최근 전적을 불러오는 중입니다.");
+
+    void (async () => {
+      const { ok, status, payload } = await readMyBattleResultsPreview(PREVIEW_RESULTS_SIZE);
+
+      if (!active) {
+        return;
+      }
+
+      if (status === 401 || payload?.resultCode === "MEMBER_401") {
+        setRecentResults([]);
+        setResultsPreviewError(null);
+        setResultsPreviewMessage(payload?.msg ?? "로그인이 필요합니다.");
+        return;
+      }
+
+      if (!ok || !payload || payload.resultCode !== "200" || !payload.data) {
+        setRecentResults([]);
+        setResultsPreviewError(payload?.msg ?? "최근 전적을 불러오지 못했습니다.");
+        setResultsPreviewMessage(payload?.msg ?? "전적 조회에 실패했습니다.");
+        return;
+      }
+
+      const loaded = payload.data.battleResults;
+      setRecentResults(loaded);
+      setResultsPreviewError(null);
+      setResultsPreviewMessage(
+        loaded.length > 0 ? payload.msg : "아직 완료한 배틀 전적이 없습니다.",
+      );
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [session.authenticated]);
 
   useEffect(() => {
     if (!session.authenticated || pollStage !== "QUEUE") {
@@ -614,310 +678,225 @@ export default function HomeScreen() {
   const activeDifficultyLabel = queueState.difficulty ?? difficulty;
   const queueElapsedSeconds = getElapsedSeconds(queueStartedAt, now);
   const countdownSeconds = getRemainingSeconds(matchState.readyCheck?.deadline ?? null, now);
-  const acceptedCount = matchState.readyCheck?.acceptedCount ?? 0;
   const roomId = matchState.room?.roomId ?? null;
-
-  const flowStatusValue =
-    modalMode === "SEARCHING"
-      ? "대기 중"
-      : modalMode === "READY_CHECK"
-        ? "수락 대기"
-        : modalMode === "ROOM_READY"
-          ? "방 준비 완료"
-          : modalMode === "TERMINAL"
-            ? "종료 안내"
-            : "대기 없음";
-
-  const flowStatusHint =
-    modalMode === "SEARCHING"
-      ? `${waitingCount} / ${requiredCount}명 대기`
-      : modalMode === "READY_CHECK"
-        ? `${acceptedCount} / ${requiredCount}명 수락`
-        : modalMode === "ROOM_READY"
-          ? roomId !== null
-            ? `roomId ${roomId}`
-            : "roomId 확인 중"
-          : modalMode === "TERMINAL"
-            ? "종료 후 로컬 상태 초기화"
-            : "메인에서 바로 시작";
+  const previewPlayedCount = recentResults.length;
+  const previewSolvedCount = recentResults.filter((item) => item.solved).length;
+  const previewWinRate =
+    previewPlayedCount > 0 ? Math.round((previewSolvedCount / previewPlayedCount) * 100) : null;
+  const previewScoreDelta = recentResults.reduce((acc, item) => acc + item.scoreDelta, 0);
 
   return (
-    <div className="space-y-8">
-      <PageHero
-        eyebrow="Main"
-        title="프로필을 보고, ready-check까지 이어지는 메인 홈"
-        description="메인 홈에서 category와 difficulty를 고른 뒤 매칭을 시작합니다. v2 흐름에서는 먼저 queue/me를 polling하고, 큐에서 빠진 뒤에는 matches/me로 전환해 수락 여부와 room 준비 상태를 확인합니다."
-        actions={
-          <>
-            <StatusPill tone={session.authenticated ? "success" : "warn"}>
-              {session.authenticated ? "로그인 상태" : "게스트 상태"}
-            </StatusPill>
-            <StatusPill>ready-check v2</StatusPill>
-            <StatusPill>HTTP polling</StatusPill>
-          </>
-        }
-      />
+    <div className="md:h-[calc(100dvh-7.5rem)] md:overflow-hidden">
+      <section className="overflow-hidden rounded-3xl border border-violet-300/80 bg-white/70 shadow-[0_24px_60px_-40px_rgba(76,29,149,0.3)] md:h-full md:min-h-0">
+        <div className="grid gap-4 p-4 md:h-full md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[180px_minmax(0,1.45fr)_240px] lg:p-5 xl:grid-cols-[200px_minmax(0,1.65fr)_280px]">
+          <aside className="space-y-4 rounded-2xl border border-violet-200 bg-white/80 p-4 text-zinc-900 md:min-h-0 md:overflow-y-auto">
+            <div className="rounded-xl border border-violet-200 bg-violet-50/70 p-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">빠른 메뉴</p>
+              <div className="mt-2 space-y-1.5">
+                {dashboardMenus.map((menu) => {
+                  const href =
+                    menu.requiresAuth && !session.authenticated
+                      ? `/login?next=${encodeURIComponent(menu.href)}`
+                      : menu.href;
 
-      <div className="rounded-3xl border border-zinc-300 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-sm text-zinc-500">상단바</p>
-            <h2 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950">
-              Algo Battle
-            </h2>
-            <p className="mt-2 text-sm text-zinc-600">
-              {session.authenticated
-                ? `${session.member?.nickname}님은 메인 홈에서 바로 매칭을 시작할 수 있습니다.`
-                : "비로그인 상태에서는 메인 구조만 볼 수 있고, 실제 매칭 시작 시 로그인으로 이동합니다."}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm">
-              <p className="font-medium text-zinc-950">
-                {session.member?.nickname ?? "게스트"}
-              </p>
-              <p className="text-zinc-500">
-                {session.member?.role ?? "로그인 필요"} / 전적 API 연동 중
-              </p>
-            </div>
-            {session.authenticated ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => handleProtectedMove("/mypage")}
-                  className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900"
-                >
-                  내 프로필
-                </button>
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  disabled={isBusy}
-                  className="rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white"
-                >
-                  로그아웃
-                </button>
-              </>
-            ) : (
-              <>
-                <Link
-                  href="/signup"
-                  className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900"
-                >
-                  회원가입
-                </Link>
-                <Link
-                  href="/login?next=/"
-                  className="rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white"
-                >
-                  로그인
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <MetricGrid>
-        <MetricCard label="현재 상태" value={flowStatusValue} hint={flowStatusHint} />
-        <MetricCard
-          label="매칭 인원"
-          value={`${requiredCount}명`}
-          hint="현재 MVP는 4인 ready-check 기준"
-        />
-        <MetricCard
-          label="카테고리"
-          value={activeCategoryLabel}
-          hint="큐 대기 중에는 queue/me 기준으로 표시합니다."
-        />
-        <MetricCard
-          label="난이도"
-          value={activeDifficultyLabel}
-          hint="Easy / Medium / Hard"
-        />
-      </MetricGrid>
-
-      <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] xl:grid-cols-[0.85fr_1.3fr_0.85fr]">
-        <Panel
-          title="서비스 메뉴"
-          description="주요 페이지별 작업 동선을 한곳에서 바로 열 수 있도록 진입점을 둡니다."
-        >
-          <div className="space-y-3">
-            {dashboardMenus.map((menu) => {
-              const href =
-                menu.requiresAuth && !session.authenticated
-                  ? `/login?next=${encodeURIComponent(menu.href)}`
-                  : menu.href;
-
-              return (
-                <Link
-                  key={menu.title}
-                  href={href}
-                  className="block rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 transition hover:border-zinc-500"
-                >
-                  <p className="font-medium text-zinc-950">{menu.title}</p>
-                  <p className="mt-1 text-sm leading-6 text-zinc-600">
-                    {menu.description}
-                  </p>
-                </Link>
-              );
-            })}
-          </div>
-        </Panel>
-
-        <Panel
-          title="매칭 설정 영역"
-          description="메인 홈의 가장 중요한 기능은 카테고리와 난이도를 고른 뒤 바로 매칭을 시작하는 것입니다."
-        >
-          <div className="space-y-6">
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-zinc-700">알고리즘 카테고리</span>
-              <select
-                value={category}
-                onChange={(event) => setCategory(event.target.value as QueueCategoryValue)}
-                className="w-full rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500"
-              >
-                {queueCategories.map((item) => (
-                  <option key={item.value} value={item.value} disabled={item.disabled}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="text-sm leading-6 text-zinc-500">
-              현재는 실제 출제 가능한 카테고리만 사용하고, 전체(무작위)는 준비 중으로 둡니다.
-            </p>
-
-            <fieldset className="space-y-3">
-              <legend className="text-sm font-medium text-zinc-700">난이도 선택</legend>
-              <div className="grid gap-3 md:grid-cols-3">
-                {difficultyOptions.map((option) => (
-                  <label
-                    key={option.value}
-                    className={`flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 text-sm transition ${
-                      difficulty === option.value
-                        ? "border-zinc-950 bg-zinc-950 text-white"
-                        : "border-zinc-300 bg-zinc-50 text-zinc-900"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="difficulty"
-                      value={option.value}
-                      checked={difficulty === option.value}
-                      onChange={() => setDifficulty(option.value)}
-                      className="sr-only"
-                    />
-                    <span>{option.label}</span>
-                  </label>
-                ))}
+                  return (
+                    <Link
+                      key={menu.title}
+                      href={href}
+                      className="block rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs text-zinc-700 transition hover:border-violet-400 hover:bg-violet-100"
+                    >
+                      {menu.title}
+                    </Link>
+                  );
+                })}
               </div>
-            </fieldset>
+            </div>
+          </aside>
 
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  void handleStartMatch();
-                }}
-                disabled={isBusy || (modalMode !== null && modalMode !== "TERMINAL")}
-                className="rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-500"
-              >
-                {modalMode === "SEARCHING"
-                  ? "매칭 진행 중"
-                  : busyAction === "start"
-                    ? "처리 중..."
-                    : "매칭 시작"}
-              </button>
-              {modalMode === "SEARCHING" ? (
+          <div className="space-y-4 md:min-h-0 md:overflow-y-auto">
+            <div className="rounded-2xl border border-violet-200 bg-white/90 p-5 text-zinc-900">
+              <div className="mb-5 flex flex-col gap-4 rounded-xl border border-violet-200 bg-violet-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-violet-700">매칭 제어</p>
+                  <h2 className="mt-2 text-xl font-semibold">매칭 설정</h2>
+                  <p className="mt-1 text-sm text-zinc-600">
+                    카테고리와 난이도를 선택한 뒤 큐에 참가합니다.
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={() => {
-                    void handleCancelMatch();
+                    void handleStartMatch();
                   }}
-                  disabled={isBusy}
-                  className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:text-zinc-400"
+                  disabled={isBusy || (modalMode !== null && modalMode !== "TERMINAL")}
+                  className="min-h-12 rounded-xl bg-violet-300 px-8 text-base font-semibold text-zinc-950 transition hover:bg-violet-200 disabled:cursor-not-allowed disabled:bg-zinc-600 disabled:text-zinc-300"
                 >
-                  매칭 취소
+                  {modalMode === "SEARCHING"
+                    ? "매칭 진행 중"
+                    : busyAction === "start"
+                      ? "처리 중..."
+                      : "매칭 시작"}
                 </button>
-              ) : null}
+              </div>
+
+              <div className="space-y-5">
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium text-zinc-700">알고리즘 카테고리</span>
+                  <div className="relative">
+                    <select
+                      value={category}
+                      onChange={(event) => setCategory(event.target.value as QueueCategoryValue)}
+                      className="w-full appearance-none rounded-xl border border-violet-300 bg-white px-4 py-3 pr-10 text-sm text-zinc-900 outline-none transition focus:border-violet-500"
+                    >
+                      {queueCategories.map((item) => (
+                        <option
+                          key={item.value}
+                          value={item.value}
+                          disabled={"disabled" in item ? item.disabled : false}
+                        >
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-zinc-500">
+                      ▾
+                    </span>
+                  </div>
+                </label>
+
+                <fieldset className="space-y-3">
+                  <legend className="text-sm font-medium text-zinc-700">난이도 선택</legend>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    {difficultyOptions.map((option) => (
+                      <label
+                        key={option.value}
+                        className={`flex cursor-pointer items-center justify-center rounded-xl border px-4 py-3 text-sm transition ${
+                          difficulty === option.value
+                            ? "border-violet-300 bg-violet-300 text-zinc-900"
+                            : "border-violet-200 bg-white text-zinc-700 hover:border-violet-400 hover:bg-violet-50"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="difficulty"
+                          value={option.value}
+                          checked={difficulty === option.value}
+                          onChange={() => setDifficulty(option.value)}
+                          className="sr-only"
+                        />
+                        <span>{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+
+                <div className="flex flex-wrap gap-3">
+                  {modalMode === "SEARCHING" ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void handleCancelMatch();
+                      }}
+                      disabled={isBusy}
+                      className="rounded-xl border border-violet-300 bg-white px-4 py-3 text-sm font-medium text-zinc-800 transition hover:border-violet-500 hover:bg-violet-50 disabled:cursor-not-allowed disabled:border-zinc-300 disabled:text-zinc-400"
+                    >
+                      매칭 취소
+                    </button>
+                  ) : null}
+                </div>
+
+                <div
+                  className={`rounded-xl border px-4 py-3 text-sm ${
+                    error
+                      ? "border-rose-300 bg-rose-50 text-rose-700"
+                      : "border-violet-200 bg-violet-50/80 text-zinc-700"
+                  }`}
+                >
+                  {error ?? terminalMessage ?? feedback}
+                </div>
+              </div>
             </div>
 
-            <div
-              className={`rounded-2xl border px-4 py-3 text-sm ${
-                error
-                  ? "border-rose-300 bg-rose-50 text-rose-900"
-                  : "border-zinc-300 bg-zinc-50 text-zinc-700"
-              }`}
-            >
-              {error ?? terminalMessage ?? feedback}
-            </div>
           </div>
-        </Panel>
 
-        <Panel
-          title="개인 통계 요약"
-          description="메인에서는 보조 정보만 보여주고, 실제 전적과 점수 API는 마이페이지에서 더 자세히 확인합니다."
-          className="lg:col-span-2 xl:col-span-1"
-        >
-          <div className="space-y-3 text-sm">
-            <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3">
-              티어/총점: API 연결 전
+          <aside className="space-y-4 rounded-2xl border border-violet-200 bg-white/80 p-4 text-zinc-900 md:col-span-2 md:min-h-0 md:overflow-y-auto lg:col-span-1">
+            <div className="rounded-xl border border-violet-200 bg-violet-50/70 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">프로필</p>
+                <StatusPill tone={session.authenticated ? "success" : "warn"}>
+                  {session.authenticated ? "로그인됨" : "게스트"}
+                </StatusPill>
+              </div>
+              <p className="mt-2 text-sm font-semibold">{session.member?.nickname ?? "게스트"}</p>
+              <p className="mt-1 text-xs text-zinc-500">{formatRoleLabel(session.member?.role)}</p>
             </div>
-            <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3">
-              현재 단계: {flowStatusValue}
-            </div>
-            <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3">
-              {modalMode === "SEARCHING"
-                ? `현재 큐: ${activeCategoryLabel} / ${activeDifficultyLabel} / ${waitingCount}명 대기`
-                : modalMode === "READY_CHECK"
-                  ? `ready-check: ${acceptedCount} / ${requiredCount}명 수락`
-                  : modalMode === "ROOM_READY"
-                    ? `방 입장 준비: roomId ${roomId ?? "확인 중"}`
-                    : "현재는 대기 중이 아닙니다."}
-            </div>
-          </div>
-        </Panel>
-      </div>
 
-      <Panel
-        title="현재 연결 사인"
-        description="메인과 인접한 흐름에서 이번 단계에 실제로 붙여 둔 API 경로들입니다."
-      >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <ApiCallout
-            method="POST"
-            path="/api/queue/join"
-            note="큐 참가 후에는 응답 메시지를 고정 상태로 쓰지 않고, queue/me polling으로 실제 대기 상태를 그립니다."
-          />
-          <ApiCallout
-            method="GET"
-            path="/api/queue/me"
-            note="SEARCHING 단계 전용입니다. waitingCount와 requiredCount를 이용해 1/4, 2/4 같은 대기 UI를 만듭니다."
-          />
-          <ApiCallout
-            method="GET"
-            path="/api/matches/me"
-            note="queue/me에서 inQueue=false가 되면 이쪽으로 전환해 ready-check, room 준비, 종료 상태를 확인합니다."
-          />
-          <ApiCallout
-            method="POST"
-            path="/api/matches/[matchId]/accept"
-            note="내 decision을 ACCEPTED로 바꾸고, 마지막 수락이면 ROOM_READY까지 이어집니다."
-          />
-          <ApiCallout
-            method="POST"
-            path="/api/matches/[matchId]/decline"
-            note="한 명이라도 거절하면 세션 전체가 CANCELLED로 바뀌고 종료 안내를 보여줍니다."
-          />
-          <ApiCallout
-            method="POST"
-            path="/api/battle/rooms/{roomId}/join"
-            note="ROOM_READY가 되면 기존 battle room join API를 재사용해서 실제 방으로 입장합니다."
-          />
+            <div className="grid gap-2">
+              {session.authenticated ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleProtectedMove("/mypage")}
+                    className="rounded-xl border border-violet-300 bg-white px-3 py-2 text-sm font-medium text-zinc-900 transition hover:border-violet-500 hover:bg-violet-50"
+                  >
+                    내 프로필
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    disabled={isBusy}
+                    className="rounded-xl bg-violet-300 px-3 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-violet-200 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500"
+                  >
+                    로그아웃
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/signup"
+                    className="rounded-xl border border-violet-300 bg-white px-3 py-2 text-center text-sm font-medium text-zinc-900 transition hover:border-violet-500 hover:bg-violet-50"
+                  >
+                    회원가입
+                  </Link>
+                  <Link
+                    href="/login?next=/"
+                    className="rounded-xl bg-violet-300 px-3 py-2 text-center text-sm font-semibold text-zinc-900 transition hover:bg-violet-200"
+                  >
+                    로그인
+                  </Link>
+                </>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-violet-200 bg-violet-50/70 p-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">전적 미리보기</p>
+              <div className="mt-3 space-y-2 text-sm text-zinc-700">
+                {session.authenticated ? (
+                  <>
+                    <p>최근 {previewPlayedCount}전 승률: {previewWinRate ?? 0}%</p>
+                    <p>최근 정답 수: {previewSolvedCount}</p>
+                    <p>
+                      최근 점수 변화 합계: {previewScoreDelta > 0 ? "+" : ""}
+                      {previewScoreDelta}
+                    </p>
+                  </>
+                ) : (
+                  <p>로그인 후 전적 미리보기를 확인할 수 있습니다.</p>
+                )}
+              </div>
+              <div
+                className={`mt-3 rounded-lg border px-3 py-2 text-xs ${
+                  resultsPreviewError
+                    ? "border-rose-300 bg-rose-50 text-rose-700"
+                    : "border-violet-200 bg-white text-zinc-600"
+                }`}
+              >
+                {resultsPreviewError ?? resultsPreviewMessage}
+              </div>
+            </div>
+          </aside>
         </div>
-      </Panel>
+      </section>
 
       <QueueModal
         mode={modalMode}
