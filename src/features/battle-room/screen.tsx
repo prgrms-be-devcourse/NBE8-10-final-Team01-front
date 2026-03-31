@@ -525,6 +525,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                       if (stompClientRef.current?.connected && room?.status === "PLAYING") {
                         stompClientRef.current.publish({
                           destination: `/app/room/${roomId}/code`,
+                          headers: { "content-type": "application/json" },
                           body: JSON.stringify({ code: newCode }),
                         });
                       }
