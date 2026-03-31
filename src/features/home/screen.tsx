@@ -1203,7 +1203,7 @@ export default function HomeScreen() {
                       # queue config
                     </div>
                     <div className="whitespace-nowrap text-[#6a717d]" style={editorLineStyle}>
-                      # required: category, level
+                      # 카테고리와 난이도를 선택하고 매칭 시작을 눌러 대기열에 참가합니다.
                     </div>
                     <div className="flex items-center gap-2" style={editorRowStyle}>
                       <span className="w-40 text-[#9cdcfe]">QUEUE_CATEGORY</span>
