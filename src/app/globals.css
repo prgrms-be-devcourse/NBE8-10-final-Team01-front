@@ -4,6 +4,7 @@
   --background: #0f1115;
   --foreground: #e5e7eb;
   --panel: #171a21;
+  --app-header-h: 56px;
 }
 
 @theme inline {

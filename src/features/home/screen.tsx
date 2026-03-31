@@ -196,6 +196,8 @@ export default function HomeScreen() {
   const joiningRoomIdRef = useRef<number | null>(null);
   const editorPaneRef = useRef<HTMLDivElement | null>(null);
   const [editorLineCount, setEditorLineCount] = useState(28);
+  const [editorLineHeight, setEditorLineHeight] = useState(32);
+  const [editorFontSize, setEditorFontSize] = useState(13);
 
   const resetFlow = useCallback((nextFeedback = DEFAULT_FEEDBACK) => {
     setQueueState(defaultQueueState);
@@ -303,25 +305,45 @@ export default function HomeScreen() {
       return;
     }
 
-    const updateEditorLineCount = () => {
-      const lineHeight = 32;
-      const verticalPadding = 32;
+    const resolveEditorMetrics = (width: number) => {
+      if (width >= 1920) {
+        return { lineHeight: 34, fontSize: 14 };
+      }
+
+      if (width >= 1280) {
+        return { lineHeight: 33, fontSize: 13 };
+      }
+
+      if (width >= 1024) {
+        return { lineHeight: 32, fontSize: 13 };
+      }
+
+      return { lineHeight: 30, fontSize: 13 };
+    };
+
+    const updateEditorMetrics = () => {
+      const { lineHeight, fontSize } = resolveEditorMetrics(window.innerWidth);
+      const verticalPadding = lineHeight;
       const usableHeight = Math.max(editorPane.clientHeight - verticalPadding, lineHeight);
       const nextLineCount = Math.max(18, Math.floor(usableHeight / lineHeight));
 
+      setEditorLineHeight((current) => (current === lineHeight ? current : lineHeight));
+      setEditorFontSize((current) => (current === fontSize ? current : fontSize));
       setEditorLineCount((current) => (current === nextLineCount ? current : nextLineCount));
     };
 
-    updateEditorLineCount();
+    updateEditorMetrics();
 
     const resizeObserver = new ResizeObserver(() => {
-      updateEditorLineCount();
+      updateEditorMetrics();
     });
 
     resizeObserver.observe(editorPane);
+    window.addEventListener("resize", updateEditorMetrics);
 
     return () => {
       resizeObserver.disconnect();
+      window.removeEventListener("resize", updateEditorMetrics);
     };
   }, []);
 
@@ -719,6 +741,17 @@ export default function HomeScreen() {
   const previewScoreDeltaLabel =
     previewScoreDelta > 0 ? `+${previewScoreDelta}` : String(previewScoreDelta);
   const editorLineNumbers = Array.from({ length: editorLineCount }, (_, index) => 41 + index);
+  const editorLineStyle = {
+    height: `${editorLineHeight}px`,
+    lineHeight: `${editorLineHeight}px`,
+  };
+  const editorRowStyle = {
+    minHeight: `${editorLineHeight}px`,
+    lineHeight: `${editorLineHeight}px`,
+  };
+  const editorContentStyle = {
+    fontSize: `${editorFontSize}px`,
+  };
   const ideProjectTreeItems: Array<{
     key: string;
     label: string;
@@ -1012,9 +1045,9 @@ export default function HomeScreen() {
   };
 
   return (
-    <div className="xl:h-[calc(100dvh-7.5rem)] xl:overflow-hidden">
-      <section className="overflow-hidden rounded-xl border border-zinc-700/80 bg-[#1e1f22] shadow-[0_34px_82px_-42px_rgba(0,0,0,0.92),0_12px_24px_-16px_rgba(0,0,0,0.78)] xl:h-full xl:min-h-0">
-        <div className="grid h-full grid-cols-1 md:grid-cols-[250px_minmax(0,1fr)] lg:grid-cols-[210px_minmax(0,1fr)_230px] xl:grid-cols-[250px_minmax(0,1fr)_280px] 2xl:grid-cols-[280px_minmax(0,1fr)_320px]">
+    <div className="-my-4 ml-[calc(50%-50dvw)] w-[100dvw] max-w-none min-h-[calc(100dvh-var(--app-header-h))] xl:h-[calc(100dvh-var(--app-header-h))] xl:overflow-hidden">
+      <section className="overflow-hidden bg-[#1e1f22] xl:h-full xl:min-h-0">
+        <div className="grid h-full grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_250px] xl:grid-cols-[260px_minmax(0,1fr)_290px] 2xl:grid-cols-[290px_minmax(1200px,1fr)_320px]">
           <aside className="min-h-0 border-b border-zinc-800/90 bg-[#2b2d30] md:border-b-0 md:border-r">
             <div className="grid h-full grid-cols-[48px_minmax(0,1fr)]">
               <div className="flex min-h-0 flex-col items-center justify-between border-r border-zinc-800/90 bg-[#25272d] py-2">
@@ -1069,7 +1102,7 @@ export default function HomeScreen() {
                     const content = (
                       <div
                         className={`flex h-7 items-center gap-1.5 rounded-sm px-1.5 ${rowToneClass}`}
-                        style={{ paddingLeft: `${item.depth * 10 + 4}px` }}
+                        style={{ paddingLeft: `${item.depth * 8 + 4}px` }}
                       >
                         <span className="inline-flex w-3 items-center justify-center text-[10px] text-zinc-500">
                           {item.hasChildren ? (item.expanded ? "▾" : "▸") : ""}
@@ -1077,7 +1110,9 @@ export default function HomeScreen() {
                         <span className="inline-flex h-3.5 w-3.5 items-center justify-center">
                           {renderProjectTreeIcon(item.icon)}
                         </span>
-                        <span className="truncate text-[13px] text-zinc-200">{item.label}</span>
+                        <span className="min-w-0 flex-1 truncate text-[13px] text-zinc-200">
+                          {item.label}
+                        </span>
                         {item.subtitle ? (
                           <span className="truncate pl-1 text-[12px] text-zinc-500">{item.subtitle}</span>
                         ) : null}
@@ -1152,20 +1187,25 @@ export default function HomeScreen() {
               </div>
 
               <div ref={editorPaneRef} className="flex-1 overflow-hidden bg-[#1e1f22]">
-                <div className="grid h-full grid-cols-[56px_minmax(0,1fr)] bg-[#1e1f22] font-mono text-sm">
+                <div
+                  className="grid h-full grid-cols-[56px_minmax(0,1fr)] bg-[#1e1f22] font-mono"
+                  style={editorContentStyle}
+                >
                   <div className="border-r border-zinc-700/70 bg-[#1e1f22] px-3 py-4 text-right text-[#606366]">
                     {editorLineNumbers.map((line) => (
-                      <div key={line} className="h-8 leading-8">
+                      <div key={line} style={editorLineStyle}>
                         {line}
                       </div>
                     ))}
                   </div>
                   <div className="px-4 py-4 text-[#a9b7c6]">
-                    <div className="h-8 whitespace-nowrap leading-8 text-[#6a717d]"># queue config</div>
-                    <div className="h-8 whitespace-nowrap leading-8 text-[#6a717d]">
+                    <div className="whitespace-nowrap text-[#6a717d]" style={editorLineStyle}>
+                      # queue config
+                    </div>
+                    <div className="whitespace-nowrap text-[#6a717d]" style={editorLineStyle}>
                       # category, level 값이 실제 매칭 요청에 반영됩니다.
                     </div>
-                    <div className="flex min-h-8 items-center gap-2 leading-8">
+                    <div className="flex items-center gap-2" style={editorRowStyle}>
                       <span className="w-40 text-[#9cdcfe]">QUEUE_CATEGORY</span>
                       <span className="text-[#80889a]">=</span>
                       <div className="relative min-w-[11rem] max-w-[18rem] flex-1 leading-none">
@@ -1189,7 +1229,7 @@ export default function HomeScreen() {
                         </span>
                       </div>
                     </div>
-                    <div className="flex min-h-8 items-center gap-2 leading-8">
+                    <div className="flex items-center gap-2" style={editorRowStyle}>
                       <span className="w-40 text-[#9cdcfe]">QUEUE_LEVEL</span>
                       <span className="text-[#80889a]">=</span>
                       <div className="flex flex-wrap gap-1 leading-none">
@@ -1215,14 +1255,14 @@ export default function HomeScreen() {
                         ))}
                       </div>
                     </div>
-                    <div className="flex min-h-8 items-center gap-2 leading-8">
+                    <div className="flex items-center gap-2" style={editorRowStyle}>
                       <span className="w-40 text-[#9cdcfe]">QUEUE_PARTY_SIZE</span>
                       <span className="text-[#80889a]">=</span>
                       <span className="inline-flex min-w-8 items-center justify-center rounded-sm border border-zinc-700 bg-[#2b2d30] px-2 text-xs text-[#b5cea8]">
                         4
                       </span>
                     </div>
-                    <div className="flex min-h-8 items-start gap-2 leading-8">
+                    <div className="flex items-start gap-2" style={editorRowStyle}>
                       <span className="w-40 text-[#9cdcfe]">QUEUE_MEMO</span>
                       <span className="pt-1 text-[#80889a]">=</span>
                       <input
@@ -1233,7 +1273,7 @@ export default function HomeScreen() {
                       />
                     </div>
 
-                    <div className="mt-2 h-8 leading-8 text-[#6a717d]">
+                    <div className="mt-2 text-[#6a717d]" style={editorLineStyle}>
                       {modalMode === "SEARCHING" ? (
                         <button
                           type="button"

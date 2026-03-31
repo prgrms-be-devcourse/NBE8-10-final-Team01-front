@@ -44,8 +44,8 @@ export default function RootLayout({
     >
       <body className="min-h-full">
         <div className="min-h-screen bg-[radial-gradient(circle_at_16%_0%,rgba(167,139,250,0.16),transparent_36%),radial-gradient(circle_at_82%_100%,rgba(139,92,246,0.1),transparent_44%),linear-gradient(180deg,#0f1115_0%,#12141b_48%,#0d0f13_100%)] text-zinc-100">
-          <header className="sticky top-0 z-20 border-b border-violet-400/20 bg-[#12141c]/88 text-zinc-100 shadow-[0_10px_24px_-18px_rgba(0,0,0,0.82)] backdrop-blur">
-            <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
+          <header className="sticky top-0 z-20 h-[var(--app-header-h)] border-b border-violet-400/20 bg-[#12141c]/88 text-zinc-100 shadow-[0_10px_24px_-18px_rgba(0,0,0,0.82)] backdrop-blur">
+            <div className="mx-auto flex h-full w-full max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
               <Link href="/" className="text-sm font-semibold tracking-tight text-zinc-100">
                 BRACKET {"{}"}
               </Link>
