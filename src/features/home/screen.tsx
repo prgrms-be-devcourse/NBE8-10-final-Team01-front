@@ -192,6 +192,8 @@ export default function HomeScreen() {
   const [recentResults, setRecentResults] = useState<MyBattleResultItem[]>([]);
   const [resultsPreviewMessage, setResultsPreviewMessage] = useState("로그인 후 최근 전적을 확인할 수 있습니다.");
   const [resultsPreviewError, setResultsPreviewError] = useState<string | null>(null);
+  const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(true);
+  const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(true);
 
   const joiningRoomIdRef = useRef<number | null>(null);
   const editorPaneRef = useRef<HTMLDivElement | null>(null);
@@ -752,6 +754,13 @@ export default function HomeScreen() {
   const editorContentStyle = {
     fontSize: `${editorFontSize}px`,
   };
+  const layoutColumnsClass = isQuickMenuOpen
+    ? isProfilePanelOpen
+      ? "grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_250px] xl:grid-cols-[260px_minmax(0,1fr)_290px] 2xl:grid-cols-[290px_minmax(1200px,1fr)_320px]"
+      : "grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_38px] xl:grid-cols-[260px_minmax(0,1fr)_38px] 2xl:grid-cols-[290px_minmax(1200px,1fr)_38px]"
+    : isProfilePanelOpen
+      ? "grid-cols-1 md:grid-cols-[48px_minmax(0,1fr)] lg:grid-cols-[48px_minmax(0,1fr)_250px] xl:grid-cols-[48px_minmax(0,1fr)_290px] 2xl:grid-cols-[48px_minmax(1200px,1fr)_320px]"
+      : "grid-cols-1 md:grid-cols-[48px_minmax(0,1fr)] lg:grid-cols-[48px_minmax(0,1fr)_38px] xl:grid-cols-[48px_minmax(0,1fr)_38px] 2xl:grid-cols-[48px_minmax(1200px,1fr)_38px]";
   const ideProjectTreeItems: Array<{
     key: string;
     label: string;
@@ -793,7 +802,7 @@ export default function HomeScreen() {
     { key: "mypage", label: "마이페이지", depth: 2, icon: "class", href: "/mypage" },
   ];
   const ideRailTopItems = [
-    { icon: "project", active: true, title: "Project" },
+    { icon: "project", title: "Project" },
     { icon: "sliders", title: "Services" },
     { icon: "branch", title: "Git" },
     { icon: "layout", title: "Layout" },
@@ -810,7 +819,7 @@ export default function HomeScreen() {
   const ideDbRailTopItems = [
     { icon: "notifications", title: "알림" },
     { icon: "search", title: "검색" },
-    { icon: "database", title: "데이터베이스", active: true },
+    { icon: "database", title: "데이터베이스" },
     { icon: "gamepad", title: "게임" },
     { icon: "blocks", title: "서비스" },
     { icon: "docs", title: "문서" },
@@ -1047,19 +1056,24 @@ export default function HomeScreen() {
   return (
     <div className="-my-4 ml-[calc(50%-50dvw)] w-[100dvw] max-w-none min-h-[calc(100dvh-var(--app-header-h))] xl:h-[calc(100dvh-var(--app-header-h))] xl:overflow-hidden">
       <section className="overflow-hidden bg-[#1e1f22] xl:h-full xl:min-h-0">
-        <div className="grid h-full grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_250px] xl:grid-cols-[260px_minmax(0,1fr)_290px] 2xl:grid-cols-[290px_minmax(1200px,1fr)_320px]">
+        <div className={`grid h-full ${layoutColumnsClass}`}>
           <aside className="min-h-0 border-b border-zinc-800/90 bg-[#2b2d30] md:border-b-0 md:border-r">
-            <div className="grid h-full grid-cols-[48px_minmax(0,1fr)]">
+            <div className={`grid h-full ${isQuickMenuOpen ? "grid-cols-[48px_minmax(0,1fr)]" : "grid-cols-[48px]"}`}>
               <div className="flex min-h-0 flex-col items-center justify-between border-r border-zinc-800/90 bg-[#25272d] py-2">
                 <div className="flex flex-col items-center gap-2">
                   {ideRailTopItems.map((item) => (
                     <button
                       key={item.title}
                       type="button"
+                      onClick={() => {
+                        if (item.icon === "project") {
+                          setIsQuickMenuOpen((current) => !current);
+                        }
+                      }}
                       title={item.title}
                       aria-label={item.title}
                       className={`h-8 w-8 rounded-md border text-[10px] font-semibold tracking-wide transition ${
-                        item.active
+                        item.icon === "project" && isQuickMenuOpen
                           ? "border-zinc-500 bg-zinc-700/70 text-zinc-100"
                           : "border-transparent text-zinc-400 hover:bg-zinc-700/30 hover:text-zinc-300"
                       }`}
@@ -1083,7 +1097,7 @@ export default function HomeScreen() {
                 </div>
               </div>
 
-              <div className="flex min-h-0 flex-col">
+              <div className={`min-h-0 flex-col ${isQuickMenuOpen ? "flex" : "hidden"}`}>
                 <div className="flex h-12 items-center justify-between border-b border-zinc-800/90 px-4">
                   <p className="text-sm font-semibold text-zinc-200">퀵 메뉴</p>
                   <span className="text-xs text-zinc-500">▼</span>
@@ -1203,7 +1217,8 @@ export default function HomeScreen() {
                       # queue config
                     </div>
                     <div className="whitespace-nowrap text-[#6a717d]" style={editorLineStyle}>
-                      # 카테고리와 난이도를 선택하고 매칭 시작을 눌러 대기열에 참가합니다.
+                      <span className="font-semibold text-[#ffcc66]"># TODO:</span>
+                      <span> 카테고리와 난이도를 선택하고 매칭 시작을 눌러 대기열에 참가합니다.</span>
                     </div>
                     <div className="flex items-center gap-2" style={editorRowStyle}>
                       <span className="w-40 text-[#9cdcfe]">QUEUE_CATEGORY</span>
@@ -1305,8 +1320,8 @@ export default function HomeScreen() {
           </main>
 
           <aside className="min-h-0 bg-[#2b2d30] md:col-span-2 lg:col-span-1">
-            <div className="grid h-full grid-cols-[minmax(0,1fr)_38px]">
-              <div className="min-h-0">
+            <div className={`grid h-full ${isProfilePanelOpen ? "grid-cols-[minmax(0,1fr)_38px]" : "grid-cols-[38px]"}`}>
+              <div className={`min-h-0 ${isProfilePanelOpen ? "block" : "hidden"}`}>
                 <div className="flex h-12 items-center justify-between border-b border-zinc-800/90 px-4">
                   <p className="text-sm font-semibold text-zinc-200">프로필</p>
                 </div>
@@ -1416,10 +1431,15 @@ export default function HomeScreen() {
                     <button
                       key={item.title}
                       type="button"
+                      onClick={() => {
+                        if (item.icon === "database") {
+                          setIsProfilePanelOpen((current) => !current);
+                        }
+                      }}
                       title={item.title}
                       aria-label={item.title}
                       className={`h-8 w-8 rounded-md border transition ${
-                        item.active
+                        item.icon === "database" && isProfilePanelOpen
                           ? "border-[#2f77ff] bg-[#2f77ff] text-white shadow-[0_0_0_1px_rgba(80,130,255,0.35)]"
                           : "border-transparent text-zinc-400 hover:bg-zinc-700/30 hover:text-zinc-200"
                       }`}
