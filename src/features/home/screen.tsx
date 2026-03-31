@@ -25,6 +25,7 @@ import {
   getRemainingSeconds,
   queueCategories,
   SEARCH_POLL_INTERVAL_MS,
+  type QueueCategoryOption,
   type QueueCategoryValue,
 } from "./data";
 import QueueModal from "./queue-modal";
@@ -98,6 +99,32 @@ async function readMatchState() {
   }
 
   return (await response.json()) as MatchStateResponse;
+}
+
+async function readTagCategories() {
+  const response = await fetch("/api/tags", {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = (await response.json().catch(() => null)) as QueueCategoryOption[] | null;
+
+  if (!Array.isArray(payload) || payload.length === 0) {
+    return null;
+  }
+
+  const normalized = payload
+    .map((item) => ({
+      value: (item.value ?? "").trim(),
+      label: (item.label ?? "").trim(),
+      disabled: item.disabled ?? false,
+    }))
+    .filter((item) => item.value.length > 0 && item.label.length > 0);
+
+  return normalized.length > 0 ? normalized : null;
 }
 
 async function postMatchDecision(matchId: number, action: "accept" | "decline") {
@@ -179,6 +206,7 @@ export default function HomeScreen() {
   const [queueState, setQueueState] = useState(defaultQueueState);
   const [matchState, setMatchState] = useState(defaultMatchState);
   const [category, setCategory] = useState<QueueCategoryValue>("dp");
+  const [categoryOptions, setCategoryOptions] = useState<QueueCategoryOption[]>(queueCategories);
   const [difficulty, setDifficulty] = useState<Difficulty>("EASY");
   const [queueStartedAt, setQueueStartedAt] = useState<string | null>(null);
   const [feedback, setFeedback] = useState(DEFAULT_FEEDBACK);
@@ -299,6 +327,35 @@ export default function HomeScreen() {
       window.clearInterval(intervalId);
     };
   }, []);
+
+  useEffect(() => {
+    if (!session.authenticated) {
+      return;
+    }
+
+    let active = true;
+
+    void (async () => {
+      const loadedCategories = await readTagCategories();
+
+      if (!active || !loadedCategories) {
+        return;
+      }
+
+      setCategoryOptions(loadedCategories);
+      setCategory((current) => {
+        if (loadedCategories.some((item) => item.value === current)) {
+          return current;
+        }
+
+        return loadedCategories.find((item) => !item.disabled)?.value ?? current;
+      });
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [session.authenticated]);
 
   useEffect(() => {
     const editorPane = editorPaneRef.current;
@@ -729,7 +786,10 @@ export default function HomeScreen() {
     queueState.requiredCount ||
     matchState.readyCheck?.requiredCount ||
     DEFAULT_REQUIRED_COUNT;
-  const activeCategoryLabel = getQueueCategoryLabel(queueState.category ?? category);
+  const activeCategoryLabel = getQueueCategoryLabel(
+    queueState.category ?? category,
+    categoryOptions,
+  );
   const activeDifficultyLabel = queueState.difficulty ?? difficulty;
   const queueElapsedSeconds = getElapsedSeconds(queueStartedAt, now);
   const countdownSeconds = getRemainingSeconds(matchState.readyCheck?.deadline ?? null, now);
@@ -1232,7 +1292,7 @@ export default function HomeScreen() {
                           onChange={(event) => setCategory(event.target.value as QueueCategoryValue)}
                           className="h-7 w-full appearance-none rounded-sm border border-zinc-700 bg-[#2b2d30] px-2 pr-6 text-xs text-[#ce9178] outline-none transition focus:border-[#4e89ff]/70"
                         >
-                          {queueCategories.map((item) => (
+                          {categoryOptions.map((item) => (
                             <option
                               key={item.value}
                               value={item.value}
