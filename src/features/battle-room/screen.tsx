@@ -11,6 +11,8 @@ import type {
   JoinRoomResponse,
   ProblemDetailResponse,
   RoomResponse,
+  RunTestCaseResult,
+  RunWsMessage,
   SessionResponse,
   SubmissionResponse,
   SubmissionWsMessage,
@@ -77,8 +79,8 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
     useState<SubmissionResponse | null>(fallbackSubmission);
   const [code, setCode] = useState(submitTemplate.code);
   const [language, setLanguage] = useState(submitTemplate.language);
-  const [testInput, setTestInput] = useState("");
-  const [runNotice, setRunNotice] = useState<string | null>(null);
+  const [runResults, setRunResults] = useState<RunTestCaseResult[] | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
   const [message, setMessage] = useState("배틀룸 정보를 불러오는 중입니다.");
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState<"api" | "fallback">("api");
@@ -238,6 +240,26 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
             return;
           }
         });
+
+        client.subscribe(`/topic/room/${roomId}/run`, (message) => {
+          let payload: unknown;
+          try {
+            payload = JSON.parse(message.body) as unknown;
+          } catch {
+            console.warn("[WS] run 메시지 파싱 실패:", message.body);
+            return;
+          }
+
+          if (typeof payload !== "object" || payload === null || !("type" in payload)) {
+            return;
+          }
+
+          const msg = payload as RunWsMessage;
+          if (msg.type === "RUN_RESULT" && msg.userId === session.member?.memberId) {
+            setRunResults(msg.results);
+            setIsRunning(false);
+          }
+        });
       },
     });
 
@@ -284,9 +306,26 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   }
 
   function handleRun() {
-    setRunNotice(
-      "현재 백엔드에는 Run 전용 API가 없습니다. 지금 제출 API는 즉시 채점/정산 흐름으로 이어지므로, 테스트 실행은 별도 endpoint가 추가된 뒤 연결해야 합니다.",
-    );
+    if (!room) return;
+
+    setError(null);
+    setIsRunning(true);
+    setRunResults(null);
+
+    void (async () => {
+      const response = await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId: room.roomId, code, language }),
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
+        setError(payload?.message ?? "실행 요청에 실패했습니다.");
+        setIsRunning(false);
+      }
+      // 성공 시 결과는 WebSocket(RUN_RESULT)으로 수신
+    })();
   }
 
   if (!session.authenticated && !room) {
@@ -537,9 +576,10 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                   <button
                     type="button"
                     onClick={handleRun}
-                    className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 transition hover:border-zinc-500"
+                    disabled={isRunning}
+                    className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
                   >
-                    Run
+                    {isRunning ? "실행 중..." : "Run"}
                   </button>
                   <button
                     type="button"
@@ -554,46 +594,99 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
             </Panel>
 
             <Panel
-              title="테스트 실행 패널"
-              description="Run API가 생기면 이 영역에 케이스별 결과와 stdout/stderr를 붙입니다."
+              title="테스트 실행 결과"
+              description="Run을 누르면 문제의 샘플 테스트케이스를 실행하고 결과를 표시합니다."
             >
-              <div className="space-y-4">
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium text-zinc-700">사용자 입력</span>
-                  <textarea
-                    value={testInput}
-                    onChange={(event) => setTestInput(event.target.value)}
-                    rows={6}
-                    placeholder="예: 4\n1 5 2 9"
-                    className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-3 font-mono text-sm leading-6 text-zinc-900 outline-none transition focus:border-zinc-500"
-                  />
-                </label>
-
-                <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm leading-7 text-amber-950">
-                  {runNotice ??
-                    "현재는 Run 전용 백엔드가 없어서 실제 실행은 불가능합니다. 대신 입력 패널과 결과 영역 구조를 먼저 고정해뒀습니다."}
+              {isRunning && (
+                <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-500">
+                  채점 서버에서 실행 중입니다...
                 </div>
+              )}
 
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                      Stdout
-                    </p>
-                    <p className="mt-2 whitespace-pre-line font-mono text-sm leading-6 text-zinc-700">
-                      Run API 미연동
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                      Expected
-                    </p>
-                    <p className="mt-2 whitespace-pre-line font-mono text-sm leading-6 text-zinc-700">
-                      문제 상세 계약에 예제 입출력 필드가 없어 아직 표시하지 않습니다.
-                    </p>
-                  </div>
+              {!isRunning && runResults === null && (
+                <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-500">
+                  Run 버튼을 누르면 샘플 테스트케이스 결과가 여기에 표시됩니다.
                 </div>
-              </div>
+              )}
+
+              {!isRunning && runResults !== null && runResults.length === 0 && (
+                <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-500">
+                  이 문제에 샘플 테스트케이스가 없습니다.
+                </div>
+              )}
+
+              {!isRunning && runResults !== null && runResults.length > 0 && (
+                <div className="space-y-4">
+                  {runResults.map((result, index) => {
+                    const isPassed = result.status === "AC";
+                    return (
+                      <div
+                        key={index}
+                        className={`rounded-2xl border p-4 ${
+                          isPassed
+                            ? "border-emerald-300 bg-emerald-50"
+                            : "border-rose-300 bg-rose-50"
+                        }`}
+                      >
+                        <div className="mb-3 flex items-center justify-between">
+                          <span className="text-sm font-medium text-zinc-700">
+                            테스트케이스 {index + 1}
+                          </span>
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                              isPassed
+                                ? "bg-emerald-100 text-emerald-800"
+                                : result.status === "CE"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-rose-100 text-rose-800"
+                            }`}
+                          >
+                            {result.status}
+                          </span>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                              Input
+                            </p>
+                            <pre className="mt-1 whitespace-pre-wrap font-mono text-sm leading-6 text-zinc-700">
+                              {result.input || "-"}
+                            </pre>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                              Expected
+                            </p>
+                            <pre className="mt-1 whitespace-pre-wrap font-mono text-sm leading-6 text-zinc-700">
+                              {result.expectedOutput || "-"}
+                            </pre>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                              Output
+                            </p>
+                            <pre className="mt-1 whitespace-pre-wrap font-mono text-sm leading-6 text-zinc-700">
+                              {result.actualOutput ?? "-"}
+                            </pre>
+                          </div>
+                        </div>
+
+                        {result.stderr && (
+                          <div className="mt-3">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-rose-500">
+                              stderr
+                            </p>
+                            <pre className="mt-1 whitespace-pre-wrap font-mono text-sm leading-6 text-rose-700">
+                              {result.stderr}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </Panel>
 
             <Panel title="최근 제출 응답" description="실제 제출 결과를 이 영역에 바로 표시합니다.">

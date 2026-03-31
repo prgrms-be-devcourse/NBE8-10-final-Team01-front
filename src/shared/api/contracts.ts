@@ -159,6 +159,26 @@ export interface SubmitPayload {
   language: string;
 }
 
+export interface RunPayload {
+  roomId: number;
+  code: string;
+  language: string;
+}
+
+export interface RunTestCaseResult {
+  input: string;
+  expectedOutput: string;
+  actualOutput: string | null;
+  status: string;
+  stderr: string | null;
+}
+
+export interface RunWsMessage {
+  type: "RUN_RESULT";
+  userId: number;
+  results: RunTestCaseResult[];
+}
+
 export interface SoloRunRequest {
   code: string;
   language: string;
