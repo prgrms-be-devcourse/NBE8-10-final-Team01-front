@@ -1,6 +1,6 @@
 import type { SessionMember } from "@/shared/api/contracts";
 
-export const FRONTEND_ACCESS_TOKEN_COOKIE = "algo_access_token";
+export const FRONTEND_ACCESS_TOKEN_COOKIE = "accessToken";
 export const ONE_YEAR_IN_SECONDS = 60 * 60 * 24 * 365;
 
 interface JwtPayload {
