@@ -1218,7 +1218,10 @@ export default function HomeScreen() {
                     </div>
                     <div className="whitespace-nowrap text-[#6a717d]" style={editorLineStyle}>
                       <span className="font-semibold text-[#ffcc66]"># TODO:</span>
-                      <span> 카테고리와 난이도를 선택하고 매칭 시작을 눌러 대기열에 참가합니다.</span>
+                      <span className="text-[#ffcc66]">
+                        {" "}
+                        카테고리와 난이도를 선택하고 매칭 시작을 눌러 대기열에 참가합니다.
+                      </span>
                     </div>
                     <div className="flex items-center gap-2" style={editorRowStyle}>
                       <span className="w-40 text-[#9cdcfe]">QUEUE_CATEGORY</span>
