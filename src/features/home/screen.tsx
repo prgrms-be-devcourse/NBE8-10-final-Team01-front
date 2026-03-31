@@ -356,9 +356,14 @@ export default function HomeScreen() {
 
     const updateEditorMetrics = () => {
       const { lineHeight, fontSize } = resolveEditorMetrics(window.innerWidth);
-      const verticalPadding = lineHeight;
-      const usableHeight = Math.max(editorPane.clientHeight - verticalPadding, lineHeight);
-      const nextLineCount = Math.max(18, Math.floor(usableHeight / lineHeight));
+      const fallbackHeight = Math.max(window.innerHeight - 180, lineHeight);
+      const measuredHeight = editorPane.getBoundingClientRect().height;
+      const usableHeight = Math.max(measuredHeight, fallbackHeight);
+      const safetyBufferLines = 8;
+      const nextLineCount = Math.max(
+        24,
+        Math.ceil(usableHeight / lineHeight) + safetyBufferLines,
+      );
 
       setEditorLineHeight((current) => (current === lineHeight ? current : lineHeight));
       setEditorFontSize((current) => (current === fontSize ? current : fontSize));

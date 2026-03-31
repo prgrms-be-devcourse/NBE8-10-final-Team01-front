@@ -66,7 +66,7 @@ export default function QueueEditorPane({
                   <circle cx="6.4" cy="10.8" r="0.7" fill="currentColor" />
                 </svg>
               </span>
-              <span>.env</span>
+              <span>.env.queue.match</span>
               <span className="text-zinc-500">×</span>
               <span className="absolute inset-x-0 bottom-0 h-[2px] bg-zinc-300" />
             </div>
@@ -215,4 +215,3 @@ export default function QueueEditorPane({
     </main>
   );
 }
-
