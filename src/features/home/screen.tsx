@@ -184,6 +184,7 @@ export default function HomeScreen() {
   const [feedback, setFeedback] = useState(DEFAULT_FEEDBACK);
   const [error, setError] = useState<string | null>(null);
   const [terminalMessage, setTerminalMessage] = useState<string | null>(null);
+  const [queueMemo, setQueueMemo] = useState(DEFAULT_FEEDBACK);
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [pollStage, setPollStage] = useState<PollStage>("IDLE");
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
@@ -193,6 +194,8 @@ export default function HomeScreen() {
   const [resultsPreviewError, setResultsPreviewError] = useState<string | null>(null);
 
   const joiningRoomIdRef = useRef<number | null>(null);
+  const editorPaneRef = useRef<HTMLDivElement | null>(null);
+  const [editorLineCount, setEditorLineCount] = useState(28);
 
   const resetFlow = useCallback((nextFeedback = DEFAULT_FEEDBACK) => {
     setQueueState(defaultQueueState);
@@ -290,6 +293,35 @@ export default function HomeScreen() {
 
     return () => {
       window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    const editorPane = editorPaneRef.current;
+
+    if (!editorPane) {
+      return;
+    }
+
+    const updateEditorLineCount = () => {
+      const lineHeight = 32;
+      const verticalPadding = 32;
+      const usableHeight = Math.max(editorPane.clientHeight - verticalPadding, lineHeight);
+      const nextLineCount = Math.max(18, Math.floor(usableHeight / lineHeight));
+
+      setEditorLineCount((current) => (current === nextLineCount ? current : nextLineCount));
+    };
+
+    updateEditorLineCount();
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateEditorLineCount();
+    });
+
+    resizeObserver.observe(editorPane);
+
+    return () => {
+      resizeObserver.disconnect();
     };
   }, []);
 
@@ -677,6 +709,7 @@ export default function HomeScreen() {
   const activeDifficultyLabel = queueState.difficulty ?? difficulty;
   const queueElapsedSeconds = getElapsedSeconds(queueStartedAt, now);
   const countdownSeconds = getRemainingSeconds(matchState.readyCheck?.deadline ?? null, now);
+  const canStartMatch = !(isBusy || (modalMode !== null && modalMode !== "TERMINAL"));
   const roomId = matchState.room?.roomId ?? null;
   const previewPlayedCount = recentResults.length;
   const previewSolvedCount = recentResults.filter((item) => item.solved).length;
@@ -685,7 +718,7 @@ export default function HomeScreen() {
   const previewScoreDelta = recentResults.reduce((acc, item) => acc + item.scoreDelta, 0);
   const previewScoreDeltaLabel =
     previewScoreDelta > 0 ? `+${previewScoreDelta}` : String(previewScoreDelta);
-  const editorLineNumbers = Array.from({ length: 28 }, (_, index) => 41 + index);
+  const editorLineNumbers = Array.from({ length: editorLineCount }, (_, index) => 41 + index);
   const ideProjectTreeItems: Array<{
     key: string;
     label: string;
@@ -979,9 +1012,9 @@ export default function HomeScreen() {
   };
 
   return (
-    <div className="md:h-[calc(100dvh-7.5rem)] md:overflow-hidden">
-      <section className="overflow-hidden rounded-xl border border-zinc-700/80 bg-[#1e1f22] shadow-[0_34px_82px_-42px_rgba(0,0,0,0.92),0_12px_24px_-16px_rgba(0,0,0,0.78)] md:h-full md:min-h-0">
-        <div className="grid h-full grid-cols-1 md:grid-cols-[250px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_260px] xl:grid-cols-[280px_minmax(0,1fr)_300px]">
+    <div className="xl:h-[calc(100dvh-7.5rem)] xl:overflow-hidden">
+      <section className="overflow-hidden rounded-xl border border-zinc-700/80 bg-[#1e1f22] shadow-[0_34px_82px_-42px_rgba(0,0,0,0.92),0_12px_24px_-16px_rgba(0,0,0,0.78)] xl:h-full xl:min-h-0">
+        <div className="grid h-full grid-cols-1 md:grid-cols-[250px_minmax(0,1fr)] lg:grid-cols-[210px_minmax(0,1fr)_230px] xl:grid-cols-[250px_minmax(0,1fr)_280px] 2xl:grid-cols-[280px_minmax(0,1fr)_320px]">
           <aside className="min-h-0 border-b border-zinc-800/90 bg-[#2b2d30] md:border-b-0 md:border-r">
             <div className="grid h-full grid-cols-[48px_minmax(0,1fr)]">
               <div className="flex min-h-0 flex-col items-center justify-between border-r border-zinc-800/90 bg-[#25272d] py-2">
@@ -1072,20 +1105,25 @@ export default function HomeScreen() {
             </div>
           </aside>
 
-          <main className="min-h-0 border-b border-zinc-700/80 bg-[#1e1f22] md:border-b-0 lg:border-r">
+          <main className="min-h-0 border-b border-zinc-700/80 bg-[#1e1f22] lg:border-b-0 lg:border-r">
             <div className="flex h-full min-h-0 flex-col">
               <div className="flex h-12 items-center justify-between border-b border-zinc-700/80 bg-[#1e1f22] px-3">
                 <div className="flex h-full items-end gap-0.5 pt-1">
                   <div className="relative flex h-10 items-center gap-2 border-r border-zinc-700/70 bg-[#1e1f22] px-3 font-mono text-xs text-zinc-200">
-                    <span className="text-sky-400">●</span>
-                    <span>QueueDemo.java</span>
+                    <span className="inline-flex h-4 w-4 items-center justify-center text-[#7da2f7]">
+                      <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4">
+                        <path
+                          d="M4 2.5h5l3 3V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z"
+                          stroke="currentColor"
+                          strokeWidth="1.2"
+                        />
+                        <path d="M9 2.5V6h3" stroke="currentColor" strokeWidth="1.2" />
+                        <circle cx="6.4" cy="10.8" r="0.7" fill="currentColor" />
+                      </svg>
+                    </span>
+                    <span>.env</span>
                     <span className="text-zinc-500">×</span>
                     <span className="absolute inset-x-0 bottom-0 h-[2px] bg-zinc-300" />
-                  </div>
-                  <div className="flex h-10 items-center gap-2 border-r border-zinc-700/70 bg-[#1e1f22] px-3 font-mono text-xs text-zinc-500">
-                    <span className="text-sky-600">●</span>
-                    <span>MatchLevel.java</span>
-                    <span>×</span>
                   </div>
                 </div>
                 <button
@@ -1093,19 +1131,28 @@ export default function HomeScreen() {
                   onClick={() => {
                     void handleStartMatch();
                   }}
-                  disabled={isBusy || (modalMode !== null && modalMode !== "TERMINAL")}
-                  className="rounded-md border border-[#b08cff]/45 bg-[#9146ff] px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-[#7f39fa] disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-600 disabled:text-zinc-300"
+                  disabled={!canStartMatch}
+                  className="inline-flex h-10 items-center gap-2 rounded-md border border-[#b08cff]/45 bg-[#9146ff] px-3 text-sm font-semibold text-white transition hover:bg-[#7f39fa] disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-600 disabled:text-zinc-300"
+                  aria-label="매칭 시작"
                 >
-                  {modalMode === "SEARCHING"
-                    ? "매칭 진행 중"
-                    : busyAction === "start"
-                      ? "처리 중..."
-                      : "매칭 시작"}
+                  <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4 text-[#7dd48c]">
+                    <path
+                      d="M8 2.3v3M5 3.4A4.9 4.9 0 1 0 11 3.4"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <span>매칭 시작</span>
+                  <span className="mx-0.5 h-4 w-px bg-white/35" />
+                  <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4 text-[#74cc84]">
+                    <path d="m6 4 5 4-5 4V4Z" fill="currentColor" />
+                  </svg>
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto bg-[#1e1f22]">
-                <div className="grid grid-cols-[56px_minmax(0,1fr)] bg-[#1e1f22] font-mono text-sm">
+              <div ref={editorPaneRef} className="flex-1 overflow-hidden bg-[#1e1f22]">
+                <div className="grid h-full grid-cols-[56px_minmax(0,1fr)] bg-[#1e1f22] font-mono text-sm">
                   <div className="border-r border-zinc-700/70 bg-[#1e1f22] px-3 py-4 text-right text-[#606366]">
                     {editorLineNumbers.map((line) => (
                       <div key={line} className="h-8 leading-8">
@@ -1114,24 +1161,18 @@ export default function HomeScreen() {
                     ))}
                   </div>
                   <div className="px-4 py-4 text-[#a9b7c6]">
-                    <div className="h-8 whitespace-nowrap leading-8">
-                      <span className="text-[#cc7832]">enum</span> MatchLevel {"{"} EASY, MEDIUM, HARD {"}"}
+                    <div className="h-8 whitespace-nowrap leading-8 text-[#6a717d]"># queue config</div>
+                    <div className="h-8 whitespace-nowrap leading-8 text-[#6a717d]">
+                      # category, level 값이 실제 매칭 요청에 반영됩니다.
                     </div>
-                    <div className="h-8 whitespace-nowrap leading-8">
-                      <span className="text-[#cc7832]">public</span> <span className="text-[#cc7832]">class</span>{" "}
-                      <span className="text-[#56a8f5]">QueueDemo</span> {"{"}
-                    </div>
-                    <div className="h-8 whitespace-nowrap pl-4 leading-8">
-                      <span className="text-[#cc7832]">public static void</span>{" "}
-                      <span className="text-[#56a8f5]">main</span>(String[] args) {"{"}
-                    </div>
-                    <div className="flex min-h-8 flex-wrap items-center gap-2 pl-4 leading-8">
-                      <span className="text-[#cc7832]">String</span> tag ={" "}
+                    <div className="flex min-h-8 items-center gap-2 leading-8">
+                      <span className="w-40 text-[#9cdcfe]">QUEUE_CATEGORY</span>
+                      <span className="text-[#80889a]">=</span>
                       <div className="relative min-w-[11rem] max-w-[18rem] flex-1 leading-none">
                         <select
                           value={category}
                           onChange={(event) => setCategory(event.target.value as QueueCategoryValue)}
-                          className="h-7 w-full appearance-none rounded-sm border border-zinc-700 bg-[#2b2d30] px-2 pr-6 text-xs text-[#a9b7c6] outline-none transition focus:border-[#4e89ff]/70"
+                          className="h-7 w-full appearance-none rounded-sm border border-zinc-700 bg-[#2b2d30] px-2 pr-6 text-xs text-[#ce9178] outline-none transition focus:border-[#4e89ff]/70"
                         >
                           {queueCategories.map((item) => (
                             <option
@@ -1147,18 +1188,18 @@ export default function HomeScreen() {
                           ▾
                         </span>
                       </div>
-                      <span>);</span>
                     </div>
-                    <div className="flex min-h-8 flex-wrap items-center gap-2 pl-4 leading-8">
-                      <span>MatchLevel level = MatchLevel.</span>
+                    <div className="flex min-h-8 items-center gap-2 leading-8">
+                      <span className="w-40 text-[#9cdcfe]">QUEUE_LEVEL</span>
+                      <span className="text-[#80889a]">=</span>
                       <div className="flex flex-wrap gap-1 leading-none">
                         {difficultyOptions.map((option) => (
                           <label
                             key={option.value}
                             className={`rounded-sm border px-2 py-1 text-xs transition ${
                               difficulty === option.value
-                                ? "border-[#4e89ff]/60 bg-[#2b3a52] text-[#a9c7ff]"
-                                : "border-zinc-700 bg-[#2b2d30] text-[#a9b7c6] hover:bg-zinc-700/40"
+                                ? "border-[#4e89ff]/60 bg-[#2b3a52] text-[#dcdcaa]"
+                                : "border-zinc-700 bg-[#2b2d30] text-[#9aa5b1] hover:bg-zinc-700/40"
                             }`}
                           >
                             <input
@@ -1173,25 +1214,24 @@ export default function HomeScreen() {
                           </label>
                         ))}
                       </div>
-                      <span>;</span>
                     </div>
-                    <div className="h-8 whitespace-nowrap pl-4 leading-8">
-                      <span className="text-[#cc7832]">int</span> partySize = <span className="text-[#6897bb]">4</span>;
+                    <div className="flex min-h-8 items-center gap-2 leading-8">
+                      <span className="w-40 text-[#9cdcfe]">QUEUE_PARTY_SIZE</span>
+                      <span className="text-[#80889a]">=</span>
+                      <span className="inline-flex min-w-8 items-center justify-center rounded-sm border border-zinc-700 bg-[#2b2d30] px-2 text-xs text-[#b5cea8]">
+                        4
+                      </span>
                     </div>
-                    <div className="h-8 whitespace-nowrap pl-4 leading-8">
-                      <span className="text-[#cc7832]">String</span> preview = <span className="text-[#6aab73]">"["</span> + level + <span className="text-[#6aab73]">"] "</span> + tag;
+                    <div className="flex min-h-8 items-start gap-2 leading-8">
+                      <span className="w-40 text-[#9cdcfe]">QUEUE_MEMO</span>
+                      <span className="pt-1 text-[#80889a]">=</span>
+                      <input
+                        type="text"
+                        value={queueMemo}
+                        onChange={(event) => setQueueMemo(event.target.value)}
+                        className="mt-0.5 h-7 w-full rounded-sm border border-zinc-700 bg-[#2b2d30] px-2 text-xs text-[#ce9178] outline-none transition focus:border-[#4e89ff]/70"
+                      />
                     </div>
-                    <div className="h-8 whitespace-nowrap pl-4 leading-8">
-                      preview += <span className="text-[#6aab73]">" queue started ("</span> + partySize + <span className="text-[#6aab73]">"/4)"</span>;
-                    </div>
-                    <div className="h-8 whitespace-nowrap pl-4 leading-8">
-                      System.out.<span className="text-[#56a8f5]">println</span>(preview);
-                    </div>
-                    <div className="h-8 whitespace-nowrap pl-4 leading-8">
-                      <span className="text-[#cc7832]">boolean</span> searching = <span className="text-[#6897bb]">true</span>;
-                    </div>
-                    <div className="h-8 whitespace-nowrap pl-4 leading-8">{"}"}</div>
-                    <div className="h-8 whitespace-nowrap leading-8">{"}"}</div>
 
                     <div className="mt-2 h-8 leading-8 text-[#6a717d]">
                       {modalMode === "SEARCHING" ? (
@@ -1205,26 +1245,19 @@ export default function HomeScreen() {
                         >
                           stopQueue();
                         </button>
-                      ) : (
-                        "// press start to run the queue demo"
-                      )}
+                      ) : null}
                     </div>
-                    <div
-                      className={`mt-1 rounded-sm border px-3 py-2 text-xs ${
-                        error
-                          ? "border-rose-400/60 bg-rose-900/20 text-rose-200"
-                          : "border-zinc-700 bg-[#2b2d30] text-zinc-300"
-                      }`}
-                    >
-                      {error ?? terminalMessage ?? feedback}
-                    </div>
-                    <div className="mt-2 space-y-0">
-                      {editorLineNumbers.slice(12).map((line) => (
-                        <div key={`filler-${line}`} className="h-8 leading-8">
-                          <span className="opacity-0">.</span>
-                        </div>
-                      ))}
-                    </div>
+                    {error || terminalMessage ? (
+                      <div
+                        className={`mt-1 rounded-sm border px-3 py-2 text-xs ${
+                          error
+                            ? "border-rose-400/60 bg-rose-900/20 text-rose-200"
+                            : "border-zinc-700 bg-[#2b2d30] text-zinc-300"
+                        }`}
+                      >
+                        {error ?? terminalMessage}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -1236,7 +1269,6 @@ export default function HomeScreen() {
               <div className="min-h-0">
                 <div className="flex h-12 items-center justify-between border-b border-zinc-800/90 px-4">
                   <p className="text-sm font-semibold text-zinc-200">프로필</p>
-                  <span className="text-xs text-zinc-500">⚙</span>
                 </div>
                 <div className="h-full overflow-y-auto p-3 text-xs text-zinc-300">
                   <div className="rounded-md border border-zinc-800/90 bg-[#1f222b] p-3">
