@@ -738,7 +738,7 @@ export default function HomeScreen() {
         />
       </MetricGrid>
 
-      <div className="grid gap-6 xl:grid-cols-[0.85fr_1.3fr_0.85fr]">
+      <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] xl:grid-cols-[0.85fr_1.3fr_0.85fr]">
         <Panel
           title="서비스 메뉴"
           description="주요 페이지별 작업 동선을 한곳에서 바로 열 수 있도록 진입점을 둡니다."
@@ -859,6 +859,7 @@ export default function HomeScreen() {
         <Panel
           title="개인 통계 요약"
           description="메인에서는 보조 정보만 보여주고, 실제 전적과 점수 API는 마이페이지에서 더 자세히 확인합니다."
+          className="lg:col-span-2 xl:col-span-1"
         >
           <div className="space-y-3 text-sm">
             <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3">
@@ -884,7 +885,7 @@ export default function HomeScreen() {
         title="현재 연결 사인"
         description="메인과 인접한 흐름에서 이번 단계에 실제로 붙여 둔 API 경로들입니다."
       >
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <ApiCallout
             method="POST"
             path="/api/queue/join"
