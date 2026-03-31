@@ -1203,7 +1203,7 @@ export default function HomeScreen() {
                       # queue config
                     </div>
                     <div className="whitespace-nowrap text-[#6a717d]" style={editorLineStyle}>
-                      # category, level 값이 실제 매칭 요청에 반영됩니다.
+                      # required: category, level
                     </div>
                     <div className="flex items-center gap-2" style={editorRowStyle}>
                       <span className="w-40 text-[#9cdcfe]">QUEUE_CATEGORY</span>
