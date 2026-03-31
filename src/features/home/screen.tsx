@@ -687,41 +687,57 @@ export default function HomeScreen() {
 
   return (
     <div className="md:h-[calc(100dvh-7.5rem)] md:overflow-hidden">
-      <section className="overflow-hidden rounded-3xl border border-violet-300/80 bg-white/70 shadow-[0_24px_60px_-40px_rgba(76,29,149,0.3)] md:h-full md:min-h-0">
-        <div className="grid gap-4 p-4 md:h-full md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[180px_minmax(0,1.45fr)_240px] lg:p-5 xl:grid-cols-[200px_minmax(0,1.65fr)_280px]">
-          <aside className="space-y-4 rounded-2xl border border-violet-200 bg-white/80 p-4 text-zinc-900 md:min-h-0 md:overflow-y-auto">
-            <div className="rounded-xl border border-violet-200 bg-violet-50/70 p-3">
-              <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">빠른 메뉴</p>
-              <div className="mt-2 space-y-1.5">
-                {dashboardMenus.map((menu) => {
+      <section className="overflow-hidden rounded-2xl border border-zinc-700/80 bg-[linear-gradient(180deg,#20232b_0%,#1b1d25_100%)] shadow-[0_34px_82px_-42px_rgba(0,0,0,0.92),0_12px_24px_-16px_rgba(0,0,0,0.78)] md:h-full md:min-h-0">
+        <div className="grid gap-4 p-4 md:h-full md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[220px_minmax(0,1.55fr)_280px] lg:p-5 xl:grid-cols-[230px_minmax(0,1.7fr)_300px]">
+          <aside className="space-y-4 rounded-xl border border-zinc-700 bg-[#1f222a] p-4 text-zinc-100 md:min-h-0 md:overflow-y-auto">
+            <div className="rounded-lg border border-zinc-700 bg-[#1a1d24] p-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-zinc-400">Project</p>
+                <span className="font-mono text-xs text-zinc-500">▼</span>
+              </div>
+              <div className="mt-3 space-y-1 font-mono text-xs text-zinc-300">
+                <p className="flex items-center gap-2 px-2 py-1 text-zinc-200">
+                  <span className="text-zinc-500">▾</span>
+                  <span>BRACKET [front]</span>
+                </p>
+                {dashboardMenus.map((menu, index) => {
                   const href =
                     menu.requiresAuth && !session.authenticated
                       ? `/login?next=${encodeURIComponent(menu.href)}`
                       : menu.href;
+                  const branchGlyph = index === dashboardMenus.length - 1 ? "└─" : "├─";
 
                   return (
                     <Link
                       key={menu.title}
                       href={href}
-                      className="block rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs text-zinc-700 transition hover:border-violet-400 hover:bg-violet-100"
+                      className="ml-4 flex items-center gap-2 rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5 text-zinc-200 transition hover:border-sky-400/45 hover:bg-sky-500/10"
                     >
-                      {menu.title}
+                      <span className="text-zinc-500">{branchGlyph}</span>
+                      <span>{menu.title}</span>
                     </Link>
                   );
                 })}
               </div>
             </div>
+            <div className="rounded-lg border border-zinc-700 bg-[#1a1d24] p-3">
+              <p className="text-xs font-semibold text-zinc-400">Open Files</p>
+              <div className="mt-2 space-y-1 font-mono text-xs text-zinc-300">
+                <p className="rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5">MatchControl.tsx</p>
+                <p className="rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5">QueueState.json</p>
+                <p className="rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5">ProfilePreview.sql</p>
+              </div>
+            </div>
           </aside>
 
           <div className="space-y-4 md:min-h-0 md:overflow-y-auto">
-            <div className="rounded-2xl border border-violet-200 bg-white/90 p-5 text-zinc-900">
-              <div className="mb-5 flex flex-col gap-4 rounded-xl border border-violet-200 bg-violet-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-violet-700">매칭 제어</p>
-                  <h2 className="mt-2 text-xl font-semibold">매칭 설정</h2>
-                  <p className="mt-1 text-sm text-zinc-600">
-                    카테고리와 난이도를 선택한 뒤 큐에 참가합니다.
-                  </p>
+            <div className="overflow-hidden rounded-xl border border-zinc-700 bg-[#1f222a] text-zinc-100">
+              <div className="flex items-center justify-between border-b border-zinc-700 bg-[#1a1d24] px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="size-2 rounded-full bg-rose-400" />
+                  <span className="size-2 rounded-full bg-amber-400" />
+                  <span className="size-2 rounded-full bg-emerald-400" />
+                  <p className="ml-2 font-mono text-xs text-zinc-300">MatchControl.tsx</p>
                 </div>
                 <button
                   type="button"
@@ -729,7 +745,7 @@ export default function HomeScreen() {
                     void handleStartMatch();
                   }}
                   disabled={isBusy || (modalMode !== null && modalMode !== "TERMINAL")}
-                  className="min-h-12 rounded-xl bg-violet-300 px-8 text-base font-semibold text-zinc-950 transition hover:bg-violet-200 disabled:cursor-not-allowed disabled:bg-zinc-600 disabled:text-zinc-300"
+                  className="rounded-lg border border-sky-300/40 bg-sky-500 px-5 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-600 disabled:text-zinc-300"
                 >
                   {modalMode === "SEARCHING"
                     ? "매칭 진행 중"
@@ -739,58 +755,75 @@ export default function HomeScreen() {
                 </button>
               </div>
 
-              <div className="space-y-5">
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium text-zinc-700">알고리즘 카테고리</span>
-                  <div className="relative">
-                    <select
-                      value={category}
-                      onChange={(event) => setCategory(event.target.value as QueueCategoryValue)}
-                      className="w-full appearance-none rounded-xl border border-violet-300 bg-white px-4 py-3 pr-10 text-sm text-zinc-900 outline-none transition focus:border-violet-500"
-                    >
-                      {queueCategories.map((item) => (
-                        <option
-                          key={item.value}
-                          value={item.value}
-                          disabled={"disabled" in item ? item.disabled : false}
-                        >
-                          {item.label}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-zinc-500">
-                      ▾
-                    </span>
+              <div className="space-y-3 p-4">
+                <div className="grid grid-cols-[1.6rem_minmax(0,1fr)] items-start gap-3">
+                  <span className="font-mono text-xs text-zinc-500">1</span>
+                  <p className="font-mono text-sm text-zinc-400">// queue options</p>
+                </div>
+
+                <label className="grid grid-cols-[1.6rem_minmax(0,1fr)] items-center gap-3">
+                  <span className="font-mono text-xs text-zinc-500">2</span>
+                  <div className="flex flex-wrap items-center gap-2 font-mono text-sm">
+                    <span className="text-sky-300">const</span>
+                    <span className="text-zinc-200">category =</span>
+                    <div className="relative min-w-[14rem] flex-1">
+                      <select
+                        value={category}
+                        onChange={(event) => setCategory(event.target.value as QueueCategoryValue)}
+                        className="w-full appearance-none rounded-md border border-zinc-700 bg-[#22262e] px-3 py-2 pr-8 text-sm text-zinc-100 outline-none transition focus:border-sky-400/55"
+                      >
+                        {queueCategories.map((item) => (
+                          <option
+                            key={item.value}
+                            value={item.value}
+                            disabled={"disabled" in item ? item.disabled : false}
+                          >
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-zinc-400">
+                        ▾
+                      </span>
+                    </div>
+                    <span className="text-zinc-500">;</span>
                   </div>
                 </label>
 
-                <fieldset className="space-y-3">
-                  <legend className="text-sm font-medium text-zinc-700">난이도 선택</legend>
-                  <div className="grid gap-3 md:grid-cols-3">
-                    {difficultyOptions.map((option) => (
-                      <label
-                        key={option.value}
-                        className={`flex cursor-pointer items-center justify-center rounded-xl border px-4 py-3 text-sm transition ${
-                          difficulty === option.value
-                            ? "border-violet-300 bg-violet-300 text-zinc-900"
-                            : "border-violet-200 bg-white text-zinc-700 hover:border-violet-400 hover:bg-violet-50"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="difficulty"
-                          value={option.value}
-                          checked={difficulty === option.value}
-                          onChange={() => setDifficulty(option.value)}
-                          className="sr-only"
-                        />
-                        <span>{option.label}</span>
-                      </label>
-                    ))}
+                <div className="grid grid-cols-[1.6rem_minmax(0,1fr)] items-start gap-3">
+                  <span className="font-mono text-xs text-zinc-500">3</span>
+                  <div className="space-y-2">
+                    <p className="font-mono text-sm">
+                      <span className="text-sky-300">const</span>{" "}
+                      <span className="text-zinc-200">difficulty =</span>
+                    </p>
+                    <div className="grid gap-2 md:grid-cols-3">
+                      {difficultyOptions.map((option) => (
+                        <label
+                          key={option.value}
+                          className={`flex cursor-pointer items-center justify-center rounded-md border px-3 py-2 text-sm transition ${
+                            difficulty === option.value
+                              ? "border-sky-300/40 bg-sky-500 text-zinc-950"
+                              : "border-zinc-700 bg-[#22262e] text-zinc-100 hover:border-sky-400/45 hover:bg-sky-500/10"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="difficulty"
+                            value={option.value}
+                            checked={difficulty === option.value}
+                            onChange={() => setDifficulty(option.value)}
+                            className="sr-only"
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </fieldset>
+                </div>
 
-                <div className="flex flex-wrap gap-3">
+                <div className="grid grid-cols-[1.6rem_minmax(0,1fr)] items-center gap-3">
+                  <span className="font-mono text-xs text-zinc-500">4</span>
                   {modalMode === "SEARCHING" ? (
                     <button
                       type="button"
@@ -798,37 +831,67 @@ export default function HomeScreen() {
                         void handleCancelMatch();
                       }}
                       disabled={isBusy}
-                      className="rounded-xl border border-violet-300 bg-white px-4 py-3 text-sm font-medium text-zinc-800 transition hover:border-violet-500 hover:bg-violet-50 disabled:cursor-not-allowed disabled:border-zinc-300 disabled:text-zinc-400"
+                      className="w-fit rounded-md border border-zinc-700 bg-[#22262e] px-4 py-2 text-sm font-medium text-zinc-100 transition hover:border-sky-400/45 hover:bg-sky-500/10 disabled:cursor-not-allowed disabled:text-zinc-500"
                     >
                       매칭 취소
                     </button>
-                  ) : null}
+                  ) : (
+                    <p className="font-mono text-sm text-zinc-500">/* cancel disabled */</p>
+                  )}
                 </div>
 
-                <div
-                  className={`rounded-xl border px-4 py-3 text-sm ${
-                    error
-                      ? "border-rose-300 bg-rose-50 text-rose-700"
-                      : "border-violet-200 bg-violet-50/80 text-zinc-700"
-                  }`}
-                >
-                  {error ?? terminalMessage ?? feedback}
+                <div className="grid grid-cols-[1.6rem_minmax(0,1fr)] items-start gap-3">
+                  <span className="font-mono text-xs text-zinc-500">5</span>
+                  <div
+                    className={`rounded-md border px-3 py-2 text-sm ${
+                      error
+                        ? "border-rose-400/60 bg-rose-900/20 text-rose-200"
+                        : "border-zinc-700 bg-[#1a1d24] text-zinc-200"
+                    }`}
+                  >
+                    {error ?? terminalMessage ?? feedback}
+                  </div>
                 </div>
               </div>
             </div>
-
           </div>
 
-          <aside className="space-y-4 rounded-2xl border border-violet-200 bg-white/80 p-4 text-zinc-900 md:col-span-2 md:min-h-0 md:overflow-y-auto lg:col-span-1">
-            <div className="rounded-xl border border-violet-200 bg-violet-50/70 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">프로필</p>
-                <StatusPill tone={session.authenticated ? "success" : "warn"}>
-                  {session.authenticated ? "로그인됨" : "게스트"}
-                </StatusPill>
+          <aside className="space-y-4 rounded-xl border border-zinc-700 bg-[#1f222a] p-4 text-zinc-100 md:col-span-2 md:min-h-0 md:overflow-y-auto lg:col-span-1">
+            <div className="rounded-lg border border-zinc-700 bg-[#1a1d24] p-3">
+              <p className="text-xs font-semibold text-zinc-400">Database</p>
+              <div className="mt-2 space-y-1 font-mono text-xs text-zinc-300">
+                <p className="px-1 text-zinc-400">▾ back@localhost</p>
+                <p className="pl-4 text-zinc-400">▾ schemas</p>
+                <p className="pl-7 text-zinc-400">▾ public</p>
+                <p className="rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5 pl-10">▾ members</p>
+                <p className="pl-14 text-zinc-500">member_id</p>
+                <p className="pl-14 text-zinc-500">email</p>
+                <p className="pl-14 text-zinc-500">nickname</p>
+                <p className="pl-14 text-zinc-500">role</p>
+                <p className="pl-14 text-zinc-500">score</p>
               </div>
-              <p className="mt-2 text-sm font-semibold">{session.member?.nickname ?? "게스트"}</p>
-              <p className="mt-1 text-xs text-zinc-500">{formatRoleLabel(session.member?.role)}</p>
+            </div>
+
+            <div className="rounded-lg border border-zinc-700 bg-[#1a1d24] p-3">
+              <p className="font-mono text-xs text-zinc-400">members.selected_row</p>
+              <dl className="mt-2 space-y-2 text-xs">
+                <div className="flex items-center justify-between rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5">
+                  <dt className="font-mono text-zinc-500">member_id</dt>
+                  <dd className="font-mono text-zinc-200">{session.member?.memberId ?? "NULL"}</dd>
+                </div>
+                <div className="flex items-center justify-between rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5">
+                  <dt className="font-mono text-zinc-500">nickname</dt>
+                  <dd className="font-mono text-zinc-200">{session.member?.nickname ?? "guest"}</dd>
+                </div>
+                <div className="flex items-center justify-between rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5">
+                  <dt className="font-mono text-zinc-500">role</dt>
+                  <dd className="font-mono text-zinc-200">{formatRoleLabel(session.member?.role)}</dd>
+                </div>
+                <div className="flex items-center justify-between rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5">
+                  <dt className="font-mono text-zinc-500">recent_win_rate</dt>
+                  <dd className="font-mono text-zinc-200">{session.authenticated ? `${previewWinRate ?? 0}%` : "NULL"}</dd>
+                </div>
+              </dl>
             </div>
 
             <div className="grid gap-2">
@@ -837,7 +900,7 @@ export default function HomeScreen() {
                   <button
                     type="button"
                     onClick={() => handleProtectedMove("/mypage")}
-                    className="rounded-xl border border-violet-300 bg-white px-3 py-2 text-sm font-medium text-zinc-900 transition hover:border-violet-500 hover:bg-violet-50"
+                    className="rounded-lg border border-zinc-700 bg-[#22262e] px-3 py-2 text-sm font-medium text-zinc-100 transition hover:border-sky-400/45 hover:bg-sky-500/10"
                   >
                     내 프로필
                   </button>
@@ -845,7 +908,7 @@ export default function HomeScreen() {
                     type="button"
                     onClick={handleLogout}
                     disabled={isBusy}
-                    className="rounded-xl bg-violet-300 px-3 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-violet-200 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500"
+                    className="rounded-lg bg-sky-500 px-3 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-zinc-600 disabled:text-zinc-300"
                   >
                     로그아웃
                   </button>
@@ -854,13 +917,13 @@ export default function HomeScreen() {
                 <>
                   <Link
                     href="/signup"
-                    className="rounded-xl border border-violet-300 bg-white px-3 py-2 text-center text-sm font-medium text-zinc-900 transition hover:border-violet-500 hover:bg-violet-50"
+                    className="rounded-lg border border-zinc-700 bg-[#22262e] px-3 py-2 text-center text-sm font-medium text-zinc-100 transition hover:border-sky-400/45 hover:bg-sky-500/10"
                   >
                     회원가입
                   </Link>
                   <Link
                     href="/login?next=/"
-                    className="rounded-xl bg-violet-300 px-3 py-2 text-center text-sm font-semibold text-zinc-900 transition hover:bg-violet-200"
+                    className="rounded-lg bg-sky-500 px-3 py-2 text-center text-sm font-semibold text-zinc-950 transition hover:bg-sky-400"
                   >
                     로그인
                   </Link>
@@ -868,9 +931,9 @@ export default function HomeScreen() {
               )}
             </div>
 
-            <div className="rounded-xl border border-violet-200 bg-violet-50/70 p-3">
-              <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">전적 미리보기</p>
-              <div className="mt-3 space-y-2 text-sm text-zinc-700">
+            <div className="rounded-lg border border-zinc-700 bg-[#1a1d24] p-3">
+              <p className="font-mono text-xs text-zinc-400">query_preview</p>
+              <div className="mt-2 space-y-1 text-sm text-zinc-200">
                 {session.authenticated ? (
                   <>
                     <p>최근 {previewPlayedCount}전 승률: {previewWinRate ?? 0}%</p>
@@ -885,10 +948,10 @@ export default function HomeScreen() {
                 )}
               </div>
               <div
-                className={`mt-3 rounded-lg border px-3 py-2 text-xs ${
+                className={`mt-3 rounded-md border px-3 py-2 text-xs ${
                   resultsPreviewError
-                    ? "border-rose-300 bg-rose-50 text-rose-700"
-                    : "border-violet-200 bg-white text-zinc-600"
+                    ? "border-rose-400/60 bg-rose-900/20 text-rose-200"
+                    : "border-zinc-700 bg-[#22262e] text-zinc-300"
                 }`}
               >
                 {resultsPreviewError ?? resultsPreviewMessage}

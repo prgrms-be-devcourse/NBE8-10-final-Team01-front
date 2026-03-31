@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f6f1ff;
-  --foreground: #1f1533;
-  --panel: #ffffff;
+  --background: #0f1115;
+  --foreground: #e5e7eb;
+  --panel: #171a21;
 }
 
 @theme inline {
@@ -35,6 +35,6 @@ pre {
 }
 
 ::selection {
-  background: #c4b5fd;
-  color: #1f1533;
+  background: #a78bfa;
+  color: #09090b;
 }
