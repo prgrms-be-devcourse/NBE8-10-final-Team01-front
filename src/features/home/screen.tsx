@@ -18,7 +18,6 @@ import { StatusPill } from "@/shared/ui";
 import { formatRoleLabel } from "@/shared/utils/format-role-label";
 
 import {
-  dashboardMenus,
   DEFAULT_REQUIRED_COUNT,
   difficultyOptions,
   getElapsedSeconds,
@@ -684,60 +683,410 @@ export default function HomeScreen() {
   const previewWinRate =
     previewPlayedCount > 0 ? Math.round((previewSolvedCount / previewPlayedCount) * 100) : null;
   const previewScoreDelta = recentResults.reduce((acc, item) => acc + item.scoreDelta, 0);
+  const previewScoreDeltaLabel =
+    previewScoreDelta > 0 ? `+${previewScoreDelta}` : String(previewScoreDelta);
+  const editorLineNumbers = Array.from({ length: 28 }, (_, index) => 41 + index);
+  const ideProjectTreeItems: Array<{
+    key: string;
+    label: string;
+    depth: number;
+    icon: "root" | "folder" | "folderAccent" | "package" | "class" | "file" | "fileAccent";
+    hasChildren?: boolean;
+    expanded?: boolean;
+    subtitle?: string;
+    rowTone?: "amber" | "green" | "selected";
+    href?: string;
+  }> = [
+    {
+      key: "root",
+      label: "BRACKET {}",
+      depth: 0,
+      icon: "root",
+      hasChildren: true,
+      expanded: true,
+    },
+    {
+      key: "quick-menu",
+      label: "퀵메뉴",
+      depth: 1,
+      icon: "folderAccent",
+      hasChildren: true,
+      expanded: true,
+      rowTone: "amber",
+    },
+    {
+      key: "home-screen",
+      label: "메인",
+      depth: 2,
+      icon: "class",
+      rowTone: "selected",
+      href: "/",
+    },
+    { key: "problem-list", label: "문제 목록", depth: 2, icon: "class", href: "/problems" },
+    { key: "spectate-list", label: "관전", depth: 2, icon: "class", href: "/spectate" },
+    { key: "mypage", label: "마이페이지", depth: 2, icon: "class", href: "/mypage" },
+  ];
+  const ideRailTopItems = [
+    { icon: "project", active: true, title: "Project" },
+    { icon: "sliders", title: "Services" },
+    { icon: "branch", title: "Git" },
+    { icon: "layout", title: "Layout" },
+    { icon: "more", title: "More" },
+  ];
+  const ideRailBottomItems = [
+    { icon: "cube", title: "AI" },
+    { icon: "tools", title: "Tools" },
+    { icon: "play", title: "Run" },
+    { icon: "terminal", title: "Terminal" },
+    { icon: "issue", title: "Problems" },
+    { icon: "nodes", title: "Connections" },
+  ];
+  const ideDbRailTopItems = [
+    { icon: "notifications", title: "알림" },
+    { icon: "search", title: "검색" },
+    { icon: "database", title: "데이터베이스", active: true },
+    { icon: "gamepad", title: "게임" },
+    { icon: "blocks", title: "서비스" },
+    { icon: "docs", title: "문서" },
+    { icon: "users", title: "사용자" },
+    { icon: "cloud", title: "클라우드" },
+    { icon: "link", title: "연결" },
+  ];
+  const ideDbRailBottomItems = [{ icon: "hammer", title: "도구" }];
+  const renderRailIcon = (name: string) => {
+    const baseClass = "h-4 w-4";
+
+    switch (name) {
+      case "project":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <path
+              d="M2 4.5h4l1.1 1.2H14v6.8a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5v-8Z"
+              stroke="currentColor"
+              strokeWidth="1.3"
+            />
+            <path d="M2.2 6h11.6" stroke="currentColor" strokeWidth="1.1" />
+          </svg>
+        );
+      case "sliders":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <path d="M2 5.2h12M2 10.8h12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+            <circle cx="6" cy="5.2" r="1.6" fill="#25272d" stroke="currentColor" strokeWidth="1.2" />
+            <circle cx="10" cy="10.8" r="1.6" fill="#25272d" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        );
+      case "branch":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <circle cx="4" cy="3.8" r="1.3" stroke="currentColor" strokeWidth="1.2" />
+            <circle cx="11.8" cy="6.8" r="1.3" stroke="currentColor" strokeWidth="1.2" />
+            <circle cx="8.2" cy="12.2" r="1.3" stroke="currentColor" strokeWidth="1.2" />
+            <path
+              d="M5.3 4.4c2 .2 3.4.7 4.8 1.6M11 8c-.5 1.5-1.3 2.4-2.2 3.2"
+              stroke="currentColor"
+              strokeWidth="1.2"
+              strokeLinecap="round"
+            />
+          </svg>
+        );
+      case "layout":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <rect x="2.2" y="2.2" width="11.6" height="11.6" rx="1.6" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M2.2 7.8h11.6M7.8 2.2v11.6" stroke="currentColor" strokeWidth="1.1" />
+          </svg>
+        );
+      case "more":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <circle cx="4" cy="8" r="1" fill="currentColor" />
+            <circle cx="8" cy="8" r="1" fill="currentColor" />
+            <circle cx="12" cy="8" r="1" fill="currentColor" />
+          </svg>
+        );
+      case "cube":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <path d="M8 2.4 12.8 5v6L8 13.6 3.2 11V5L8 2.4Z" stroke="currentColor" strokeWidth="1.1" />
+            <path d="m8 2.4 4.8 2.6L8 7.5 3.2 5 8 2.4ZM8 7.5V13.6" stroke="currentColor" strokeWidth="1.1" />
+            <path d="m12.2 2.2.8.8m0 0 .8-.8M13 3v1.1" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+          </svg>
+        );
+      case "tools":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <path d="m4 5 7 7M11.5 4.5a2 2 0 0 0-2.6 2.6l2.6-2.6ZM3.2 10.8l2-2L7 10.6l-2 2-1.8-1.8Z" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="m9 3 1.2 1.2M8 4l1.2 1.2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+          </svg>
+        );
+      case "play":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <path d="M4.2 3.8h7.6v8.4H4.2z" stroke="currentColor" strokeWidth="1.1" transform="rotate(-30 8 8)" />
+            <path d="m6.6 5.9 4 2.1-4 2.1V5.9Z" fill="currentColor" />
+          </svg>
+        );
+      case "terminal":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <rect x="2.2" y="2.8" width="11.6" height="10.4" rx="1.3" stroke="currentColor" strokeWidth="1.2" />
+            <path d="m5.1 6.7 2 1.5-2 1.5M8.8 9.8h2.2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+        );
+      case "issue":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <circle cx="8" cy="8" r="5.6" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M8 5.4v3.2M8 11h.01" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
+        );
+      case "nodes":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <circle cx="5" cy="5" r="1.5" stroke="currentColor" strokeWidth="1.2" />
+            <circle cx="11.5" cy="5.5" r="1.5" stroke="currentColor" strokeWidth="1.2" />
+            <circle cx="8" cy="11.3" r="1.5" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M6.4 5.2h3.6M10.8 6.8l-2 3.1M6.8 10l-1.2-3.1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+          </svg>
+        );
+      default:
+        return null;
+    }
+  };
+  const renderProjectTreeIcon = (
+    icon: "root" | "folder" | "folderAccent" | "package" | "class" | "file" | "fileAccent",
+  ) => {
+    switch (icon) {
+      case "class":
+        return (
+          <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-[#3b78e7] text-[8px] font-semibold leading-none text-[#62a5ff]">
+            C
+          </span>
+        );
+      case "package":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 text-[#6ea5ff]">
+            <path d="M2.2 5h3.2l.9.9h7.5v6.1a1.3 1.3 0 0 1-1.3 1.3H3.5A1.3 1.3 0 0 1 2.2 12V5Z" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        );
+      case "folderAccent":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 text-[#cf8f4e]">
+            <path d="M2.2 4.8h3.4l1 1h7.2v6.2a1.3 1.3 0 0 1-1.3 1.3H3.5A1.3 1.3 0 0 1 2.2 12V4.8Z" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        );
+      case "root":
+      case "folder":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 text-zinc-300">
+            <path d="M2.2 4.8h3.4l1 1h7.2v6.2a1.3 1.3 0 0 1-1.3 1.3H3.5A1.3 1.3 0 0 1 2.2 12V4.8Z" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        );
+      case "fileAccent":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 text-[#6ea5ff]">
+            <path d="M4 2.5h5l3 3V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M9 2.5V6h3" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        );
+      case "file":
+      default:
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 text-zinc-300">
+            <path d="M4 2.5h5l3 3V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M9 2.5V6h3" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        );
+    }
+  };
+  const renderDbRailIcon = (name: string) => {
+    const baseClass = "h-4 w-4";
+
+    switch (name) {
+      case "notifications":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <path d="M8 3a3 3 0 0 0-3 3v2.2l-1 1.6h8l-1-1.6V6a3 3 0 0 0-3-3Z" stroke="currentColor" strokeWidth="1.2" />
+            <circle cx="12.2" cy="3.8" r="1.4" fill="#ff5f6d" />
+          </svg>
+        );
+      case "search":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <circle cx="7" cy="7" r="3.6" stroke="currentColor" strokeWidth="1.2" />
+            <path d="m10 10 3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+        );
+      case "database":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <ellipse cx="8" cy="4.1" rx="4.7" ry="2" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M3.3 4.1v4.8c0 1.1 2.1 2 4.7 2s4.7-.9 4.7-2V4.1" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        );
+      case "gamepad":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <rect x="3" y="6.2" width="10" height="5.8" rx="2.2" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M5.4 9h2.2M6.5 7.9v2.2M10.6 8.4h.01M11.8 9.6h.01" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+        );
+      case "blocks":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <rect x="2.4" y="2.4" width="4.8" height="4.8" stroke="currentColor" strokeWidth="1.2" />
+            <rect x="8.8" y="2.4" width="4.8" height="4.8" stroke="currentColor" strokeWidth="1.2" />
+            <rect x="5.6" y="8.8" width="4.8" height="4.8" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        );
+      case "docs":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <path d="M4 2.5h5l3 3V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M9 2.5V6h3M5.2 8.2h5.6M5.2 10.2h5.6" stroke="currentColor" strokeWidth="1.1" />
+          </svg>
+        );
+      case "users":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <circle cx="6.1" cy="6.1" r="2.1" stroke="currentColor" strokeWidth="1.2" />
+            <circle cx="11.1" cy="6.7" r="1.6" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M3.4 12c.5-1.7 1.6-2.7 2.9-2.7s2.4 1 2.9 2.7M9 12.1c.4-1.3 1.2-2.1 2.2-2.1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+        );
+      case "cloud":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <path d="M4.8 11.8h6a2.2 2.2 0 1 0-.4-4.4 3.1 3.1 0 0 0-5.9.8 1.9 1.9 0 0 0 .3 3.6Z" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        );
+      case "link":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <path d="M6.5 9.5 9.5 6.5M5.3 11a2.3 2.3 0 0 1 0-3.2l1.5-1.5a2.3 2.3 0 1 1 3.2 3.2l-.6.6M10.7 5a2.3 2.3 0 0 1 0 3.2l-1.5 1.5a2.3 2.3 0 1 1-3.2-3.2l.6-.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+        );
+      case "hammer":
+        return (
+          <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+            <path d="m9.2 3.2 3.1 3.1M4.1 12.2 9.9 6.4 7.6 4.1 1.8 9.9l2.3 2.3Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="md:h-[calc(100dvh-7.5rem)] md:overflow-hidden">
-      <section className="overflow-hidden rounded-2xl border border-zinc-700/80 bg-[linear-gradient(180deg,#20232b_0%,#1b1d25_100%)] shadow-[0_34px_82px_-42px_rgba(0,0,0,0.92),0_12px_24px_-16px_rgba(0,0,0,0.78)] md:h-full md:min-h-0">
-        <div className="grid gap-4 p-4 md:h-full md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[220px_minmax(0,1.55fr)_280px] lg:p-5 xl:grid-cols-[230px_minmax(0,1.7fr)_300px]">
-          <aside className="space-y-4 rounded-xl border border-zinc-700 bg-[#1f222a] p-4 text-zinc-100 md:min-h-0 md:overflow-y-auto">
-            <div className="rounded-lg border border-zinc-700 bg-[#1a1d24] p-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-zinc-400">Project</p>
-                <span className="font-mono text-xs text-zinc-500">▼</span>
-              </div>
-              <div className="mt-3 space-y-1 font-mono text-xs text-zinc-300">
-                <p className="flex items-center gap-2 px-2 py-1 text-zinc-200">
-                  <span className="text-zinc-500">▾</span>
-                  <span>BRACKET [front]</span>
-                </p>
-                {dashboardMenus.map((menu, index) => {
-                  const href =
-                    menu.requiresAuth && !session.authenticated
-                      ? `/login?next=${encodeURIComponent(menu.href)}`
-                      : menu.href;
-                  const branchGlyph = index === dashboardMenus.length - 1 ? "└─" : "├─";
-
-                  return (
-                    <Link
-                      key={menu.title}
-                      href={href}
-                      className="ml-4 flex items-center gap-2 rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5 text-zinc-200 transition hover:border-sky-400/45 hover:bg-sky-500/10"
+      <section className="overflow-hidden rounded-xl border border-zinc-700/80 bg-[#1e1f22] shadow-[0_34px_82px_-42px_rgba(0,0,0,0.92),0_12px_24px_-16px_rgba(0,0,0,0.78)] md:h-full md:min-h-0">
+        <div className="grid h-full grid-cols-1 md:grid-cols-[250px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_260px] xl:grid-cols-[280px_minmax(0,1fr)_300px]">
+          <aside className="min-h-0 border-b border-zinc-800/90 bg-[#2b2d30] md:border-b-0 md:border-r">
+            <div className="grid h-full grid-cols-[48px_minmax(0,1fr)]">
+              <div className="flex min-h-0 flex-col items-center justify-between border-r border-zinc-800/90 bg-[#25272d] py-2">
+                <div className="flex flex-col items-center gap-2">
+                  {ideRailTopItems.map((item) => (
+                    <button
+                      key={item.title}
+                      type="button"
+                      title={item.title}
+                      aria-label={item.title}
+                      className={`h-8 w-8 rounded-md border text-[10px] font-semibold tracking-wide transition ${
+                        item.active
+                          ? "border-zinc-500 bg-zinc-700/70 text-zinc-100"
+                          : "border-transparent text-zinc-400 hover:bg-zinc-700/30 hover:text-zinc-300"
+                      }`}
                     >
-                      <span className="text-zinc-500">{branchGlyph}</span>
-                      <span>{menu.title}</span>
-                    </Link>
-                  );
-                })}
+                      <span className="flex items-center justify-center">{renderRailIcon(item.icon)}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                  {ideRailBottomItems.map((item) => (
+                    <button
+                      key={item.title}
+                      type="button"
+                      title={item.title}
+                      aria-label={item.title}
+                      className="h-8 w-8 rounded-md border border-transparent text-[10px] font-semibold tracking-wide text-zinc-500 transition hover:bg-zinc-700/30 hover:text-zinc-300"
+                    >
+                      <span className="flex items-center justify-center">{renderRailIcon(item.icon)}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div className="rounded-lg border border-zinc-700 bg-[#1a1d24] p-3">
-              <p className="text-xs font-semibold text-zinc-400">Open Files</p>
-              <div className="mt-2 space-y-1 font-mono text-xs text-zinc-300">
-                <p className="rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5">MatchControl.tsx</p>
-                <p className="rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5">QueueState.json</p>
-                <p className="rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5">ProfilePreview.sql</p>
+
+              <div className="flex min-h-0 flex-col">
+                <div className="flex h-12 items-center justify-between border-b border-zinc-800/90 px-4">
+                  <p className="text-sm font-semibold text-zinc-200">퀵 메뉴</p>
+                  <span className="text-xs text-zinc-500">▼</span>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-3 font-mono text-sm text-zinc-300">
+                  {ideProjectTreeItems.map((item) => {
+                    const rowToneClass =
+                      item.rowTone === "amber"
+                        ? "bg-[#4a3924]/50"
+                        : item.rowTone === "green"
+                          ? "bg-[#1f3a2a]/55"
+                          : item.rowTone === "selected"
+                            ? "bg-zinc-600/70"
+                            : "hover:bg-zinc-700/30";
+
+                    const content = (
+                      <div
+                        className={`flex h-7 items-center gap-1.5 rounded-sm px-1.5 ${rowToneClass}`}
+                        style={{ paddingLeft: `${item.depth * 10 + 4}px` }}
+                      >
+                        <span className="inline-flex w-3 items-center justify-center text-[10px] text-zinc-500">
+                          {item.hasChildren ? (item.expanded ? "▾" : "▸") : ""}
+                        </span>
+                        <span className="inline-flex h-3.5 w-3.5 items-center justify-center">
+                          {renderProjectTreeIcon(item.icon)}
+                        </span>
+                        <span className="truncate text-[13px] text-zinc-200">{item.label}</span>
+                        {item.subtitle ? (
+                          <span className="truncate pl-1 text-[12px] text-zinc-500">{item.subtitle}</span>
+                        ) : null}
+                      </div>
+                    );
+
+                    if (item.href) {
+                      const href = item.href === "/"
+                        ? "/"
+                        : !session.authenticated
+                          ? `/login?next=${encodeURIComponent(item.href)}`
+                          : item.href;
+
+                      return (
+                        <Link key={item.key} href={href}>
+                          {content}
+                        </Link>
+                      );
+                    }
+
+                    return <div key={item.key}>{content}</div>;
+                  })}
+                </div>
               </div>
             </div>
           </aside>
 
-          <div className="space-y-4 md:min-h-0 md:overflow-y-auto">
-            <div className="overflow-hidden rounded-xl border border-zinc-700 bg-[#1f222a] text-zinc-100">
-              <div className="flex items-center justify-between border-b border-zinc-700 bg-[#1a1d24] px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <span className="size-2 rounded-full bg-rose-400" />
-                  <span className="size-2 rounded-full bg-amber-400" />
-                  <span className="size-2 rounded-full bg-emerald-400" />
-                  <p className="ml-2 font-mono text-xs text-zinc-300">MatchControl.tsx</p>
+          <main className="min-h-0 border-b border-zinc-700/80 bg-[#1e1f22] md:border-b-0 lg:border-r">
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="flex h-12 items-center justify-between border-b border-zinc-700/80 bg-[#1e1f22] px-3">
+                <div className="flex h-full items-end gap-0.5 pt-1">
+                  <div className="relative flex h-10 items-center gap-2 border-r border-zinc-700/70 bg-[#1e1f22] px-3 font-mono text-xs text-zinc-200">
+                    <span className="text-sky-400">●</span>
+                    <span>QueueDemo.java</span>
+                    <span className="text-zinc-500">×</span>
+                    <span className="absolute inset-x-0 bottom-0 h-[2px] bg-zinc-300" />
+                  </div>
+                  <div className="flex h-10 items-center gap-2 border-r border-zinc-700/70 bg-[#1e1f22] px-3 font-mono text-xs text-zinc-500">
+                    <span className="text-sky-600">●</span>
+                    <span>MatchLevel.java</span>
+                    <span>×</span>
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -745,7 +1094,7 @@ export default function HomeScreen() {
                     void handleStartMatch();
                   }}
                   disabled={isBusy || (modalMode !== null && modalMode !== "TERMINAL")}
-                  className="rounded-lg border border-sky-300/40 bg-sky-500 px-5 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-600 disabled:text-zinc-300"
+                  className="rounded-md border border-[#b08cff]/45 bg-[#9146ff] px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-[#7f39fa] disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-600 disabled:text-zinc-300"
                 >
                   {modalMode === "SEARCHING"
                     ? "매칭 진행 중"
@@ -755,206 +1104,271 @@ export default function HomeScreen() {
                 </button>
               </div>
 
-              <div className="space-y-3 p-4">
-                <div className="grid grid-cols-[1.6rem_minmax(0,1fr)] items-start gap-3">
-                  <span className="font-mono text-xs text-zinc-500">1</span>
-                  <p className="font-mono text-sm text-zinc-400">// queue options</p>
-                </div>
-
-                <label className="grid grid-cols-[1.6rem_minmax(0,1fr)] items-center gap-3">
-                  <span className="font-mono text-xs text-zinc-500">2</span>
-                  <div className="flex flex-wrap items-center gap-2 font-mono text-sm">
-                    <span className="text-sky-300">const</span>
-                    <span className="text-zinc-200">category =</span>
-                    <div className="relative min-w-[14rem] flex-1">
-                      <select
-                        value={category}
-                        onChange={(event) => setCategory(event.target.value as QueueCategoryValue)}
-                        className="w-full appearance-none rounded-md border border-zinc-700 bg-[#22262e] px-3 py-2 pr-8 text-sm text-zinc-100 outline-none transition focus:border-sky-400/55"
-                      >
-                        {queueCategories.map((item) => (
-                          <option
-                            key={item.value}
-                            value={item.value}
-                            disabled={"disabled" in item ? item.disabled : false}
-                          >
-                            {item.label}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-zinc-400">
-                        ▾
-                      </span>
-                    </div>
-                    <span className="text-zinc-500">;</span>
+              <div className="flex-1 overflow-y-auto bg-[#1e1f22]">
+                <div className="grid grid-cols-[56px_minmax(0,1fr)] bg-[#1e1f22] font-mono text-sm">
+                  <div className="border-r border-zinc-700/70 bg-[#1e1f22] px-3 py-4 text-right text-[#606366]">
+                    {editorLineNumbers.map((line) => (
+                      <div key={line} className="h-8 leading-8">
+                        {line}
+                      </div>
+                    ))}
                   </div>
-                </label>
-
-                <div className="grid grid-cols-[1.6rem_minmax(0,1fr)] items-start gap-3">
-                  <span className="font-mono text-xs text-zinc-500">3</span>
-                  <div className="space-y-2">
-                    <p className="font-mono text-sm">
-                      <span className="text-sky-300">const</span>{" "}
-                      <span className="text-zinc-200">difficulty =</span>
-                    </p>
-                    <div className="grid gap-2 md:grid-cols-3">
-                      {difficultyOptions.map((option) => (
-                        <label
-                          key={option.value}
-                          className={`flex cursor-pointer items-center justify-center rounded-md border px-3 py-2 text-sm transition ${
-                            difficulty === option.value
-                              ? "border-sky-300/40 bg-sky-500 text-zinc-950"
-                              : "border-zinc-700 bg-[#22262e] text-zinc-100 hover:border-sky-400/45 hover:bg-sky-500/10"
-                          }`}
+                  <div className="px-4 py-4 text-[#a9b7c6]">
+                    <div className="h-8 whitespace-nowrap leading-8">
+                      <span className="text-[#cc7832]">enum</span> MatchLevel {"{"} EASY, MEDIUM, HARD {"}"}
+                    </div>
+                    <div className="h-8 whitespace-nowrap leading-8">
+                      <span className="text-[#cc7832]">public</span> <span className="text-[#cc7832]">class</span>{" "}
+                      <span className="text-[#56a8f5]">QueueDemo</span> {"{"}
+                    </div>
+                    <div className="h-8 whitespace-nowrap pl-4 leading-8">
+                      <span className="text-[#cc7832]">public static void</span>{" "}
+                      <span className="text-[#56a8f5]">main</span>(String[] args) {"{"}
+                    </div>
+                    <div className="flex min-h-8 flex-wrap items-center gap-2 pl-4 leading-8">
+                      <span className="text-[#cc7832]">String</span> tag ={" "}
+                      <div className="relative min-w-[11rem] max-w-[18rem] flex-1 leading-none">
+                        <select
+                          value={category}
+                          onChange={(event) => setCategory(event.target.value as QueueCategoryValue)}
+                          className="h-7 w-full appearance-none rounded-sm border border-zinc-700 bg-[#2b2d30] px-2 pr-6 text-xs text-[#a9b7c6] outline-none transition focus:border-[#4e89ff]/70"
                         >
-                          <input
-                            type="radio"
-                            name="difficulty"
-                            value={option.value}
-                            checked={difficulty === option.value}
-                            onChange={() => setDifficulty(option.value)}
-                            className="sr-only"
-                          />
-                          <span>{option.label}</span>
-                        </label>
+                          {queueCategories.map((item) => (
+                            <option
+                              key={item.value}
+                              value={item.value}
+                              disabled={"disabled" in item ? item.disabled : false}
+                            >
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-zinc-500">
+                          ▾
+                        </span>
+                      </div>
+                      <span>);</span>
+                    </div>
+                    <div className="flex min-h-8 flex-wrap items-center gap-2 pl-4 leading-8">
+                      <span>MatchLevel level = MatchLevel.</span>
+                      <div className="flex flex-wrap gap-1 leading-none">
+                        {difficultyOptions.map((option) => (
+                          <label
+                            key={option.value}
+                            className={`rounded-sm border px-2 py-1 text-xs transition ${
+                              difficulty === option.value
+                                ? "border-[#4e89ff]/60 bg-[#2b3a52] text-[#a9c7ff]"
+                                : "border-zinc-700 bg-[#2b2d30] text-[#a9b7c6] hover:bg-zinc-700/40"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="difficulty"
+                              value={option.value}
+                              checked={difficulty === option.value}
+                              onChange={() => setDifficulty(option.value)}
+                              className="sr-only"
+                            />
+                            {option.label.toUpperCase()}
+                          </label>
+                        ))}
+                      </div>
+                      <span>;</span>
+                    </div>
+                    <div className="h-8 whitespace-nowrap pl-4 leading-8">
+                      <span className="text-[#cc7832]">int</span> partySize = <span className="text-[#6897bb]">4</span>;
+                    </div>
+                    <div className="h-8 whitespace-nowrap pl-4 leading-8">
+                      <span className="text-[#cc7832]">String</span> preview = <span className="text-[#6aab73]">"["</span> + level + <span className="text-[#6aab73]">"] "</span> + tag;
+                    </div>
+                    <div className="h-8 whitespace-nowrap pl-4 leading-8">
+                      preview += <span className="text-[#6aab73]">" queue started ("</span> + partySize + <span className="text-[#6aab73]">"/4)"</span>;
+                    </div>
+                    <div className="h-8 whitespace-nowrap pl-4 leading-8">
+                      System.out.<span className="text-[#56a8f5]">println</span>(preview);
+                    </div>
+                    <div className="h-8 whitespace-nowrap pl-4 leading-8">
+                      <span className="text-[#cc7832]">boolean</span> searching = <span className="text-[#6897bb]">true</span>;
+                    </div>
+                    <div className="h-8 whitespace-nowrap pl-4 leading-8">{"}"}</div>
+                    <div className="h-8 whitespace-nowrap leading-8">{"}"}</div>
+
+                    <div className="mt-2 h-8 leading-8 text-[#6a717d]">
+                      {modalMode === "SEARCHING" ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleCancelMatch();
+                          }}
+                          disabled={isBusy}
+                          className="rounded-sm border border-zinc-700 bg-[#2b2d30] px-2 py-0.5 text-xs text-zinc-100 transition hover:bg-zinc-700/40 disabled:cursor-not-allowed disabled:text-zinc-500"
+                        >
+                          stopQueue();
+                        </button>
+                      ) : (
+                        "// press start to run the queue demo"
+                      )}
+                    </div>
+                    <div
+                      className={`mt-1 rounded-sm border px-3 py-2 text-xs ${
+                        error
+                          ? "border-rose-400/60 bg-rose-900/20 text-rose-200"
+                          : "border-zinc-700 bg-[#2b2d30] text-zinc-300"
+                      }`}
+                    >
+                      {error ?? terminalMessage ?? feedback}
+                    </div>
+                    <div className="mt-2 space-y-0">
+                      {editorLineNumbers.slice(12).map((line) => (
+                        <div key={`filler-${line}`} className="h-8 leading-8">
+                          <span className="opacity-0">.</span>
+                        </div>
                       ))}
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+          </main>
 
-                <div className="grid grid-cols-[1.6rem_minmax(0,1fr)] items-center gap-3">
-                  <span className="font-mono text-xs text-zinc-500">4</span>
-                  {modalMode === "SEARCHING" ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void handleCancelMatch();
-                      }}
-                      disabled={isBusy}
-                      className="w-fit rounded-md border border-zinc-700 bg-[#22262e] px-4 py-2 text-sm font-medium text-zinc-100 transition hover:border-sky-400/45 hover:bg-sky-500/10 disabled:cursor-not-allowed disabled:text-zinc-500"
-                    >
-                      매칭 취소
-                    </button>
-                  ) : (
-                    <p className="font-mono text-sm text-zinc-500">/* cancel disabled */</p>
-                  )}
+          <aside className="min-h-0 bg-[#2b2d30] md:col-span-2 lg:col-span-1">
+            <div className="grid h-full grid-cols-[minmax(0,1fr)_38px]">
+              <div className="min-h-0">
+                <div className="flex h-12 items-center justify-between border-b border-zinc-800/90 px-4">
+                  <p className="text-sm font-semibold text-zinc-200">프로필</p>
+                  <span className="text-xs text-zinc-500">⚙</span>
                 </div>
+                <div className="h-full overflow-y-auto p-3 text-xs text-zinc-300">
+                  <div className="rounded-md border border-zinc-800/90 bg-[#1f222b] p-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                        계정
+                      </p>
+                      <StatusPill tone={session.authenticated ? "success" : "warn"}>
+                        {session.authenticated ? "로그인됨" : "게스트"}
+                      </StatusPill>
+                    </div>
+                    <div className="mt-3 space-y-1">
+                      <p className="text-base font-semibold text-zinc-100">
+                        {session.member?.nickname ?? "게스트"}
+                      </p>
+                      <p className="text-zinc-400">
+                        {session.authenticated
+                          ? formatRoleLabel(session.member?.role)
+                          : "로그인이 필요합니다."}
+                      </p>
+                    </div>
+                  </div>
 
-                <div className="grid grid-cols-[1.6rem_minmax(0,1fr)] items-start gap-3">
-                  <span className="font-mono text-xs text-zinc-500">5</span>
-                  <div
-                    className={`rounded-md border px-3 py-2 text-sm ${
-                      error
-                        ? "border-rose-400/60 bg-rose-900/20 text-rose-200"
-                        : "border-zinc-700 bg-[#1a1d24] text-zinc-200"
-                    }`}
-                  >
-                    {error ?? terminalMessage ?? feedback}
+                  <div className="mt-3 rounded-md border border-zinc-800/90 bg-[#1f222b] p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                      전적 요약
+                    </p>
+                    {session.authenticated ? (
+                      <>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <div className="rounded border border-zinc-700 bg-[#171a22] px-2 py-1.5">
+                            <p className="text-[10px] text-zinc-500">최근 경기</p>
+                            <p className="text-sm font-semibold text-zinc-100">{previewPlayedCount}</p>
+                          </div>
+                          <div className="rounded border border-zinc-700 bg-[#171a22] px-2 py-1.5">
+                            <p className="text-[10px] text-zinc-500">클리어</p>
+                            <p className="text-sm font-semibold text-zinc-100">{previewSolvedCount}</p>
+                          </div>
+                          <div className="rounded border border-zinc-700 bg-[#171a22] px-2 py-1.5">
+                            <p className="text-[10px] text-zinc-500">승률</p>
+                            <p className="text-sm font-semibold text-zinc-100">{previewWinRate ?? 0}%</p>
+                          </div>
+                          <div className="rounded border border-zinc-700 bg-[#171a22] px-2 py-1.5">
+                            <p className="text-[10px] text-zinc-500">점수 변화</p>
+                            <p className="text-sm font-semibold text-zinc-100">{previewScoreDeltaLabel}</p>
+                          </div>
+                        </div>
+                        <p
+                          className={`mt-2 text-[11px] ${
+                            resultsPreviewError ? "text-rose-300" : "text-zinc-500"
+                          }`}
+                        >
+                          {resultsPreviewError ?? resultsPreviewMessage}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="mt-2 text-[11px] text-zinc-500">
+                        로그인 후 전적 요약을 확인할 수 있습니다.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="mt-4 space-y-2 font-sans">
+                    {session.authenticated ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleProtectedMove("/mypage")}
+                          className="w-full rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2 text-sm font-medium text-zinc-100 transition hover:bg-zinc-700/30"
+                        >
+                          내 프로필
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleLogout}
+                          disabled={isBusy}
+                          className="w-full rounded-md bg-[#9146ff] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#7f39fa] disabled:cursor-not-allowed disabled:bg-zinc-600 disabled:text-zinc-300"
+                        >
+                          로그아웃
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <Link
+                          href="/signup"
+                          className="block w-full rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2 text-center text-sm font-medium text-zinc-100 transition hover:bg-zinc-700/30"
+                        >
+                          회원가입
+                        </Link>
+                        <Link
+                          href="/login?next=/"
+                          className="block w-full rounded-md bg-[#9146ff] px-3 py-2 text-center text-sm font-semibold text-white transition hover:bg-[#7f39fa]"
+                        >
+                          로그인
+                        </Link>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
 
-          <aside className="space-y-4 rounded-xl border border-zinc-700 bg-[#1f222a] p-4 text-zinc-100 md:col-span-2 md:min-h-0 md:overflow-y-auto lg:col-span-1">
-            <div className="rounded-lg border border-zinc-700 bg-[#1a1d24] p-3">
-              <p className="text-xs font-semibold text-zinc-400">Database</p>
-              <div className="mt-2 space-y-1 font-mono text-xs text-zinc-300">
-                <p className="px-1 text-zinc-400">▾ back@localhost</p>
-                <p className="pl-4 text-zinc-400">▾ schemas</p>
-                <p className="pl-7 text-zinc-400">▾ public</p>
-                <p className="rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5 pl-10">▾ members</p>
-                <p className="pl-14 text-zinc-500">member_id</p>
-                <p className="pl-14 text-zinc-500">email</p>
-                <p className="pl-14 text-zinc-500">nickname</p>
-                <p className="pl-14 text-zinc-500">role</p>
-                <p className="pl-14 text-zinc-500">score</p>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-zinc-700 bg-[#1a1d24] p-3">
-              <p className="font-mono text-xs text-zinc-400">members.selected_row</p>
-              <dl className="mt-2 space-y-2 text-xs">
-                <div className="flex items-center justify-between rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5">
-                  <dt className="font-mono text-zinc-500">member_id</dt>
-                  <dd className="font-mono text-zinc-200">{session.member?.memberId ?? "NULL"}</dd>
+              <div className="flex min-h-0 flex-col items-center justify-between border-l border-zinc-800/90 bg-[#25272d] py-2">
+                <div className="flex flex-col items-center gap-2">
+                  {ideDbRailTopItems.map((item) => (
+                    <button
+                      key={item.title}
+                      type="button"
+                      title={item.title}
+                      aria-label={item.title}
+                      className={`h-8 w-8 rounded-md border transition ${
+                        item.active
+                          ? "border-[#2f77ff] bg-[#2f77ff] text-white shadow-[0_0_0_1px_rgba(80,130,255,0.35)]"
+                          : "border-transparent text-zinc-400 hover:bg-zinc-700/30 hover:text-zinc-200"
+                      }`}
+                    >
+                      <span className="flex items-center justify-center">{renderDbRailIcon(item.icon)}</span>
+                    </button>
+                  ))}
                 </div>
-                <div className="flex items-center justify-between rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5">
-                  <dt className="font-mono text-zinc-500">nickname</dt>
-                  <dd className="font-mono text-zinc-200">{session.member?.nickname ?? "guest"}</dd>
+                <div className="flex flex-col items-center gap-2">
+                  {ideDbRailBottomItems.map((item) => (
+                    <button
+                      key={item.title}
+                      type="button"
+                      title={item.title}
+                      aria-label={item.title}
+                      className="h-8 w-8 rounded-md border border-transparent text-zinc-500 transition hover:bg-zinc-700/30 hover:text-zinc-200"
+                    >
+                      <span className="flex items-center justify-center">{renderDbRailIcon(item.icon)}</span>
+                    </button>
+                  ))}
                 </div>
-                <div className="flex items-center justify-between rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5">
-                  <dt className="font-mono text-zinc-500">role</dt>
-                  <dd className="font-mono text-zinc-200">{formatRoleLabel(session.member?.role)}</dd>
-                </div>
-                <div className="flex items-center justify-between rounded-md border border-zinc-700 bg-[#22262e] px-2 py-1.5">
-                  <dt className="font-mono text-zinc-500">recent_win_rate</dt>
-                  <dd className="font-mono text-zinc-200">{session.authenticated ? `${previewWinRate ?? 0}%` : "NULL"}</dd>
-                </div>
-              </dl>
-            </div>
-
-            <div className="grid gap-2">
-              {session.authenticated ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => handleProtectedMove("/mypage")}
-                    className="rounded-lg border border-zinc-700 bg-[#22262e] px-3 py-2 text-sm font-medium text-zinc-100 transition hover:border-sky-400/45 hover:bg-sky-500/10"
-                  >
-                    내 프로필
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    disabled={isBusy}
-                    className="rounded-lg bg-sky-500 px-3 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-zinc-600 disabled:text-zinc-300"
-                  >
-                    로그아웃
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Link
-                    href="/signup"
-                    className="rounded-lg border border-zinc-700 bg-[#22262e] px-3 py-2 text-center text-sm font-medium text-zinc-100 transition hover:border-sky-400/45 hover:bg-sky-500/10"
-                  >
-                    회원가입
-                  </Link>
-                  <Link
-                    href="/login?next=/"
-                    className="rounded-lg bg-sky-500 px-3 py-2 text-center text-sm font-semibold text-zinc-950 transition hover:bg-sky-400"
-                  >
-                    로그인
-                  </Link>
-                </>
-              )}
-            </div>
-
-            <div className="rounded-lg border border-zinc-700 bg-[#1a1d24] p-3">
-              <p className="font-mono text-xs text-zinc-400">query_preview</p>
-              <div className="mt-2 space-y-1 text-sm text-zinc-200">
-                {session.authenticated ? (
-                  <>
-                    <p>최근 {previewPlayedCount}전 승률: {previewWinRate ?? 0}%</p>
-                    <p>최근 정답 수: {previewSolvedCount}</p>
-                    <p>
-                      최근 점수 변화 합계: {previewScoreDelta > 0 ? "+" : ""}
-                      {previewScoreDelta}
-                    </p>
-                  </>
-                ) : (
-                  <p>로그인 후 전적 미리보기를 확인할 수 있습니다.</p>
-                )}
-              </div>
-              <div
-                className={`mt-3 rounded-md border px-3 py-2 text-xs ${
-                  resultsPreviewError
-                    ? "border-rose-400/60 bg-rose-900/20 text-rose-200"
-                    : "border-zinc-700 bg-[#22262e] text-zinc-300"
-                }`}
-              >
-                {resultsPreviewError ?? resultsPreviewMessage}
               </div>
             </div>
           </aside>
