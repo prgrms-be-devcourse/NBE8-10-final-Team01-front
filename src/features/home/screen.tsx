@@ -9,8 +9,8 @@ import type {
   MatchStateResponse,
   QueueStateResponse,
   QueueStatusResponse,
-  SessionResponse,
 } from "@/shared/api/contracts";
+import { useAppSession } from "@/features/layout/session-context";
 
 import {
   DEFAULT_REQUIRED_COUNT,
@@ -52,22 +52,6 @@ const defaultMatchState: MatchStateResponse = {
   room: null,
   message: null,
 };
-
-async function readSession() {
-  const response = await fetch("/api/auth/session", {
-    cache: "no-store",
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    return {
-      authenticated: false,
-      member: null,
-    } satisfies SessionResponse;
-  }
-
-  return (await response.json()) as SessionResponse;
-}
 
 async function readQueueState() {
   const response = await fetch("/api/queue/me", {
@@ -178,10 +162,7 @@ function getApiErrorMessage(
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [session, setSession] = useState<SessionResponse>({
-    authenticated: false,
-    member: null,
-  });
+  const { session, sessionLoaded } = useAppSession();
   const [queueState, setQueueState] = useState(defaultQueueState);
   const [matchState, setMatchState] = useState(defaultMatchState);
   const [category, setCategory] = useState<QueueCategoryValue>("dp");
@@ -386,18 +367,14 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
+    if (!sessionLoaded) {
+      return;
+    }
+
     let active = true;
 
     void (async () => {
-      const nextSession = await readSession();
-
-      if (!active) {
-        return;
-      }
-
-      setSession(nextSession);
-
-      if (!nextSession.authenticated) {
+      if (!session.authenticated) {
         resetFlow();
         return;
       }
@@ -434,7 +411,7 @@ export default function HomeScreen() {
     return () => {
       active = false;
     };
-  }, [applyMatchSnapshot, resetFlow]);
+  }, [applyMatchSnapshot, resetFlow, session.authenticated, sessionLoaded]);
 
   useEffect(() => {
     if (!session.authenticated || pollStage !== "QUEUE") {

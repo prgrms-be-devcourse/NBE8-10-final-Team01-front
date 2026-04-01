@@ -6,24 +6,11 @@ import { useEffect, useState } from "react";
 import type {
   ApiErrorResponse,
   ProblemListResponse,
-  SessionResponse,
 } from "@/shared/api/contracts";
+import { useAppSession } from "@/features/layout/session-context";
 
 const PROBLEM_PAGE_SIZE = 20;
 const MAX_PAGE_BUTTONS = 7;
-
-async function readSession() {
-  const response = await fetch("/api/auth/session", { cache: "no-store" });
-
-  if (!response.ok) {
-    return {
-      authenticated: false,
-      member: null,
-    } satisfies SessionResponse;
-  }
-
-  return (await response.json()) as SessionResponse;
-}
 
 async function readProblemList(page: number) {
   const searchParams = new URLSearchParams({
@@ -77,23 +64,11 @@ function getPageTokens(currentPage: number, totalPages: number) {
 }
 
 export default function ProblemsScreen() {
-  const [session, setSession] = useState<SessionResponse>({
-    authenticated: false,
-    member: null,
-  });
-  const [sessionLoaded, setSessionLoaded] = useState(false);
+  const { session, sessionLoaded } = useAppSession();
   const [problemPage, setProblemPage] = useState(0);
   const [problemList, setProblemList] = useState<ProblemListResponse | null>(null);
   const [problemError, setProblemError] = useState<string | null>(null);
   const [isProblemLoading, setIsProblemLoading] = useState(false);
-
-  useEffect(() => {
-    void (async () => {
-      const nextSession = await readSession();
-      setSession(nextSession);
-      setSessionLoaded(true);
-    })();
-  }, []);
 
   useEffect(() => {
     if (!sessionLoaded) {

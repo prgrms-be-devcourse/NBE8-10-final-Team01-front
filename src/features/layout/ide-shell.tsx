@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type {
   MyBattleResultItem,
@@ -13,6 +13,7 @@ import ProfilePane from "@/features/home/components/profile-pane";
 import QuickMenuPane, {
   type QuickMenuTreeItem,
 } from "@/features/home/components/quick-menu-pane";
+import SessionContext from "@/features/layout/session-context";
 
 const PREVIEW_RESULTS_SIZE = 5;
 
@@ -56,6 +57,7 @@ export default function IdeShell({ children }: { children: React.ReactNode }) {
     authenticated: false,
     member: null,
   });
+  const [sessionLoaded, setSessionLoaded] = useState(false);
   const [recentResults, setRecentResults] = useState<MyBattleResultItem[]>([]);
   const [resultsPreviewMessage, setResultsPreviewMessage] = useState(
     "로그인 후 최근 전적을 확인할 수 있습니다.",
@@ -63,23 +65,16 @@ export default function IdeShell({ children }: { children: React.ReactNode }) {
   const [resultsPreviewError, setResultsPreviewError] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+  const refreshSession = useCallback(async () => {
+    const nextSession = await readSession();
+    setSession(nextSession);
+    setSessionLoaded(true);
+    return nextSession;
+  }, []);
+
   useEffect(() => {
-    let active = true;
-
-    void (async () => {
-      const nextSession = await readSession();
-
-      if (!active) {
-        return;
-      }
-
-      setSession(nextSession);
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [pathname]);
+    void refreshSession();
+  }, [pathname, refreshSession]);
 
   useEffect(() => {
     let active = true;
@@ -142,6 +137,7 @@ export default function IdeShell({ children }: { children: React.ReactNode }) {
         authenticated: false,
         member: null,
       });
+      setSessionLoaded(true);
       router.refresh();
     } finally {
       setIsLoggingOut(false);
@@ -228,41 +224,43 @@ export default function IdeShell({ children }: { children: React.ReactNode }) {
     pathname === "/mypage";
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden bg-[#1e1f22]">
-      <div className={`grid h-full w-full ${layoutColumnsClass}`}>
-        <QuickMenuPane
-          isQuickMenuOpen={isQuickMenuOpen}
-          onToggleQuickMenu={() => setIsQuickMenuOpen((current) => !current)}
-          sessionAuthenticated={session.authenticated}
-          projectTreeItems={projectTreeItems}
-        />
+    <SessionContext.Provider value={{ session, sessionLoaded, refreshSession }}>
+      <div className="flex min-h-0 flex-1 overflow-hidden bg-[#1e1f22]">
+        <div className={`grid h-full w-full ${layoutColumnsClass}`}>
+          <QuickMenuPane
+            isQuickMenuOpen={isQuickMenuOpen}
+            onToggleQuickMenu={() => setIsQuickMenuOpen((current) => !current)}
+            sessionAuthenticated={session.authenticated}
+            projectTreeItems={projectTreeItems}
+          />
 
-        <section className="min-h-0 overflow-hidden bg-[#1e1f22]">
-          {isFullBleedCenter ? (
-            <div className="h-full min-h-0">{children}</div>
-          ) : (
-            <div className="h-full overflow-y-auto">
-              <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8">{children}</div>
-            </div>
-          )}
-        </section>
+          <section className="min-h-0 overflow-hidden bg-[#1e1f22]">
+            {isFullBleedCenter ? (
+              <div className="h-full min-h-0">{children}</div>
+            ) : (
+              <div className="h-full overflow-y-auto">
+                <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8">{children}</div>
+              </div>
+            )}
+          </section>
 
-        <ProfilePane
-          isProfilePanelOpen={isProfilePanelOpen}
-          onToggleProfilePanel={() => setIsProfilePanelOpen((current) => !current)}
-          session={session}
-          previewPlayedCount={previewPlayedCount}
-          previewSolvedCount={previewSolvedCount}
-          previewWinRate={previewWinRate}
-          previewScoreDeltaLabel={previewScoreDeltaLabel}
-          resultsPreviewMessage={resultsPreviewMessage}
-          resultsPreviewError={resultsPreviewError}
-          isBusy={isLoggingOut}
-          onLogout={() => {
-            void handleLogout();
-          }}
-        />
+          <ProfilePane
+            isProfilePanelOpen={isProfilePanelOpen}
+            onToggleProfilePanel={() => setIsProfilePanelOpen((current) => !current)}
+            session={session}
+            previewPlayedCount={previewPlayedCount}
+            previewSolvedCount={previewSolvedCount}
+            previewWinRate={previewWinRate}
+            previewScoreDeltaLabel={previewScoreDeltaLabel}
+            resultsPreviewMessage={resultsPreviewMessage}
+            resultsPreviewError={resultsPreviewError}
+            isBusy={isLoggingOut}
+            onLogout={() => {
+              void handleLogout();
+            }}
+          />
+        </div>
       </div>
-    </div>
+    </SessionContext.Provider>
   );
 }
