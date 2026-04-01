@@ -8,6 +8,7 @@ interface SessionContextValue {
   session: SessionResponse;
   sessionLoaded: boolean;
   refreshSession: () => Promise<SessionResponse>;
+  applySession: (nextSession: SessionResponse) => void;
 }
 
 const defaultSession: SessionResponse = {
@@ -19,6 +20,7 @@ const SessionContext = createContext<SessionContextValue>({
   session: defaultSession,
   sessionLoaded: false,
   refreshSession: async () => defaultSession,
+  applySession: () => undefined,
 });
 
 export function useAppSession() {

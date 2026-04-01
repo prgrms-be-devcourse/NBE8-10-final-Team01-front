@@ -68,6 +68,15 @@ export default function IdeShell({
   );
   const [resultsPreviewError, setResultsPreviewError] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const applySession = useCallback((nextSession: SessionResponse) => {
+    setSession(nextSession);
+    setSessionLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    // router.refresh() 이후 서버에서 내려준 초기 세션을 클라이언트 전역 상태에 반영한다.
+    applySession(initialSession);
+  }, [applySession, initialSession]);
 
   const refreshSession = useCallback(async () => {
     // 중복 요청으로 세션 상태가 흔들리지 않도록 in-flight 요청을 재사용한다.
@@ -171,11 +180,10 @@ export default function IdeShell({
         method: "POST",
         credentials: "include",
       });
-      setSession({
+      applySession({
         authenticated: false,
         member: null,
       });
-      setSessionLoaded(true);
       router.refresh();
     } finally {
       setIsLoggingOut(false);
@@ -262,7 +270,7 @@ export default function IdeShell({
     pathname === "/mypage";
 
   return (
-    <SessionContext.Provider value={{ session, sessionLoaded, refreshSession }}>
+    <SessionContext.Provider value={{ session, sessionLoaded, refreshSession, applySession }}>
       <div className="flex min-h-0 flex-1 overflow-hidden bg-[#1e1f22]">
         <div className={`grid h-full w-full ${layoutColumnsClass}`}>
           <QuickMenuPane
