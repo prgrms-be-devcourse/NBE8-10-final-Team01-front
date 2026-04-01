@@ -21,7 +21,7 @@ export async function POST(
   const token = cookieStore.get(FRONTEND_ACCESS_TOKEN_COOKIE)?.value;
   const memberId = token ? getMemberIdFromToken(token) : null;
 
-  if (!token || !memberId) {
+  if (!memberId) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
