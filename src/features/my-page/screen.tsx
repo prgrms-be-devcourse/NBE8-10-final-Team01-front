@@ -9,14 +9,6 @@ import type {
   PageInfo,
   SessionResponse,
 } from "@/shared/api/contracts";
-import {
-  EmptyPanel,
-  MetricCard,
-  MetricGrid,
-  PageHero,
-  Panel,
-  StatusPill,
-} from "@/shared/ui";
 import { formatDateTime } from "@/shared/utils/format-date-time";
 import { formatRoleLabel } from "@/shared/utils/format-role-label";
 
@@ -70,64 +62,62 @@ function formatScoreDelta(scoreDelta: number) {
   return `${sign}${scoreDelta}`;
 }
 
-function ScoreDeltaText({ scoreDelta }: { scoreDelta: number }) {
-  const toneClass =
-    scoreDelta > 0
-      ? "text-emerald-700"
-      : scoreDelta < 0
-        ? "text-rose-700"
-        : "text-zinc-600";
+function toneForScore(scoreDelta: number) {
+  if (scoreDelta > 0) {
+    return "text-emerald-300";
+  }
 
-  return <span className={`font-semibold ${toneClass}`}>{formatScoreDelta(scoreDelta)}</span>;
+  if (scoreDelta < 0) {
+    return "text-rose-300";
+  }
+
+  return "text-zinc-300";
 }
 
 function ResultCard({ item }: { item: MyBattleResultItem }) {
   return (
     <Link
       href={`/battle/results/${item.roomId}`}
-      className="block rounded-2xl border border-zinc-300 bg-zinc-50 p-5 transition hover:border-zinc-500 hover:bg-white"
+      className="block rounded-md border border-zinc-700 bg-[#2b2d30] p-4 transition hover:bg-zinc-700/35"
     >
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="space-y-2">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-xs text-zinc-500">
             roomId {item.roomId} · problemId {item.problemId}
           </p>
-          <h3 className="text-xl font-semibold tracking-tight text-zinc-950">
-            {item.problemTitle}
-          </h3>
-          <p className="text-sm text-zinc-600">{formatDateTime(item.playedAt)} 플레이</p>
+          <h3 className="mt-1 text-base font-semibold text-zinc-100">{item.problemTitle}</h3>
+          <p className="mt-1 text-xs text-zinc-400">{formatDateTime(item.playedAt)} 플레이</p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusPill tone={item.solved ? "success" : "warn"}>
+        <div className="flex items-center gap-2 text-xs">
+          <span
+            className={`inline-flex h-6 items-center rounded-full border px-2 font-semibold ${
+              item.solved
+                ? "border-emerald-400/60 bg-emerald-900/30 text-emerald-200"
+                : "border-amber-400/60 bg-amber-900/30 text-amber-200"
+            }`}
+          >
             {item.solved ? "성공" : "미해결"}
-          </StatusPill>
-          <StatusPill tone={item.finalRank === 1 ? "success" : "default"}>
+          </span>
+          <span className="inline-flex h-6 items-center rounded-full border border-zinc-600 bg-[#1f2128] px-2 font-semibold text-zinc-200">
             {formatRank(item.finalRank)}
-          </StatusPill>
+          </span>
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 rounded-2xl border border-zinc-200 bg-white p-4 text-sm text-zinc-700 md:grid-cols-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-            최종 순위
-          </p>
-          <p className="mt-2 text-base font-semibold text-zinc-950">{formatRank(item.finalRank)}</p>
+      <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
+        <div className="rounded-md border border-zinc-700 bg-[#1f2128] px-3 py-2">
+          <p className="text-xs text-zinc-500">최종 순위</p>
+          <p className="mt-1 font-semibold text-zinc-100">{formatRank(item.finalRank)}</p>
         </div>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-            점수 변화
-          </p>
-          <p className="mt-2 text-base">
-            <ScoreDeltaText scoreDelta={item.scoreDelta} />
+        <div className="rounded-md border border-zinc-700 bg-[#1f2128] px-3 py-2">
+          <p className="text-xs text-zinc-500">점수 변화</p>
+          <p className={`mt-1 font-semibold ${toneForScore(item.scoreDelta)}`}>
+            {formatScoreDelta(item.scoreDelta)}
           </p>
         </div>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-            정답 처리 시각
-          </p>
-          <p className="mt-2 text-base font-medium text-zinc-950">
+        <div className="rounded-md border border-zinc-700 bg-[#1f2128] px-3 py-2">
+          <p className="text-xs text-zinc-500">정답 처리 시각</p>
+          <p className="mt-1 font-medium text-zinc-100">
             {item.finishTime ? formatDateTime(item.finishTime) : "기록 없음"}
           </p>
         </div>
@@ -142,15 +132,15 @@ function LoadingRows() {
       {Array.from({ length: 3 }).map((_, index) => (
         <div
           key={index}
-          className="animate-pulse rounded-2xl border border-zinc-300 bg-zinc-50 p-5"
+          className="animate-pulse rounded-md border border-zinc-700 bg-[#2b2d30] p-4"
         >
-          <div className="h-3 w-32 rounded bg-zinc-200" />
-          <div className="mt-4 h-6 w-2/3 rounded bg-zinc-200" />
-          <div className="mt-3 h-4 w-40 rounded bg-zinc-200" />
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            <div className="h-20 rounded-2xl bg-white" />
-            <div className="h-20 rounded-2xl bg-white" />
-            <div className="h-20 rounded-2xl bg-white" />
+          <div className="h-3 w-36 rounded bg-zinc-600" />
+          <div className="mt-3 h-4 w-2/3 rounded bg-zinc-600" />
+          <div className="mt-1 h-3 w-40 rounded bg-zinc-700" />
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            <div className="h-14 rounded-md bg-zinc-700" />
+            <div className="h-14 rounded-md bg-zinc-700" />
+            <div className="h-14 rounded-md bg-zinc-700" />
           </div>
         </div>
       ))}
@@ -269,154 +259,140 @@ export default function MyPageScreen() {
   const currentPage = pageInfo.totalPages > 0 ? pageInfo.page + 1 : 0;
 
   return (
-    <div className="space-y-8">
-      <PageHero
-        eyebrow="My Page"
-        title="프로필과 전적 화면의 최소 운영 골격"
-        description="현재 백엔드에는 `/me`, 티어, 총점 API가 아직 없습니다. 그래서 세션 쿠키에서 복원 가능한 식별 정보는 먼저 보여주고, 내 전적 목록은 실제 API로 연결해 확인할 수 있도록 구성합니다."
-        actions={
-          <>
-            <StatusPill tone={session.authenticated ? "success" : "warn"}>
-              {session.authenticated ? "로그인 상태" : "로그인 필요"}
-            </StatusPill>
-            <StatusPill>Profile placeholder</StatusPill>
-          </>
-        }
-      />
-
-      <MetricGrid>
-        <MetricCard
-          label="닉네임"
-          value={session.member?.nickname ?? "게스트"}
-          hint="현재 로그인 사용자 기준"
-        />
-        <MetricCard
-          label="이메일"
-          value={session.member?.email ?? "-"}
-          hint="실제 members 조회 API 연동 전"
-        />
-        <MetricCard
-          label="티어"
-          value="연결 전"
-          hint="백엔드 프로필 API 필요"
-        />
-        <MetricCard
-          label="총점"
-          value="연결 전"
-          hint="전적/점수 API 필요"
-        />
-      </MetricGrid>
-
-      {session.authenticated ? (
-        <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-          <Panel title="프로필 영역" description="현재 세션에서 바로 읽을 수 있는 정보">
-            <div className="space-y-3 text-sm leading-7 text-zinc-700">
-              <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3">
-                닉네임: {session.member?.nickname}
-              </div>
-              <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3">
-                이메일: {session.member?.email}
-              </div>
-              <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3">
-                역할: {formatRoleLabel(session.member?.role)}
-              </div>
-              <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-zinc-600">
-                전적 상태: {error ?? message}
-              </div>
-            </div>
-          </Panel>
-
-          <Panel
-            title="전적 리스트 자리"
-            description="실제 전적 API를 연결해 최신 전적을 확인할 수 있도록 구성합니다."
-          >
-            <div className="mb-4 grid gap-3 md:grid-cols-3">
-              <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                  전체 전적
-                </p>
-                <p className="mt-2 text-lg font-semibold text-zinc-950">{pageInfo.totalElements}</p>
-              </div>
-              <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                  현재 페이지
-                </p>
-                <p className="mt-2 text-lg font-semibold text-zinc-950">
-                  {currentPage > 0 ? `${currentPage} / ${pageInfo.totalPages}` : "-"}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                  로드된 전적
-                </p>
-                <p className="mt-2 text-lg font-semibold text-zinc-950">
-                  {loadedCount}개{session.authenticated ? ` / 해결 ${solvedCount}개` : ""}
-                </p>
-              </div>
-            </div>
-
-            {error ? (
-              <div className="mb-4 rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-                {error}
-              </div>
-            ) : null}
-
-            {isLoading ? (
-              <LoadingRows />
-            ) : battleResults.length === 0 ? (
-              <EmptyPanel
-                title="아직 전적이 없습니다"
-                description="배틀을 한 번 이상 완료하면 이곳에서 최근 전적을 확인할 수 있습니다."
+    <main className="flex h-full min-h-0 flex-col border-b border-zinc-700/80 bg-[#1e1f22] lg:border-b-0 lg:border-r">
+      <div className="flex h-12 items-center border-b border-zinc-700/80 bg-[#1e1f22] px-3">
+        <div className="relative flex h-10 items-center gap-2 border-r border-zinc-700/70 bg-[#1e1f22] px-3 font-mono text-xs text-zinc-200">
+          <span className="inline-flex h-4 w-4 items-center justify-center text-[#a78bfa]">
+            <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4">
+              <path
+                d="M4 2.5h5l3 3V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z"
+                stroke="currentColor"
+                strokeWidth="1.2"
               />
-            ) : (
-              <div className="space-y-3">
-                {battleResults.map((item) => (
-                  <ResultCard key={`${item.roomId}-${item.problemId}`} item={item} />
-                ))}
-              </div>
-            )}
-
-            {!isLoading && battleResults.length > 0 ? (
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-zinc-600">
-                  {loadedCount}개 로드됨 / 전체 {pageInfo.totalElements}개
-                </p>
-                {pageInfo.hasNext ? (
-                  <button
-                    type="button"
-                    onClick={handleLoadMore}
-                    disabled={isLoadingMore}
-                    className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:text-zinc-400"
-                  >
-                    {isLoadingMore ? "불러오는 중..." : "다음 전적 더 보기"}
-                  </button>
-                ) : (
-                  <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
-                    마지막 페이지입니다.
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </Panel>
+              <path d="M9 2.5V6h3" stroke="currentColor" strokeWidth="1.2" />
+              <path d="M5.2 8.2h5.6M5.2 10.2h5.6" stroke="currentColor" strokeWidth="1.1" />
+            </svg>
+          </span>
+          <span>my-page.json</span>
+          <span className="text-zinc-500">×</span>
+          <span className="absolute inset-x-0 bottom-0 h-[2px] bg-zinc-300" />
         </div>
-      ) : (
-        <Panel title="로그인이 필요합니다" description="내 전적 화면은 로그인한 사용자만 볼 수 있습니다.">
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href="/login?next=/mypage"
-              className="rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white"
-            >
-              로그인하러 가기
-            </Link>
-            <Link
-              href="/signup"
-              className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-900"
-            >
-              회원가입
-            </Link>
+      </div>
+
+      <div className="flex-1 overflow-auto bg-[#1e1f22]">
+        <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-2 border-b border-zinc-700/70 pb-3">
+            <div>
+              <h1 className="text-xl font-semibold text-zinc-100">마이페이지</h1>
+              <p className="mt-1 text-sm text-zinc-400">
+                내 계정 정보와 최근 배틀 전적을 확인합니다.
+              </p>
+            </div>
+            {session.authenticated ? (
+              <p className="text-xs text-zinc-500">
+                {pageInfo.totalElements > 0
+                  ? `총 ${pageInfo.totalElements}개 · ${currentPage}/${pageInfo.totalPages} 페이지`
+                  : "전적 데이터 준비 중"}
+              </p>
+            ) : null}
           </div>
-        </Panel>
-      )}
-    </div>
+
+          {!session.authenticated ? (
+            <div className="space-y-4 rounded-md border border-zinc-700 bg-[#2b2d30] px-4 py-4">
+              <p className="text-sm text-zinc-300">{message}</p>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href="/login?next=/mypage"
+                  className="inline-flex h-10 items-center justify-center rounded-md bg-[#9146ff] px-4 text-sm font-semibold text-white transition hover:bg-[#7f39fa]"
+                >
+                  로그인
+                </Link>
+                <Link
+                  href="/signup"
+                  className="inline-flex h-10 items-center justify-center rounded-md border border-zinc-700 bg-[#1e1f22] px-4 text-sm font-medium text-zinc-200 transition hover:bg-zinc-700/30"
+                >
+                  회원가입
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-md border border-zinc-700 bg-[#2b2d30] px-3 py-2">
+                  <p className="text-xs text-zinc-500">닉네임</p>
+                  <p className="mt-1 text-base font-semibold text-zinc-100">
+                    {session.member?.nickname ?? "-"}
+                  </p>
+                </div>
+                <div className="rounded-md border border-zinc-700 bg-[#2b2d30] px-3 py-2">
+                  <p className="text-xs text-zinc-500">이메일</p>
+                  <p className="mt-1 truncate text-base font-semibold text-zinc-100">
+                    {session.member?.email ?? "-"}
+                  </p>
+                </div>
+                <div className="rounded-md border border-zinc-700 bg-[#2b2d30] px-3 py-2">
+                  <p className="text-xs text-zinc-500">역할</p>
+                  <p className="mt-1 text-base font-semibold text-zinc-100">
+                    {formatRoleLabel(session.member?.role)}
+                  </p>
+                </div>
+                <div className="rounded-md border border-zinc-700 bg-[#2b2d30] px-3 py-2">
+                  <p className="text-xs text-zinc-500">해결 / 전체</p>
+                  <p className="mt-1 text-base font-semibold text-zinc-100">
+                    {solvedCount} / {loadedCount}
+                  </p>
+                </div>
+              </div>
+
+              {error ? (
+                <div className="rounded-md border border-rose-400/60 bg-rose-900/25 px-3 py-2 text-sm text-rose-200">
+                  {error}
+                </div>
+              ) : (
+                <div className="rounded-md border border-zinc-700 bg-[#2b2d30] px-3 py-2 text-sm text-zinc-300">
+                  {message}
+                </div>
+              )}
+
+              {isLoading ? (
+                <LoadingRows />
+              ) : battleResults.length === 0 ? (
+                <div className="rounded-md border border-zinc-700 bg-[#2b2d30] px-4 py-6 text-center text-sm text-zinc-400">
+                  아직 전적이 없습니다. 배틀을 완료하면 이곳에서 확인할 수 있습니다.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {battleResults.map((item) => (
+                    <ResultCard key={`${item.roomId}-${item.problemId}`} item={item} />
+                  ))}
+                </div>
+              )}
+
+              {!isLoading && battleResults.length > 0 ? (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-zinc-400">
+                    {loadedCount}개 로드됨 / 전체 {pageInfo.totalElements}개
+                  </p>
+                  {pageInfo.hasNext ? (
+                    <button
+                      type="button"
+                      onClick={handleLoadMore}
+                      disabled={isLoadingMore}
+                      className="inline-flex h-10 items-center justify-center rounded-md bg-[#9146ff] px-4 text-sm font-semibold text-white transition hover:bg-[#7f39fa] disabled:cursor-not-allowed disabled:bg-zinc-600 disabled:text-zinc-300"
+                    >
+                      {isLoadingMore ? "불러오는 중..." : "다음 전적 더 보기"}
+                    </button>
+                  ) : (
+                    <div className="inline-flex h-10 items-center rounded-md border border-zinc-700 bg-[#2b2d30] px-4 text-sm text-zinc-400">
+                      마지막 페이지입니다.
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+      </div>
+    </main>
   );
 }

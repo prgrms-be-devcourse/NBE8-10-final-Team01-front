@@ -1,0 +1,273 @@
+import Link from "next/link";
+
+import type { SessionResponse } from "@/shared/api/contracts";
+import { StatusPill } from "@/shared/ui";
+import { formatRoleLabel } from "@/shared/utils/format-role-label";
+
+const ideDbRailTopItems = [
+  { icon: "notifications", title: "알림" },
+  { icon: "search", title: "검색" },
+  { icon: "database", title: "데이터베이스" },
+  { icon: "gamepad", title: "게임" },
+  { icon: "blocks", title: "서비스" },
+  { icon: "docs", title: "문서" },
+  { icon: "users", title: "사용자" },
+  { icon: "cloud", title: "클라우드" },
+  { icon: "link", title: "연결" },
+];
+
+const ideDbRailBottomItems = [{ icon: "hammer", title: "도구" }];
+
+function renderDbRailIcon(name: string) {
+  const baseClass = "h-4 w-4";
+
+  switch (name) {
+    case "notifications":
+      return (
+        <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+          <path d="M8 3a3 3 0 0 0-3 3v2.2l-1 1.6h8l-1-1.6V6a3 3 0 0 0-3-3Z" stroke="currentColor" strokeWidth="1.2" />
+          <circle cx="12.2" cy="3.8" r="1.4" fill="#ff5f6d" />
+        </svg>
+      );
+    case "search":
+      return (
+        <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+          <circle cx="7" cy="7" r="3.6" stroke="currentColor" strokeWidth="1.2" />
+          <path d="m10 10 3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      );
+    case "database":
+      return (
+        <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+          <ellipse cx="8" cy="4.1" rx="4.7" ry="2" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M3.3 4.1v4.8c0 1.1 2.1 2 4.7 2s4.7-.9 4.7-2V4.1" stroke="currentColor" strokeWidth="1.2" />
+        </svg>
+      );
+    case "gamepad":
+      return (
+        <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+          <rect x="3" y="6.2" width="10" height="5.8" rx="2.2" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M5.4 9h2.2M6.5 7.9v2.2M10.6 8.4h.01M11.8 9.6h.01" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      );
+    case "blocks":
+      return (
+        <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+          <rect x="2.4" y="2.4" width="4.8" height="4.8" stroke="currentColor" strokeWidth="1.2" />
+          <rect x="8.8" y="2.4" width="4.8" height="4.8" stroke="currentColor" strokeWidth="1.2" />
+          <rect x="5.6" y="8.8" width="4.8" height="4.8" stroke="currentColor" strokeWidth="1.2" />
+        </svg>
+      );
+    case "docs":
+      return (
+        <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+          <path d="M4 2.5h5l3 3V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M9 2.5V6h3M5.2 8.2h5.6M5.2 10.2h5.6" stroke="currentColor" strokeWidth="1.1" />
+        </svg>
+      );
+    case "users":
+      return (
+        <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+          <circle cx="6.1" cy="6.1" r="2.1" stroke="currentColor" strokeWidth="1.2" />
+          <circle cx="11.1" cy="6.7" r="1.6" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M3.4 12c.5-1.7 1.6-2.7 2.9-2.7s2.4 1 2.9 2.7M9 12.1c.4-1.3 1.2-2.1 2.2-2.1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      );
+    case "cloud":
+      return (
+        <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+          <path d="M4.8 11.8h6a2.2 2.2 0 1 0-.4-4.4 3.1 3.1 0 0 0-5.9.8 1.9 1.9 0 0 0 .3 3.6Z" stroke="currentColor" strokeWidth="1.2" />
+        </svg>
+      );
+    case "link":
+      return (
+        <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+          <path d="M6.5 9.5 9.5 6.5M5.3 11a2.3 2.3 0 0 1 0-3.2l1.5-1.5a2.3 2.3 0 1 1 3.2 3.2l-.6.6M10.7 5a2.3 2.3 0 0 1 0 3.2l-1.5 1.5a2.3 2.3 0 1 1-3.2-3.2l.6-.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      );
+    case "hammer":
+      return (
+        <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
+          <path d="m9.2 3.2 3.1 3.1M4.1 12.2 9.9 6.4 7.6 4.1 1.8 9.9l2.3 2.3Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
+interface ProfilePaneProps {
+  isProfilePanelOpen: boolean;
+  onToggleProfilePanel: () => void;
+  session: SessionResponse;
+  previewPlayedCount: number;
+  previewSolvedCount: number;
+  previewWinRate: number;
+  previewScoreDeltaLabel: string;
+  resultsPreviewMessage: string;
+  resultsPreviewError: string | null;
+  isBusy: boolean;
+  onLogout: () => void;
+}
+
+export default function ProfilePane({
+  isProfilePanelOpen,
+  onToggleProfilePanel,
+  session,
+  previewPlayedCount,
+  previewSolvedCount,
+  previewWinRate,
+  previewScoreDeltaLabel,
+  resultsPreviewMessage,
+  resultsPreviewError,
+  isBusy,
+  onLogout,
+}: ProfilePaneProps) {
+  return (
+    <aside className="min-h-0 bg-[#2b2d30] md:col-span-2 lg:col-span-1">
+      <div className={`grid h-full ${isProfilePanelOpen ? "grid-cols-[minmax(0,1fr)_38px]" : "grid-cols-[38px]"}`}>
+        <div className={`min-h-0 ${isProfilePanelOpen ? "block" : "hidden"}`}>
+          <div className="flex h-12 items-center justify-between border-b border-zinc-800/90 px-4">
+            <p className="text-sm font-semibold text-zinc-200">프로필</p>
+          </div>
+          <div className="h-full overflow-y-auto p-3 text-xs text-zinc-300">
+            <div className="rounded-md border border-zinc-800/90 bg-[#1f222b] p-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                  계정
+                </p>
+                <StatusPill tone={session.authenticated ? "success" : "warn"}>
+                  {session.authenticated ? "로그인됨" : "게스트"}
+                </StatusPill>
+              </div>
+              <div className="mt-3 space-y-1">
+                <p className="text-base font-semibold text-zinc-100">
+                  {session.member?.nickname ?? "게스트"}
+                </p>
+                <p className="text-zinc-400">
+                  {session.authenticated
+                    ? formatRoleLabel(session.member?.role)
+                    : "로그인이 필요합니다."}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-md border border-zinc-800/90 bg-[#1f222b] p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                전적 요약
+              </p>
+              {session.authenticated ? (
+                <>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div className="rounded border border-zinc-700 bg-[#171a22] px-2 py-1.5">
+                      <p className="text-[10px] text-zinc-500">최근 경기</p>
+                      <p className="text-sm font-semibold text-zinc-100">{previewPlayedCount}</p>
+                    </div>
+                    <div className="rounded border border-zinc-700 bg-[#171a22] px-2 py-1.5">
+                      <p className="text-[10px] text-zinc-500">클리어</p>
+                      <p className="text-sm font-semibold text-zinc-100">{previewSolvedCount}</p>
+                    </div>
+                    <div className="rounded border border-zinc-700 bg-[#171a22] px-2 py-1.5">
+                      <p className="text-[10px] text-zinc-500">승률</p>
+                      <p className="text-sm font-semibold text-zinc-100">{previewWinRate}%</p>
+                    </div>
+                    <div className="rounded border border-zinc-700 bg-[#171a22] px-2 py-1.5">
+                      <p className="text-[10px] text-zinc-500">점수 변화</p>
+                      <p className="text-sm font-semibold text-zinc-100">{previewScoreDeltaLabel}</p>
+                    </div>
+                  </div>
+                  <p
+                    className={`mt-2 text-[11px] ${
+                      resultsPreviewError ? "text-rose-300" : "text-zinc-500"
+                    }`}
+                  >
+                    {resultsPreviewError ?? resultsPreviewMessage}
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-[11px] text-zinc-500">
+                  로그인 후 전적 요약을 확인할 수 있습니다.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-4 space-y-2 font-sans">
+              {session.authenticated ? (
+                <>
+                  <Link
+                    href="/mypage"
+                    className="block w-full rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2 text-center text-sm font-medium text-zinc-100 transition hover:bg-zinc-700/30"
+                  >
+                    내 프로필
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    disabled={isBusy}
+                    className="w-full rounded-md bg-[#9146ff] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#7f39fa] disabled:cursor-not-allowed disabled:bg-zinc-600 disabled:text-zinc-300"
+                  >
+                    로그아웃
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/signup"
+                    className="block w-full rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2 text-center text-sm font-medium text-zinc-100 transition hover:bg-zinc-700/30"
+                  >
+                    회원가입
+                  </Link>
+                  <Link
+                    href="/login?next=/"
+                    className="block w-full rounded-md bg-[#9146ff] px-3 py-2 text-center text-sm font-semibold text-white transition hover:bg-[#7f39fa]"
+                  >
+                    로그인
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex min-h-0 flex-col items-center justify-between border-l border-zinc-800/90 bg-[#25272d] py-2">
+          <div className="flex flex-col items-center gap-2">
+            {ideDbRailTopItems.map((item) => (
+              <button
+                key={item.title}
+                type="button"
+                onClick={() => {
+                  if (item.icon === "database") {
+                    onToggleProfilePanel();
+                  }
+                }}
+                title={item.title}
+                aria-label={item.title}
+                className={`h-8 w-8 rounded-md border transition ${
+                  item.icon === "database" && isProfilePanelOpen
+                    ? "border-[#2f77ff] bg-[#2f77ff] text-white shadow-[0_0_0_1px_rgba(80,130,255,0.35)]"
+                    : "border-transparent text-zinc-400 hover:bg-zinc-700/30 hover:text-zinc-200"
+                }`}
+              >
+                <span className="flex items-center justify-center">{renderDbRailIcon(item.icon)}</span>
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-col items-center gap-2">
+            {ideDbRailBottomItems.map((item) => (
+              <button
+                key={item.title}
+                type="button"
+                title={item.title}
+                aria-label={item.title}
+                className="h-8 w-8 rounded-md border border-transparent text-zinc-500 transition hover:bg-zinc-700/30 hover:text-zinc-200"
+              >
+                <span className="flex items-center justify-center">{renderDbRailIcon(item.icon)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+

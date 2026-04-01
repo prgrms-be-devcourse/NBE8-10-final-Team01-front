@@ -3,7 +3,13 @@ import type { Difficulty } from "@/shared/api/contracts";
 export const SEARCH_POLL_INTERVAL_MS = 1_000;
 export const DEFAULT_REQUIRED_COUNT = 4;
 
-export const queueCategories = [
+export interface QueueCategoryOption {
+  value: string;
+  label: string;
+  disabled?: boolean;
+}
+
+export const queueCategories: QueueCategoryOption[] = [
   { value: "RANDOM", label: "전체 (무작위 준비 중)", disabled: true },
   { value: "dp", label: "DP" },
   { value: "graphs", label: "그래프" },
@@ -12,7 +18,7 @@ export const queueCategories = [
   { value: "implementation", label: "구현" },
 ] as const;
 
-export type QueueCategoryValue = (typeof queueCategories)[number]["value"];
+export type QueueCategoryValue = string;
 
 export const difficultyOptions: Array<{ value: Difficulty; label: string }> = [
   { value: "EASY", label: "Easy" },
@@ -47,12 +53,15 @@ export const dashboardMenus = [
   },
 ];
 
-export function getQueueCategoryLabel(category: string | null) {
+export function getQueueCategoryLabel(
+  category: string | null,
+  categories: QueueCategoryOption[] = queueCategories,
+) {
   if (!category) {
     return "-";
   }
 
-  return queueCategories.find((item) => item.value === category)?.label ?? category;
+  return categories.find((item) => item.value === category)?.label ?? category;
 }
 
 export function getReadyDecisionLabel(decision: "PENDING" | "ACCEPTED" | "DECLINED") {
