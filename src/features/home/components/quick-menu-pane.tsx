@@ -289,7 +289,7 @@ export default function QuickMenuPane({
                       : item.href;
 
                 return (
-                  <Link key={item.key} href={href}>
+                  <Link key={item.key} href={href} prefetch={false}>
                     {content}
                   </Link>
                 );
@@ -303,4 +303,3 @@ export default function QuickMenuPane({
     </aside>
   );
 }
-
