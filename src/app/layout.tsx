@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
+
+import type { SessionResponse } from "@/shared/api/contracts";
+import {
+  FRONTEND_ACCESS_TOKEN_COOKIE,
+  getSessionMemberFromToken,
+} from "@/shared/auth/session";
+
 import "./globals.css";
 import "katex/dist/katex.min.css";
 import IdeShell from "@/features/layout/ide-shell";
@@ -24,11 +32,19 @@ export const metadata: Metadata = {
     "실제 백엔드 API와 화면 구조를 맞추는 Algo Battle 프론트엔드.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(FRONTEND_ACCESS_TOKEN_COOKIE)?.value;
+  const member = token ? getSessionMemberFromToken(token) : null;
+  const initialSession: SessionResponse = {
+    authenticated: member !== null,
+    member,
+  };
+
   return (
     <html
       lang="ko"
@@ -44,7 +60,7 @@ export default function RootLayout({
             </div>
           </header>
           <main className="flex min-h-0 flex-1">
-            <IdeShell>{children}</IdeShell>
+            <IdeShell initialSession={initialSession}>{children}</IdeShell>
           </main>
         </div>
       </body>

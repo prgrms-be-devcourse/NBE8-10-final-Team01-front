@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   MyBattleResultItem,
@@ -48,16 +48,20 @@ async function readMyBattleResultsPreview(size: number) {
   };
 }
 
-export default function IdeShell({ children }: { children: React.ReactNode }) {
+export default function IdeShell({
+  children,
+  initialSession,
+}: {
+  children: React.ReactNode;
+  initialSession: SessionResponse;
+}) {
   const pathname = usePathname();
   const router = useRouter();
+  const isFirstRouteSyncRef = useRef(true);
   const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(true);
   const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(true);
-  const [session, setSession] = useState<SessionResponse>({
-    authenticated: false,
-    member: null,
-  });
-  const [sessionLoaded, setSessionLoaded] = useState(false);
+  const [session, setSession] = useState<SessionResponse>(initialSession);
+  const [sessionLoaded, setSessionLoaded] = useState(true);
   const [recentResults, setRecentResults] = useState<MyBattleResultItem[]>([]);
   const [resultsPreviewMessage, setResultsPreviewMessage] = useState(
     "로그인 후 최근 전적을 확인할 수 있습니다.",
@@ -73,6 +77,11 @@ export default function IdeShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (isFirstRouteSyncRef.current) {
+      isFirstRouteSyncRef.current = false;
+      return;
+    }
+
     void refreshSession();
   }, [pathname, refreshSession]);
 
