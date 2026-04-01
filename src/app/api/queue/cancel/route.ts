@@ -3,27 +3,24 @@ import { cookies } from "next/headers";
 
 import type { QueueStatusResponse } from "@/shared/api/contracts";
 import {
-  fetchBackend,
+  fetchBackendWithReissue,
   getErrorMessage,
   readJsonBody,
 } from "@/shared/api/backend";
-import { FRONTEND_ACCESS_TOKEN_COOKIE } from "@/shared/auth/session";
 
 const DEFAULT_REQUIRED_COUNT = 4;
 
 export async function DELETE() {
   const cookieStore = await cookies();
-  const token = cookieStore.get(FRONTEND_ACCESS_TOKEN_COOKIE)?.value;
-
-  if (!token) {
-    return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
-  }
 
   try {
-    const response = await fetchBackend("/api/v2/queue/cancel", {
+    const response = await fetchBackendWithReissue("/api/v2/queue/cancel", {
       method: "DELETE",
-      token,
-    });
+    }, cookieStore);
+
+    if (response.status === 401) {
+      return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
+    }
 
     if (!response.ok) {
       return NextResponse.json(

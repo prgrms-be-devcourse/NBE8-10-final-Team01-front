@@ -3,11 +3,10 @@ import { cookies } from "next/headers";
 
 import type { MyBattleResultsResponse } from "@/shared/api/contracts";
 import {
-  fetchBackend,
+  fetchBackendWithReissue,
   getErrorMessage,
   readJsonBody,
 } from "@/shared/api/backend";
-import { FRONTEND_ACCESS_TOKEN_COOKIE } from "@/shared/auth/session";
 
 function buildFallbackPageInfo(pageParam: string | null, sizeParam: string | null) {
   const page = Number(pageParam ?? "0");
@@ -28,27 +27,25 @@ export async function GET(request: Request) {
   const size = url.searchParams.get("size") ?? "20";
 
   const cookieStore = await cookies();
-  const token = cookieStore.get(FRONTEND_ACCESS_TOKEN_COOKIE)?.value;
-
-  if (!token) {
-    return NextResponse.json(
-      {
-        resultCode: "MEMBER_401",
-        msg: "로그인이 필요합니다.",
-        data: null,
-      } satisfies MyBattleResultsResponse,
-      { status: 401 },
-    );
-  }
 
   try {
-    const response = await fetchBackend("/api/v1/members/me/battle-results", {
-      token,
+    const response = await fetchBackendWithReissue("/api/v1/members/me/battle-results", {
       searchParams: {
         page,
         size,
       },
-    });
+    }, cookieStore);
+
+    if (response.status === 401) {
+      return NextResponse.json(
+        {
+          resultCode: "MEMBER_401",
+          msg: "로그인이 필요합니다.",
+          data: null,
+        } satisfies MyBattleResultsResponse,
+        { status: 401 },
+      );
+    }
 
     const body = await readJsonBody<MyBattleResultsResponse>(response.clone());
 

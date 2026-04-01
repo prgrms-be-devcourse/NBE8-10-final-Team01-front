@@ -1,3 +1,24 @@
+import {
+  FRONTEND_ACCESS_TOKEN_COOKIE,
+  FRONTEND_REFRESH_TOKEN_COOKIE,
+  extractAccessTokenFromSetCookie,
+  ONE_YEAR_IN_SECONDS,
+} from "@/shared/auth/session";
+
+interface CookieStore {
+  get(name: string): { value: string } | undefined;
+  set(cookie: {
+    name: string;
+    value: string;
+    httpOnly: boolean;
+    sameSite: "lax";
+    secure: boolean;
+    path: string;
+    maxAge: number;
+  }): void;
+  delete(name: string): void;
+}
+
 const DEFAULT_BACKEND_BASE_URL = "http://localhost:8080";
 
 export function getBackendBaseUrl() {
@@ -25,12 +46,14 @@ export async function fetchBackend(
   path: string,
   {
     token,
+    refreshToken,
     headers,
     body,
     method = "GET",
     searchParams,
   }: {
     token?: string;
+    refreshToken?: string;
     headers?: HeadersInit;
     body?: BodyInit | object;
     method?: string;
@@ -41,6 +64,12 @@ export async function fetchBackend(
 
   if (token) {
     requestHeaders.set("Cookie", `accessToken=${token}`);
+  }
+
+  if (refreshToken) {
+    const existing = requestHeaders.get("Cookie");
+    const rtCookie = `refreshToken=${refreshToken}`;
+    requestHeaders.set("Cookie", existing ? `${existing}; ${rtCookie}` : rtCookie);
   }
 
   const init: RequestInit = {
@@ -86,6 +115,53 @@ export async function readJsonBody<T>(response: Response) {
   } catch {
     return null;
   }
+}
+
+export async function fetchBackendWithReissue(
+  path: string,
+  options: {
+    headers?: HeadersInit;
+    body?: BodyInit | object;
+    method?: string;
+    searchParams?: Record<string, string | number | undefined>;
+  } = {},
+  cookieStore: CookieStore,
+): Promise<Response> {
+  const accessToken = cookieStore.get(FRONTEND_ACCESS_TOKEN_COOKIE)?.value;
+  const response = await fetchBackend(path, { ...options, token: accessToken });
+
+  if (response.status !== 401) return response;
+
+  const refreshToken = cookieStore.get(FRONTEND_REFRESH_TOKEN_COOKIE)?.value;
+
+  if (!refreshToken) return response;
+
+  const reissueResponse = await fetchBackend("/api/v1/auth/reissue", {
+    method: "POST",
+    refreshToken,
+  });
+
+  if (!reissueResponse.ok) {
+    cookieStore.delete(FRONTEND_ACCESS_TOKEN_COOKIE);
+    cookieStore.delete(FRONTEND_REFRESH_TOKEN_COOKIE);
+    return response;
+  }
+
+  const newToken = extractAccessTokenFromSetCookie(reissueResponse.headers.get("set-cookie"));
+
+  if (!newToken) return response;
+
+  cookieStore.set({
+    name: FRONTEND_ACCESS_TOKEN_COOKIE,
+    value: newToken,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: ONE_YEAR_IN_SECONDS,
+  });
+
+  return fetchBackend(path, { ...options, token: newToken });
 }
 
 export async function getErrorMessage(response: Response) {

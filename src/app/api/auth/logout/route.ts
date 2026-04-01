@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
 import { fetchBackend } from "@/shared/api/backend";
-import { FRONTEND_ACCESS_TOKEN_COOKIE } from "@/shared/auth/session";
+import { FRONTEND_ACCESS_TOKEN_COOKIE, FRONTEND_REFRESH_TOKEN_COOKIE } from "@/shared/auth/session";
 
 export async function POST() {
   const cookieStore = await cookies();
@@ -20,6 +20,7 @@ export async function POST() {
   }
 
   cookieStore.delete(FRONTEND_ACCESS_TOKEN_COOKIE);
+  cookieStore.delete(FRONTEND_REFRESH_TOKEN_COOKIE);
 
   return NextResponse.json({
     message: "로그아웃되었습니다.",

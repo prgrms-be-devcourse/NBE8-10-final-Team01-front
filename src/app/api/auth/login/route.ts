@@ -13,7 +13,9 @@ import {
 } from "@/shared/api/backend";
 import {
   extractAccessTokenFromSetCookie,
+  extractRefreshTokenFromSetCookie,
   FRONTEND_ACCESS_TOKEN_COOKIE,
+  FRONTEND_REFRESH_TOKEN_COOKIE,
   getSessionMemberFromToken,
   ONE_YEAR_IN_SECONDS,
 } from "@/shared/auth/session";
@@ -42,7 +44,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const token = extractAccessTokenFromSetCookie(response.headers.get("set-cookie"));
+    const setCookieHeader = response.headers.get("set-cookie");
+    const token = extractAccessTokenFromSetCookie(setCookieHeader);
+    const refreshToken = extractRefreshTokenFromSetCookie(setCookieHeader);
     const member = token ? getSessionMemberFromToken(token) : null;
 
     if (!token || !member) {
@@ -63,6 +67,18 @@ export async function POST(request: Request) {
       path: "/",
       maxAge: ONE_YEAR_IN_SECONDS,
     });
+
+    if (refreshToken) {
+      cookieStore.set({
+        name: FRONTEND_REFRESH_TOKEN_COOKIE,
+        value: refreshToken,
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: ONE_YEAR_IN_SECONDS,
+      });
+    }
 
     const result: AuthMutationResponse = {
       message: body?.msg ?? "로그인 성공",
