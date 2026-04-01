@@ -57,7 +57,7 @@ export default function IdeShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const isFirstRouteSyncRef = useRef(true);
+  const refreshInFlightRef = useRef<Promise<SessionResponse> | null>(null);
   const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(true);
   const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(true);
   const [session, setSession] = useState<SessionResponse>(initialSession);
@@ -70,20 +70,47 @@ export default function IdeShell({
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const refreshSession = useCallback(async () => {
-    const nextSession = await readSession();
-    setSession(nextSession);
-    setSessionLoaded(true);
-    return nextSession;
+    // 중복 요청으로 세션 상태가 흔들리지 않도록 in-flight 요청을 재사용한다.
+    if (refreshInFlightRef.current) {
+      return refreshInFlightRef.current;
+    }
+
+    const task = (async () => {
+      const nextSession = await readSession();
+      setSession(nextSession);
+      setSessionLoaded(true);
+      return nextSession;
+    })();
+
+    refreshInFlightRef.current = task;
+
+    try {
+      return await task;
+    } finally {
+      refreshInFlightRef.current = null;
+    }
   }, []);
 
   useEffect(() => {
-    if (isFirstRouteSyncRef.current) {
-      isFirstRouteSyncRef.current = false;
-      return;
-    }
+    // 라우트 이동마다 재조회하지 않고, 탭 복귀 시점에만 세션을 최신화한다.
+    const onWindowFocus = () => {
+      void refreshSession();
+    };
 
-    void refreshSession();
-  }, [pathname, refreshSession]);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshSession();
+      }
+    };
+
+    window.addEventListener("focus", onWindowFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", onWindowFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [refreshSession]);
 
   useEffect(() => {
     let active = true;
@@ -108,6 +135,8 @@ export default function IdeShell({
       }
 
       if (status === 401 || payload?.resultCode === "MEMBER_401") {
+        // 401은 서버가 인증 만료/무효를 확정한 신호이므로 전역 세션을 즉시 재동기화한다.
+        void refreshSession();
         setRecentResults([]);
         setResultsPreviewError(null);
         setResultsPreviewMessage(payload?.msg ?? "로그인이 필요합니다.");
@@ -132,7 +161,7 @@ export default function IdeShell({
     return () => {
       active = false;
     };
-  }, [session.authenticated]);
+  }, [refreshSession, session.authenticated]);
 
   async function handleLogout() {
     setIsLoggingOut(true);
