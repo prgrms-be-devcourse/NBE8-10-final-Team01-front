@@ -377,6 +377,22 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
     const client = new Client({
       webSocketFactory: () => new SockJS("/ws"),
       reconnectDelay: 3000,
+      // 연결(및 재연결) 시마다 1회용 토큰을 새로 발급해 STOMP CONNECT 헤더에 주입.
+      // 토큰은 30초 TTL이고 1회 사용 후 폐기되므로 재연결 시에도 반드시 새 토큰이 필요.
+      // 토큰 발급 실패 시 쿠키 기반 인증(로컬 환경)으로 자동 폴백됨.
+      beforeConnect: async () => {
+        // 재연결 시 이전 연결에서 소비된 토큰이 재사용되지 않도록 먼저 초기화
+        client.connectHeaders = {};
+        try {
+          const res = await fetch("/api/v1/ws/token", { method: "POST" });
+          if (res.ok) {
+            const data = (await res.json()) as { token: string };
+            client.connectHeaders = { "X-WS-Token": data.token };
+          }
+        } catch {
+          console.warn("[WS] 토큰 발급 실패, 쿠키 기반 인증으로 폴백");
+        }
+      },
       onConnect: () => {
         client.subscribe(`/topic/solo/${memberId}`, (message) => {
           let payload: unknown;
