@@ -13,10 +13,10 @@ import type {
   RoomResponse,
   RunTestCaseResult,
   RunWsMessage,
-  SessionResponse,
   SubmissionResponse,
   SubmissionWsMessage,
 } from "@/shared/api/contracts";
+import { useAppSession } from "@/features/layout/session-context";
 import {
   ApiCallout,
   DefinitionGrid,
@@ -55,24 +55,8 @@ function participantTone(status: string) {
   return "default" as const;
 }
 
-async function readSession() {
-  const response = await fetch("/api/auth/session", { cache: "no-store" });
-
-  if (!response.ok) {
-    return {
-      authenticated: false,
-      member: null,
-    } satisfies SessionResponse;
-  }
-
-  return (await response.json()) as SessionResponse;
-}
-
 export default function BattleRoomScreen({ roomId }: { roomId: string }) {
-  const [session, setSession] = useState<SessionResponse>({
-    authenticated: false,
-    member: null,
-  });
+  const { session, sessionLoaded, refreshSession } = useAppSession();
   const [room, setRoom] = useState<RoomResponse | null>(null);
   const [problem, setProblem] = useState<ProblemDetailResponse | null>(null);
   const [latestSubmission, setLatestSubmission] =
@@ -89,11 +73,18 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
-    void (async () => {
-      const nextSession = await readSession();
-      setSession(nextSession);
+    if (!sessionLoaded) {
+      return;
+    }
 
-      if (!nextSession.authenticated) {
+    let active = true;
+
+    void (async () => {
+      if (!session.authenticated) {
+        if (!active) {
+          return;
+        }
+        setRoom(null);
         setMessage("배틀룸은 로그인 후 접근할 수 있습니다.");
         return;
       }
@@ -103,9 +94,16 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
       });
 
       if (!roomResponse.ok) {
+        if (roomResponse.status === 401) {
+          void refreshSession();
+        }
+
         const fallbackRoom = getBattleRoom(roomId);
 
         if (fallbackRoom) {
+          if (!active) {
+            return;
+          }
           setSource("fallback");
           setRoom(fallbackRoom);
           setProblem(getProblemDetail(fallbackRoom.problemId));
@@ -114,11 +112,17 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
         }
 
         const payload = (await roomResponse.json().catch(() => null)) as ApiErrorResponse | null;
+        if (!active) {
+          return;
+        }
         setError(payload?.message ?? "배틀룸을 불러오지 못했습니다.");
         return;
       }
 
       const nextRoom = (await roomResponse.json()) as RoomResponse;
+      if (!active) {
+        return;
+      }
       setRoom(nextRoom);
       setSource("api");
 
@@ -127,14 +131,24 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
       });
 
       if (problemResponse.ok) {
+        if (!active) {
+          return;
+        }
         setProblem((await problemResponse.json()) as ProblemDetailResponse);
         setMessage("실제 API 기반 배틀룸을 표시합니다.");
       } else {
+        if (!active) {
+          return;
+        }
         setProblem(getProblemDetail(nextRoom.problemId));
         setMessage("문제 상세 조회에 실패해 샘플 설명을 함께 표시합니다.");
       }
     })();
-  }, [roomId]);
+
+    return () => {
+      active = false;
+    };
+  }, [refreshSession, roomId, session.authenticated, sessionLoaded]);
 
   useEffect(() => {
     if (
@@ -181,7 +195,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
         }
       })();
     });
-  }, [room, roomId, session]);
+  }, [room, roomId, session.authenticated, session.member?.memberId]);
 
   // WebSocket: BATTLE_STARTED 이벤트 수신 시 방 상태 자동 갱신
   useEffect(() => {
@@ -285,7 +299,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
       stompClientRef.current = null;
       void client.deactivate();
     };
-  }, [roomId, session.authenticated]);
+  }, [roomId, session.authenticated, session.member?.memberId]);
 
   function handleSubmit() {
     if (!room) {
@@ -342,6 +356,19 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
       }
       // 성공 시 결과는 WebSocket(RUN_RESULT)으로 수신
     })();
+  }
+
+  if (!sessionLoaded && !room) {
+    return (
+      <div className="space-y-8">
+        <PageHero
+          eyebrow="Battle Room"
+          title="세션을 확인하는 중입니다."
+          description="잠시만 기다려주세요."
+          actions={<StatusPill>Session</StatusPill>}
+        />
+      </div>
+    );
   }
 
   if (!session.authenticated && !room) {

@@ -9,8 +9,8 @@ import type {
   MatchStateResponse,
   QueueStateResponse,
   QueueStatusResponse,
-  SessionResponse,
 } from "@/shared/api/contracts";
+import { useAppSession } from "@/features/layout/session-context";
 
 import {
   DEFAULT_REQUIRED_COUNT,
@@ -37,6 +37,7 @@ type BusyAction =
   | null;
 
 const DEFAULT_FEEDBACK = "메인에서 바로 매칭을 시작할 수 있습니다.";
+const TAGS_CACHE_TTL_MS = 60_000;
 
 const defaultQueueState: QueueStateResponse = {
   inQueue: false,
@@ -53,21 +54,11 @@ const defaultMatchState: MatchStateResponse = {
   message: null,
 };
 
-async function readSession() {
-  const response = await fetch("/api/auth/session", {
-    cache: "no-store",
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    return {
-      authenticated: false,
-      member: null,
-    } satisfies SessionResponse;
-  }
-
-  return (await response.json()) as SessionResponse;
-}
+let tagCategoriesCache: {
+  expiresAt: number;
+  categories: QueueCategoryOption[];
+} | null = null;
+let tagCategoriesInFlight: Promise<QueueCategoryOption[] | null> | null = null;
 
 async function readQueueState() {
   const response = await fetch("/api/queue/me", {
@@ -96,29 +87,56 @@ async function readMatchState() {
 }
 
 async function readTagCategories() {
-  const response = await fetch("/api/tags", {
-    cache: "no-store",
-  });
+  const now = Date.now();
 
-  if (!response.ok) {
-    return null;
+  if (tagCategoriesCache && tagCategoriesCache.expiresAt > now) {
+    return tagCategoriesCache.categories;
   }
 
-  const payload = (await response.json().catch(() => null)) as QueueCategoryOption[] | null;
-
-  if (!Array.isArray(payload) || payload.length === 0) {
-    return null;
+  if (tagCategoriesInFlight) {
+    return tagCategoriesInFlight;
   }
 
-  const normalized = payload
-    .map((item) => ({
-      value: (item.value ?? "").trim(),
-      label: (item.label ?? "").trim(),
-      disabled: item.disabled ?? false,
-    }))
-    .filter((item) => item.value.length > 0 && item.label.length > 0);
+  const task = (async () => {
+    const response = await fetch("/api/tags");
 
-  return normalized.length > 0 ? normalized : null;
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = (await response.json().catch(() => null)) as QueueCategoryOption[] | null;
+
+    if (!Array.isArray(payload) || payload.length === 0) {
+      return null;
+    }
+
+    const normalized = payload
+      .map((item) => ({
+        value: (item.value ?? "").trim(),
+        label: (item.label ?? "").trim(),
+        disabled: item.disabled ?? false,
+      }))
+      .filter((item) => item.value.length > 0 && item.label.length > 0);
+
+    if (normalized.length === 0) {
+      return null;
+    }
+
+    tagCategoriesCache = {
+      expiresAt: Date.now() + TAGS_CACHE_TTL_MS,
+      categories: normalized,
+    };
+
+    return normalized;
+  })();
+
+  tagCategoriesInFlight = task;
+
+  try {
+    return await task;
+  } finally {
+    tagCategoriesInFlight = null;
+  }
 }
 
 async function postMatchDecision(matchId: number, action: "accept" | "decline") {
@@ -178,10 +196,7 @@ function getApiErrorMessage(
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [session, setSession] = useState<SessionResponse>({
-    authenticated: false,
-    member: null,
-  });
+  const { session, sessionLoaded } = useAppSession();
   const [queueState, setQueueState] = useState(defaultQueueState);
   const [matchState, setMatchState] = useState(defaultMatchState);
   const [category, setCategory] = useState<QueueCategoryValue>("dp");
@@ -386,18 +401,14 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
+    if (!sessionLoaded) {
+      return;
+    }
+
     let active = true;
 
     void (async () => {
-      const nextSession = await readSession();
-
-      if (!active) {
-        return;
-      }
-
-      setSession(nextSession);
-
-      if (!nextSession.authenticated) {
+      if (!session.authenticated) {
         resetFlow();
         return;
       }
@@ -434,7 +445,7 @@ export default function HomeScreen() {
     return () => {
       active = false;
     };
-  }, [applyMatchSnapshot, resetFlow]);
+  }, [applyMatchSnapshot, resetFlow, session.authenticated, sessionLoaded]);
 
   useEffect(() => {
     if (!session.authenticated || pollStage !== "QUEUE") {

@@ -9,6 +9,7 @@ import type {
   AuthMutationResponse,
   LoginRequest,
 } from "@/shared/api/contracts";
+import { useAppSession } from "@/features/layout/session-context";
 
 const initialForm: LoginRequest = {
   email: "",
@@ -17,6 +18,7 @@ const initialForm: LoginRequest = {
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { applySession } = useAppSession();
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next") || "/";
   const [form, setForm] = useState(initialForm);
@@ -46,6 +48,10 @@ export default function LoginScreen() {
 
         const payload = (await response.json()) as AuthMutationResponse;
         setMessage(payload.message);
+        applySession({
+          authenticated: payload.authenticated,
+          member: payload.member,
+        });
         router.push(nextPath);
         router.refresh();
       })();

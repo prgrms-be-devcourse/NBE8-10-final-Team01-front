@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   MyBattleResultItem,
@@ -13,6 +13,7 @@ import ProfilePane from "@/features/home/components/profile-pane";
 import QuickMenuPane, {
   type QuickMenuTreeItem,
 } from "@/features/home/components/quick-menu-pane";
+import SessionContext from "@/features/layout/session-context";
 
 const PREVIEW_RESULTS_SIZE = 5;
 
@@ -47,39 +48,78 @@ async function readMyBattleResultsPreview(size: number) {
   };
 }
 
-export default function IdeShell({ children }: { children: React.ReactNode }) {
+export default function IdeShell({
+  children,
+  initialSession,
+}: {
+  children: React.ReactNode;
+  initialSession: SessionResponse;
+}) {
   const pathname = usePathname();
   const router = useRouter();
+  const refreshInFlightRef = useRef<Promise<SessionResponse> | null>(null);
   const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(true);
   const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(true);
-  const [session, setSession] = useState<SessionResponse>({
-    authenticated: false,
-    member: null,
-  });
+  const [session, setSession] = useState<SessionResponse>(initialSession);
+  const [sessionLoaded, setSessionLoaded] = useState(true);
   const [recentResults, setRecentResults] = useState<MyBattleResultItem[]>([]);
   const [resultsPreviewMessage, setResultsPreviewMessage] = useState(
     "로그인 후 최근 전적을 확인할 수 있습니다.",
   );
   const [resultsPreviewError, setResultsPreviewError] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const applySession = useCallback((nextSession: SessionResponse) => {
+    setSession(nextSession);
+    setSessionLoaded(true);
+  }, []);
 
   useEffect(() => {
-    let active = true;
+    // router.refresh() 이후 서버에서 내려준 초기 세션을 클라이언트 전역 상태에 반영한다.
+    applySession(initialSession);
+  }, [applySession, initialSession]);
 
-    void (async () => {
+  const refreshSession = useCallback(async () => {
+    // 중복 요청으로 세션 상태가 흔들리지 않도록 in-flight 요청을 재사용한다.
+    if (refreshInFlightRef.current) {
+      return refreshInFlightRef.current;
+    }
+
+    const task = (async () => {
       const nextSession = await readSession();
-
-      if (!active) {
-        return;
-      }
-
       setSession(nextSession);
+      setSessionLoaded(true);
+      return nextSession;
     })();
 
-    return () => {
-      active = false;
+    refreshInFlightRef.current = task;
+
+    try {
+      return await task;
+    } finally {
+      refreshInFlightRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    // 라우트 이동마다 재조회하지 않고, 탭 복귀 시점에만 세션을 최신화한다.
+    const onWindowFocus = () => {
+      void refreshSession();
     };
-  }, [pathname]);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshSession();
+      }
+    };
+
+    window.addEventListener("focus", onWindowFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", onWindowFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [refreshSession]);
 
   useEffect(() => {
     let active = true;
@@ -104,6 +144,8 @@ export default function IdeShell({ children }: { children: React.ReactNode }) {
       }
 
       if (status === 401 || payload?.resultCode === "MEMBER_401") {
+        // 401은 서버가 인증 만료/무효를 확정한 신호이므로 전역 세션을 즉시 재동기화한다.
+        void refreshSession();
         setRecentResults([]);
         setResultsPreviewError(null);
         setResultsPreviewMessage(payload?.msg ?? "로그인이 필요합니다.");
@@ -128,7 +170,7 @@ export default function IdeShell({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [session.authenticated]);
+  }, [refreshSession, session.authenticated]);
 
   async function handleLogout() {
     setIsLoggingOut(true);
@@ -138,7 +180,7 @@ export default function IdeShell({ children }: { children: React.ReactNode }) {
         method: "POST",
         credentials: "include",
       });
-      setSession({
+      applySession({
         authenticated: false,
         member: null,
       });
@@ -228,41 +270,43 @@ export default function IdeShell({ children }: { children: React.ReactNode }) {
     pathname === "/mypage";
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden bg-[#1e1f22]">
-      <div className={`grid h-full w-full ${layoutColumnsClass}`}>
-        <QuickMenuPane
-          isQuickMenuOpen={isQuickMenuOpen}
-          onToggleQuickMenu={() => setIsQuickMenuOpen((current) => !current)}
-          sessionAuthenticated={session.authenticated}
-          projectTreeItems={projectTreeItems}
-        />
+    <SessionContext.Provider value={{ session, sessionLoaded, refreshSession, applySession }}>
+      <div className="flex min-h-0 flex-1 overflow-hidden bg-[#1e1f22]">
+        <div className={`grid h-full w-full ${layoutColumnsClass}`}>
+          <QuickMenuPane
+            isQuickMenuOpen={isQuickMenuOpen}
+            onToggleQuickMenu={() => setIsQuickMenuOpen((current) => !current)}
+            sessionAuthenticated={session.authenticated}
+            projectTreeItems={projectTreeItems}
+          />
 
-        <section className="min-h-0 overflow-hidden bg-[#1e1f22]">
-          {isFullBleedCenter ? (
-            <div className="h-full min-h-0">{children}</div>
-          ) : (
-            <div className="h-full overflow-y-auto">
-              <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8">{children}</div>
-            </div>
-          )}
-        </section>
+          <section className="min-h-0 overflow-hidden bg-[#1e1f22]">
+            {isFullBleedCenter ? (
+              <div className="h-full min-h-0">{children}</div>
+            ) : (
+              <div className="h-full overflow-y-auto">
+                <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8">{children}</div>
+              </div>
+            )}
+          </section>
 
-        <ProfilePane
-          isProfilePanelOpen={isProfilePanelOpen}
-          onToggleProfilePanel={() => setIsProfilePanelOpen((current) => !current)}
-          session={session}
-          previewPlayedCount={previewPlayedCount}
-          previewSolvedCount={previewSolvedCount}
-          previewWinRate={previewWinRate}
-          previewScoreDeltaLabel={previewScoreDeltaLabel}
-          resultsPreviewMessage={resultsPreviewMessage}
-          resultsPreviewError={resultsPreviewError}
-          isBusy={isLoggingOut}
-          onLogout={() => {
-            void handleLogout();
-          }}
-        />
+          <ProfilePane
+            isProfilePanelOpen={isProfilePanelOpen}
+            onToggleProfilePanel={() => setIsProfilePanelOpen((current) => !current)}
+            session={session}
+            previewPlayedCount={previewPlayedCount}
+            previewSolvedCount={previewSolvedCount}
+            previewWinRate={previewWinRate}
+            previewScoreDeltaLabel={previewScoreDeltaLabel}
+            resultsPreviewMessage={resultsPreviewMessage}
+            resultsPreviewError={resultsPreviewError}
+            isBusy={isLoggingOut}
+            onLogout={() => {
+              void handleLogout();
+            }}
+          />
+        </div>
       </div>
-    </div>
+    </SessionContext.Provider>
   );
 }

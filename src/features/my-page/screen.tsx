@@ -7,8 +7,8 @@ import type {
   MyBattleResultItem,
   MyBattleResultsResponse,
   PageInfo,
-  SessionResponse,
 } from "@/shared/api/contracts";
+import { useAppSession } from "@/features/layout/session-context";
 import { formatDateTime } from "@/shared/utils/format-date-time";
 import { formatRoleLabel } from "@/shared/utils/format-role-label";
 
@@ -21,22 +21,6 @@ const defaultPageInfo: PageInfo = {
   totalPages: 0,
   hasNext: false,
 };
-
-async function readSession() {
-  const response = await fetch("/api/auth/session", {
-    cache: "no-store",
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    return {
-      authenticated: false,
-      member: null,
-    } satisfies SessionResponse;
-  }
-
-  return (await response.json()) as SessionResponse;
-}
 
 async function readMyBattleResults(page: number, size: number) {
   const response = await fetch(`/api/members/me/battle-results?page=${page}&size=${size}`, {
@@ -149,10 +133,7 @@ function LoadingRows() {
 }
 
 export default function MyPageScreen() {
-  const [session, setSession] = useState<SessionResponse>({
-    authenticated: false,
-    member: null,
-  });
+  const { session, sessionLoaded, refreshSession } = useAppSession();
   const [battleResults, setBattleResults] = useState<MyBattleResultItem[]>([]);
   const [pageInfo, setPageInfo] = useState(defaultPageInfo);
   const [message, setMessage] = useState("내 전적을 불러오는 중입니다.");
@@ -161,18 +142,14 @@ export default function MyPageScreen() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   useEffect(() => {
+    if (!sessionLoaded) {
+      return;
+    }
+
     let active = true;
 
     void (async () => {
-      const nextSession = await readSession();
-
-      if (!active) {
-        return;
-      }
-
-      setSession(nextSession);
-
-      if (!nextSession.authenticated) {
+      if (!session.authenticated) {
         setIsLoading(false);
         setMessage("로그인 후 내 전적을 확인할 수 있습니다.");
         return;
@@ -185,10 +162,7 @@ export default function MyPageScreen() {
       }
 
       if (status === 401 || payload?.resultCode === "MEMBER_401") {
-        setSession({
-          authenticated: false,
-          member: null,
-        });
+        void refreshSession();
         setBattleResults([]);
         setPageInfo(defaultPageInfo);
         setError(null);
@@ -216,7 +190,7 @@ export default function MyPageScreen() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [refreshSession, session.authenticated, sessionLoaded]);
 
   async function handleLoadMore() {
     if (!session.authenticated || !pageInfo.hasNext || isLoadingMore) {
@@ -229,10 +203,7 @@ export default function MyPageScreen() {
     const { ok, status, payload } = await readMyBattleResults(nextPage, pageInfo.size);
 
     if (status === 401 || payload?.resultCode === "MEMBER_401") {
-      setSession({
-        authenticated: false,
-        member: null,
-      });
+      void refreshSession();
       setBattleResults([]);
       setPageInfo(defaultPageInfo);
       setError(null);

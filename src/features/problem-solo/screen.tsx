@@ -9,7 +9,6 @@ import SockJS from "sockjs-client";
 import type {
   ApiErrorResponse,
   ProblemDetailResponse,
-  SessionResponse,
   SoloRunRequest,
   SoloRunResponse,
   SoloSubmitRequest,
@@ -18,6 +17,7 @@ import type {
   SubmissionResponse,
   SubmissionWsMessage,
 } from "@/shared/api/contracts";
+import { useAppSession } from "@/features/layout/session-context";
 import {
   DefinitionGrid,
   MathText,
@@ -207,19 +207,6 @@ function resolveDefaultLanguage(problem: ProblemDetailResponse | null) {
   return languages[0];
 }
 
-async function readSession() {
-  const response = await fetch("/api/auth/session", { cache: "no-store" });
-
-  if (!response.ok) {
-    return {
-      authenticated: false,
-      member: null,
-    } satisfies SessionResponse;
-  }
-
-  return (await response.json()) as SessionResponse;
-}
-
 async function readProblem(problemId: string) {
   const response = await fetch(`/api/problems/${problemId}`, { cache: "no-store" });
 
@@ -238,11 +225,7 @@ async function readProblem(problemId: string) {
 }
 
 export default function ProblemSoloScreen({ problemId }: { problemId: string }) {
-  const [session, setSession] = useState<SessionResponse>({
-    authenticated: false,
-    member: null,
-  });
-  const [sessionLoaded, setSessionLoaded] = useState(false);
+  const { session, sessionLoaded } = useAppSession();
   const [problem, setProblem] = useState<ProblemDetailResponse | null>(null);
   const [problemError, setProblemError] = useState<string | null>(null);
   const [isProblemLoading, setIsProblemLoading] = useState(true);
@@ -259,14 +242,6 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
   const rightColumnRef = useRef<HTMLDivElement | null>(null);
   const runTimeoutRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    void (async () => {
-      const nextSession = await readSession();
-      setSession(nextSession);
-      setSessionLoaded(true);
-    })();
-  }, []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 1280px)");

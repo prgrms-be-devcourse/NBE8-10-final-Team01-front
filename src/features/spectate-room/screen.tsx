@@ -10,8 +10,8 @@ import type {
   CodeUpdateWsMessage,
   ProblemDetailResponse,
   RoomResponse,
-  SessionResponse,
 } from "@/shared/api/contracts";
+import { useAppSession } from "@/features/layout/session-context";
 import {
   CodeWindow,
   MetricCard,
@@ -23,21 +23,8 @@ import {
 
 import { getSpectateRoom } from "./data";
 
-async function readSession() {
-  const response = await fetch("/api/auth/session", { cache: "no-store" });
-
-  if (!response.ok) {
-    return { authenticated: false, member: null } satisfies SessionResponse;
-  }
-
-  return (await response.json()) as SessionResponse;
-}
-
 export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
-  const [session, setSession] = useState<SessionResponse>({
-    authenticated: false,
-    member: null,
-  });
+  const { session, sessionLoaded, refreshSession } = useAppSession();
   const [room, setRoom] = useState<RoomResponse | null>(null);
   const [problem, setProblem] = useState<ProblemDetailResponse | null>(null);
   const [message, setMessage] = useState("관전 정보를 불러오는 중입니다.");
@@ -49,21 +36,37 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
 
   // 세션 및 방 정보 로드
   useEffect(() => {
-    void (async () => {
-      const nextSession = await readSession();
-      setSession(nextSession);
+    if (!sessionLoaded) {
+      return;
+    }
 
-      if (!nextSession.authenticated) {
+    let active = true;
+
+    void (async () => {
+      if (!session.authenticated) {
+        if (!active) {
+          return;
+        }
         setRequiresLogin(true);
         setMessage("관전 상세는 로그인 후 접근할 수 있습니다.");
         return;
       }
+
+      if (!active) {
+        return;
+      }
+
+      setRequiresLogin(false);
 
       const response = await fetch(`/api/battle/rooms/${roomId}`, {
         cache: "no-store",
       });
 
       if (response.status === 401) {
+        void refreshSession();
+        if (!active) {
+          return;
+        }
         setRequiresLogin(true);
         setMessage("관전 상세는 로그인 후 접근할 수 있습니다.");
         return;
@@ -73,16 +76,25 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
         const fallback = getSpectateRoom(roomId);
 
         if (fallback) {
+          if (!active) {
+            return;
+          }
           setMessage("백엔드 연결 실패로 샘플 관전 데이터를 표시합니다.");
           return;
         }
 
         const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
+        if (!active) {
+          return;
+        }
         setError(payload?.message ?? "관전 상세를 불러오지 못했습니다.");
         return;
       }
 
       const nextRoom = (await response.json()) as RoomResponse;
+      if (!active) {
+        return;
+      }
       setRoom(nextRoom);
 
       const problemResponse = await fetch(`/api/problems/${nextRoom.problemId}`, {
@@ -90,12 +102,22 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
       });
 
       if (problemResponse.ok) {
+        if (!active) {
+          return;
+        }
         setProblem((await problemResponse.json()) as ProblemDetailResponse);
       }
 
+      if (!active) {
+        return;
+      }
       setMessage("실시간 관전 중입니다.");
     })();
-  }, [roomId]);
+
+    return () => {
+      active = false;
+    };
+  }, [refreshSession, roomId, session.authenticated, sessionLoaded]);
 
   // WebSocket: /topic/room/{roomId}/spectate 구독
   useEffect(() => {
