@@ -85,6 +85,22 @@ export interface MatchStateResponse {
   message: string | null;
 }
 
+export interface QueueStateChangedWsMessage {
+  type: "QUEUE_STATE_CHANGED";
+  queue: QueueStateResponse | null;
+  match: null;
+}
+
+export interface ReadyCheckStartedWsMessage {
+  type: "READY_CHECK_STARTED";
+  queue: null;
+  match: MatchStateResponse | null;
+}
+
+export type MatchingWsMessage =
+  | QueueStateChangedWsMessage
+  | ReadyCheckStartedWsMessage;
+
 export interface ParticipantInfo {
   userId: number;
   nickname: string;

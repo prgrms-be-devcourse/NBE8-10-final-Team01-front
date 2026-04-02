@@ -2,11 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Client } from "@stomp/stompjs";
+import SockJS from "sockjs-client";
 
 import type {
   ApiErrorResponse,
   Difficulty,
   MatchStateResponse,
+  MatchingWsMessage,
   QueueStateResponse,
   QueueStatusResponse,
 } from "@/shared/api/contracts";
@@ -35,9 +38,11 @@ type BusyAction =
   | "decline"
   | "join-room"
   | null;
+type SubscriptionHandle = { unsubscribe: () => void };
 
 const DEFAULT_FEEDBACK = "메인에서 바로 매칭을 시작할 수 있습니다.";
 const TAGS_CACHE_TTL_MS = 60_000;
+const MATCHING_PERSONAL_DESTINATION = "/user/queue/matching";
 
 const defaultQueueState: QueueStateResponse = {
   inQueue: false,
@@ -194,6 +199,48 @@ function getApiErrorMessage(
   return fallback;
 }
 
+function buildQueueTopicDestination(category: string, difficulty: string) {
+  const normalize = (value: string) => encodeURIComponent(value.trim().toUpperCase());
+
+  return `/topic/matching/queue/${normalize(category)}/${normalize(difficulty)}`;
+}
+
+function parseMatchingWsMessage(body: string): MatchingWsMessage | null {
+  try {
+    const payload = JSON.parse(body) as unknown;
+
+    if (!payload || typeof payload !== "object" || !("type" in payload)) {
+      return null;
+    }
+
+    const typed = payload as { type?: unknown };
+
+    if (
+      typed.type === "QUEUE_STATE_CHANGED" ||
+      typed.type === "READY_CHECK_STARTED"
+    ) {
+      return payload as MatchingWsMessage;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function logMatchingDebug(label: string, payload?: unknown) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (payload === undefined) {
+    console.log(`[matching] ${label}`);
+    return;
+  }
+
+  console.log(`[matching] ${label}`, payload);
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const { session, sessionLoaded } = useAppSession();
@@ -213,10 +260,20 @@ export default function HomeScreen() {
   const [now, setNow] = useState(Date.now());
 
   const joiningRoomIdRef = useRef<number | null>(null);
+  const stompClientRef = useRef<Client | null>(null);
+  const personalSubscriptionRef = useRef<SubscriptionHandle | null>(null);
+  const queueTopicSubscriptionRef = useRef<SubscriptionHandle | null>(null);
+  const queueTopicDestinationRef = useRef<string | null>(null);
   const editorPaneRef = useRef<HTMLDivElement | null>(null);
   const [editorLineCount, setEditorLineCount] = useState(28);
   const [editorLineHeight, setEditorLineHeight] = useState(32);
   const [editorFontSize, setEditorFontSize] = useState(13);
+
+  const clearQueueTopicSubscription = useCallback(() => {
+    queueTopicSubscriptionRef.current?.unsubscribe();
+    queueTopicSubscriptionRef.current = null;
+    queueTopicDestinationRef.current = null;
+  }, []);
 
   const resetFlow = useCallback((nextFeedback = DEFAULT_FEEDBACK) => {
     setQueueState(defaultQueueState);
@@ -307,6 +364,77 @@ export default function HomeScreen() {
     [router],
   );
 
+  const handleQueueStateChangedEvent = useCallback((nextQueueState: QueueStateResponse) => {
+    logMatchingDebug("ws QUEUE_STATE_CHANGED", nextQueueState);
+    setQueueState({
+      ...nextQueueState,
+      requiredCount: nextQueueState.requiredCount ?? DEFAULT_REQUIRED_COUNT,
+    });
+    setQueueStartedAt((current) => current ?? new Date().toISOString());
+    setError(null);
+    setFeedback("대기열 인원이 갱신되었습니다.");
+  }, []);
+
+  const handleReadyCheckStartedEvent = useCallback(
+    (nextMatchState: MatchStateResponse | null) => {
+      logMatchingDebug("ws READY_CHECK_STARTED", nextMatchState);
+      clearQueueTopicSubscription();
+
+      setQueueState(defaultQueueState);
+      setQueueStartedAt(null);
+      setError(null);
+
+      if (nextMatchState) {
+        applyMatchSnapshot(nextMatchState);
+        return;
+      }
+
+      setModalMode("READY_CHECK");
+      setPollStage("MATCH");
+      setFeedback("ready-check 세션을 확인하는 중입니다.");
+    },
+    [applyMatchSnapshot, clearQueueTopicSubscription],
+  );
+
+  const syncQueueTopicSubscription = useCallback(
+    (categoryValue: string | null, difficultyValue: string | null) => {
+      if (!categoryValue || !difficultyValue) {
+        clearQueueTopicSubscription();
+        return;
+      }
+
+      const destination = buildQueueTopicDestination(categoryValue, difficultyValue);
+
+      if (
+        queueTopicDestinationRef.current === destination &&
+        queueTopicSubscriptionRef.current
+      ) {
+        return;
+      }
+
+      queueTopicSubscriptionRef.current?.unsubscribe();
+      queueTopicSubscriptionRef.current = null;
+      queueTopicDestinationRef.current = destination;
+
+      const client = stompClientRef.current;
+
+      if (!client?.connected) {
+        return;
+      }
+
+      queueTopicSubscriptionRef.current = client.subscribe(destination, (message) => {
+        const payload = parseMatchingWsMessage(message.body);
+
+        if (!payload || payload.type !== "QUEUE_STATE_CHANGED" || !payload.queue) {
+          return;
+        }
+
+        handleQueueStateChangedEvent(payload.queue);
+      });
+    },
+    [clearQueueTopicSubscription, handleQueueStateChangedEvent],
+  );
+
   useEffect(() => {
     const intervalId = window.setInterval(() => {
       setNow(Date.now());
@@ -316,6 +444,74 @@ export default function HomeScreen() {
       window.clearInterval(intervalId);
     };
   }, []);
+
+  useEffect(() => {
+    if (!sessionLoaded || !session.authenticated) {
+      personalSubscriptionRef.current?.unsubscribe();
+      personalSubscriptionRef.current = null;
+      clearQueueTopicSubscription();
+      stompClientRef.current = null;
+      return;
+    }
+
+    const client = new Client({
+      webSocketFactory: () => new SockJS("/ws"),
+      reconnectDelay: 3000,
+      onConnect: () => {
+        logMatchingDebug("ws connected");
+        personalSubscriptionRef.current?.unsubscribe();
+        personalSubscriptionRef.current = client.subscribe(
+          MATCHING_PERSONAL_DESTINATION,
+          (message) => {
+            const payload = parseMatchingWsMessage(message.body);
+
+            if (!payload || payload.type !== "READY_CHECK_STARTED") {
+              return;
+            }
+
+            handleReadyCheckStartedEvent(payload.match);
+          },
+        );
+
+        if (queueTopicDestinationRef.current) {
+          queueTopicSubscriptionRef.current?.unsubscribe();
+          queueTopicSubscriptionRef.current = client.subscribe(
+            queueTopicDestinationRef.current,
+            (message) => {
+              const payload = parseMatchingWsMessage(message.body);
+
+              if (
+                !payload ||
+                payload.type !== "QUEUE_STATE_CHANGED" ||
+                !payload.queue
+              ) {
+                return;
+              }
+
+              handleQueueStateChangedEvent(payload.queue);
+            },
+          );
+        }
+      },
+    });
+
+    client.activate();
+    stompClientRef.current = client;
+
+    return () => {
+      personalSubscriptionRef.current?.unsubscribe();
+      personalSubscriptionRef.current = null;
+      clearQueueTopicSubscription();
+      stompClientRef.current = null;
+      void client.deactivate();
+    };
+  }, [
+    clearQueueTopicSubscription,
+    handleQueueStateChangedEvent,
+    handleReadyCheckStartedEvent,
+    session.authenticated,
+    sessionLoaded,
+  ]);
 
   useEffect(() => {
     if (!session.authenticated) {
@@ -415,7 +611,12 @@ export default function HomeScreen() {
       }
 
       if (nextQueueState?.inQueue) {
-        setQueueState(nextQueueState);
+        setQueueState({
+          ...nextQueueState,
+          requiredCount: nextQueueState.requiredCount ?? DEFAULT_REQUIRED_COUNT,
+        });
+        logMatchingDebug("poll matches/me status=IDLE", nextMatchState);
+        logMatchingDebug("poll matches/me status=IDLE", nextMatchState);
         setMatchState(defaultMatchState);
         setQueueStartedAt((current) => current ?? new Date().toISOString());
         setTerminalMessage(null);
@@ -440,6 +641,29 @@ export default function HomeScreen() {
   }, [applyMatchSnapshot, resetFlow, session.authenticated, sessionLoaded]);
 
   useEffect(() => {
+    if (
+      !session.authenticated ||
+      pollStage !== "QUEUE" ||
+      !queueState.inQueue ||
+      !queueState.category ||
+      !queueState.difficulty
+    ) {
+      clearQueueTopicSubscription();
+      return;
+    }
+
+    syncQueueTopicSubscription(queueState.category, queueState.difficulty);
+  }, [
+    clearQueueTopicSubscription,
+    pollStage,
+    queueState.category,
+    queueState.difficulty,
+    queueState.inQueue,
+    session.authenticated,
+    syncQueueTopicSubscription,
+  ]);
+
+  useEffect(() => {
     if (!session.authenticated || pollStage !== "QUEUE") {
       return;
     }
@@ -454,13 +678,19 @@ export default function HomeScreen() {
       }
 
       if (nextQueueState.inQueue) {
-        setQueueState(nextQueueState);
+        logMatchingDebug("poll queue/me inQueue=true", nextQueueState);
+        setQueueState({
+          ...nextQueueState,
+          requiredCount: nextQueueState.requiredCount ?? DEFAULT_REQUIRED_COUNT,
+        });
         setModalMode("SEARCHING");
         setError(null);
         setFeedback("대기열에서 상대를 찾고 있습니다.");
         return;
       }
 
+      clearQueueTopicSubscription();
+      logMatchingDebug("poll queue/me inQueue=false -> switch to matches/me", nextQueueState);
       setQueueState(nextQueueState);
       setQueueStartedAt(null);
       setModalMode("READY_CHECK");
@@ -480,6 +710,8 @@ export default function HomeScreen() {
         return;
       }
 
+      logMatchingDebug("poll matches/me state", nextMatchState);
+      logMatchingDebug("poll matches/me state", nextMatchState);
       applyMatchSnapshot(nextMatchState);
     };
 
@@ -493,7 +725,7 @@ export default function HomeScreen() {
       active = false;
       window.clearInterval(intervalId);
     };
-  }, [applyMatchSnapshot, pollStage, session.authenticated]);
+  }, [applyMatchSnapshot, clearQueueTopicSubscription, pollStage, session.authenticated]);
 
   useEffect(() => {
     if (!session.authenticated || pollStage !== "MATCH") {
@@ -593,6 +825,7 @@ export default function HomeScreen() {
         setModalMode("SEARCHING");
         setPollStage("QUEUE");
         setFeedback(payload.message);
+        syncQueueTopicSubscription(payload.category, payload.difficulty);
         return;
       }
 
@@ -627,6 +860,7 @@ export default function HomeScreen() {
         return;
       }
 
+      clearQueueTopicSubscription();
       resetFlow(getApiErrorMessage(payload, "매칭 대기열에서 취소됐습니다."));
     } finally {
       setBusyAction(null);
