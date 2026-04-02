@@ -50,7 +50,7 @@ export default function QueueEditorPane({
   terminalMessage,
 }: QueueEditorPaneProps) {
   return (
-    <main className="min-h-0 border-b border-zinc-700/80 bg-[#1e1f22] lg:border-b-0 lg:border-r">
+    <main className="h-full overflow-hidden border-b border-zinc-700/80 bg-[#1e1f22] lg:border-b-0 lg:border-r">
       <div className="flex h-full min-h-0 flex-col">
         <div className="flex h-12 items-center justify-between border-b border-zinc-700/80 bg-[#1e1f22] px-3">
           <div className="flex h-full items-end gap-0.5 pt-1">

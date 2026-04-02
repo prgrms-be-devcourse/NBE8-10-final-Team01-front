@@ -3,11 +3,10 @@ import { cookies } from "next/headers";
 
 import type { RoomResponse } from "@/shared/api/contracts";
 import {
-  fetchBackend,
+  fetchBackendWithReissue,
   getErrorMessage,
   readJsonBody,
 } from "@/shared/api/backend";
-import { FRONTEND_ACCESS_TOKEN_COOKIE } from "@/shared/auth/session";
 
 export async function GET(
   _request: Request,
@@ -15,14 +14,13 @@ export async function GET(
 ) {
   const { roomId } = await context.params;
   const cookieStore = await cookies();
-  const token = cookieStore.get(FRONTEND_ACCESS_TOKEN_COOKIE)?.value;
-
-  if (!token) {
-    return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
-  }
 
   try {
-    const response = await fetchBackend(`/api/v1/battle/rooms/${roomId}`, { token });
+    const response = await fetchBackendWithReissue(`/api/v1/battle/rooms/${roomId}`, {}, cookieStore);
+
+    if (response.status === 401) {
+      return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
+    }
 
     if (!response.ok) {
       return NextResponse.json(

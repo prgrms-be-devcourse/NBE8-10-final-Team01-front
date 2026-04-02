@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
 import {
-  fetchBackend,
+  fetchBackendWithReissue,
   getErrorMessage,
   readJsonBody,
 } from "@/shared/api/backend";
@@ -82,7 +82,7 @@ export async function GET() {
   }
 
   try {
-    const response = await fetchBackend("/api/v1/tags", { token });
+    const response = await fetchBackendWithReissue("/api/v1/tags", {}, cookieStore);
 
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {

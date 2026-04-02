@@ -3,20 +3,16 @@ import { cookies } from "next/headers";
 
 import type { RunPayload } from "@/shared/api/contracts";
 import {
-  fetchBackend,
+  fetchBackendWithReissue,
   getErrorMessage,
 } from "@/shared/api/backend";
-import {
-  FRONTEND_ACCESS_TOKEN_COOKIE,
-  getSessionMemberFromToken,
-} from "@/shared/auth/session";
+import { FRONTEND_ACCESS_TOKEN_COOKIE } from "@/shared/auth/session";
 
 export async function POST(request: Request) {
   const cookieStore = await cookies();
   const token = cookieStore.get(FRONTEND_ACCESS_TOKEN_COOKIE)?.value;
-  const member = token ? getSessionMemberFromToken(token) : null;
 
-  if (!token || !member) {
+  if (!token) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
@@ -29,15 +25,14 @@ export async function POST(request: Request) {
   }
 
   try {
-    const response = await fetchBackend("/api/v1/run", {
+    const response = await fetchBackendWithReissue("/api/v1/run", {
       method: "POST",
-      token,
       body: {
         roomId: payload.roomId,
         code: payload.code,
         language: payload.language,
       },
-    });
+    }, cookieStore);
 
     if (!response.ok) {
       return NextResponse.json(

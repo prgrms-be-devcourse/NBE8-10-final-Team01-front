@@ -6,11 +6,10 @@ import type {
   SoloRunResponse,
 } from "@/shared/api/contracts";
 import {
-  fetchBackend,
+  fetchBackendWithReissue,
   getErrorMessage,
   readJsonBody,
 } from "@/shared/api/backend";
-import { FRONTEND_ACCESS_TOKEN_COOKIE } from "@/shared/auth/session";
 
 export async function POST(
   request: Request,
@@ -24,11 +23,6 @@ export async function POST(
   }
 
   const cookieStore = await cookies();
-  const token = cookieStore.get(FRONTEND_ACCESS_TOKEN_COOKIE)?.value;
-
-  if (!token) {
-    return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
-  }
 
   let payload: SoloRunRequest;
 
@@ -43,15 +37,18 @@ export async function POST(
   }
 
   try {
-    const response = await fetchBackend("/api/v1/solo/run", {
+    const response = await fetchBackendWithReissue("/api/v1/solo/run", {
       method: "POST",
-      token,
       body: {
         problemId: parsedProblemId,
         code: payload.code,
         language: payload.language,
       },
-    });
+    }, cookieStore);
+
+    if (response.status === 401) {
+      return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
+    }
 
     if (!response.ok) {
       return NextResponse.json(

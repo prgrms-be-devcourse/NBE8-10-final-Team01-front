@@ -3,13 +3,13 @@ import { cookies } from "next/headers";
 
 import type { JoinRoomResponse } from "@/shared/api/contracts";
 import {
-  fetchBackend,
+  fetchBackendWithReissue,
   getErrorMessage,
   readJsonBody,
 } from "@/shared/api/backend";
 import {
   FRONTEND_ACCESS_TOKEN_COOKIE,
-  getSessionMemberFromToken,
+  getMemberIdFromToken,
 } from "@/shared/auth/session";
 
 export async function POST(
@@ -19,18 +19,17 @@ export async function POST(
   const { roomId } = await context.params;
   const cookieStore = await cookies();
   const token = cookieStore.get(FRONTEND_ACCESS_TOKEN_COOKIE)?.value;
-  const member = token ? getSessionMemberFromToken(token) : null;
+  const memberId = token ? getMemberIdFromToken(token) : null;
 
-  if (!token || !member) {
+  if (!memberId) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
   try {
-    const response = await fetchBackend(`/api/v1/battle/rooms/${roomId}/join`, {
+    const response = await fetchBackendWithReissue(`/api/v1/battle/rooms/${roomId}/join`, {
       method: "POST",
-      token,
-      body: { memberId: member.memberId },
-    });
+      body: { memberId },
+    }, cookieStore);
 
     if (!response.ok) {
       return NextResponse.json(
