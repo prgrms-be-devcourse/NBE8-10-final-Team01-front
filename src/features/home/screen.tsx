@@ -371,9 +371,7 @@ export default function HomeScreen() {
 
     const updateEditorMetrics = () => {
       const { lineHeight, fontSize } = resolveEditorMetrics(window.innerWidth);
-      const fallbackHeight = Math.max(window.innerHeight - 180, lineHeight);
-      const measuredHeight = editorPane.getBoundingClientRect().height;
-      const usableHeight = Math.max(measuredHeight, fallbackHeight);
+      const usableHeight = Math.max(window.innerHeight - 180, lineHeight);
       const safetyBufferLines = 8;
       const nextLineCount = Math.max(
         24,
@@ -387,15 +385,9 @@ export default function HomeScreen() {
 
     updateEditorMetrics();
 
-    const resizeObserver = new ResizeObserver(() => {
-      updateEditorMetrics();
-    });
-
-    resizeObserver.observe(editorPane);
     window.addEventListener("resize", updateEditorMetrics);
 
     return () => {
-      resizeObserver.disconnect();
       window.removeEventListener("resize", updateEditorMetrics);
     };
   }, []);
