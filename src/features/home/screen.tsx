@@ -705,8 +705,8 @@ export default function HomeScreen() {
       }
 
       if (nextMatchState.status === "IDLE") {
-        setMatchState(defaultMatchState);
-        setFeedback("ready-check 세션을 확인하는 중입니다.");
+        logMatchingDebug("poll matches/me status=IDLE -> reset flow");
+        resetFlow("매칭이 취소되었거나 종료되었습니다. 다시 시작할 수 있습니다.");
         return;
       }
 
@@ -725,7 +725,13 @@ export default function HomeScreen() {
       active = false;
       window.clearInterval(intervalId);
     };
-  }, [applyMatchSnapshot, clearQueueTopicSubscription, pollStage, session.authenticated]);
+  }, [
+    applyMatchSnapshot,
+    clearQueueTopicSubscription,
+    pollStage,
+    resetFlow,
+    session.authenticated,
+  ]);
 
   useEffect(() => {
     if (!session.authenticated || pollStage !== "MATCH") {
@@ -742,10 +748,8 @@ export default function HomeScreen() {
       }
 
       if (nextMatchState.status === "IDLE") {
-        setMatchState(defaultMatchState);
-        setModalMode("READY_CHECK");
-        setError(null);
-        setFeedback("ready-check 세션을 확인하는 중입니다.");
+        logMatchingDebug("poll match stage status=IDLE -> reset flow");
+        resetFlow("ready-check 세션이 종료되었습니다. 다시 매칭을 시작하세요.");
         return;
       }
 
@@ -762,7 +766,7 @@ export default function HomeScreen() {
       active = false;
       window.clearInterval(intervalId);
     };
-  }, [applyMatchSnapshot, pollStage, session.authenticated]);
+  }, [applyMatchSnapshot, pollStage, resetFlow, session.authenticated]);
 
   useEffect(() => {
     const roomId = matchState.room?.roomId ?? null;

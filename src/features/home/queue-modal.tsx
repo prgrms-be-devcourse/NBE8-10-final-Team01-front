@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ReadyCheckState } from "@/shared/api/contracts";
-import { StatusPill } from "@/shared/ui";
+import { ConfirmDialog } from "@/shared/ui";
 
 import {
   formatClock,
@@ -39,9 +39,11 @@ interface ConsoleLogLine {
   time: string;
   level: "INFO" | "DEBUG" | "WARN" | "ERROR";
   message: string;
+  count: number;
 }
 
 const CONSOLE_MAX_LINES = 90;
+const SPRING_BOOT_VERSION = "v3.5.11";
 
 const SPRING_BOOT_BANNER = String.raw`  .   ____          _            __ _ _
  /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
@@ -189,38 +191,6 @@ function buildDynamicEventMessages({
   return [{ level: "WARN", message: "terminal flow reached" }];
 }
 
-function getModeStatusLine({
-  mode,
-  waitingCount,
-  requiredCount,
-  queueElapsedSeconds,
-  countdownSeconds,
-  readyCheck,
-  roomId,
-}: {
-  mode: Exclude<QueueModalMode, null>;
-  waitingCount: number;
-  requiredCount: number;
-  queueElapsedSeconds: number;
-  countdownSeconds: number;
-  readyCheck: ReadyCheckState | null;
-  roomId: number | null;
-}) {
-  if (mode === "SEARCHING") {
-    return `상태: 상대를 찾는 중 (${waitingCount}/${requiredCount}명) · 경과 ${formatClock(queueElapsedSeconds)}`;
-  }
-
-  if (mode === "READY_CHECK") {
-    return `상태: 수락 확인 중 (${readyCheck?.acceptedCount ?? 0}/${readyCheck?.requiredCount ?? requiredCount}명 수락) · 남은 시간 ${formatClock(countdownSeconds)} · 경과 ${formatClock(queueElapsedSeconds)}`;
-  }
-
-  if (mode === "ROOM_READY") {
-    return `상태: 입장 준비 완료 · 방 번호 ${roomId ?? "확인 중"} · 수락 ${readyCheck?.acceptedCount ?? 0}/${readyCheck?.requiredCount ?? requiredCount}명`;
-  }
-
-  return "상태: 매칭 종료";
-}
-
 export default function QueueModal({
   mode,
   categoryLabel,
@@ -243,6 +213,7 @@ export default function QueueModal({
   onCloseTerminal,
 }: QueueModalProps) {
   const [consoleLogs, setConsoleLogs] = useState<ConsoleLogLine[]>([]);
+  const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
   const logViewportRef = useRef<HTMLDivElement | null>(null);
   const logIdRef = useRef(0);
   const pidRef = useRef(24000 + Math.floor(Math.random() * 6000));
@@ -275,6 +246,7 @@ export default function QueueModal({
         time: timestamp,
         level,
         message,
+        count: 1,
       };
     },
     [],
@@ -283,7 +255,22 @@ export default function QueueModal({
   const appendLog = useCallback(
     (level: ConsoleLogLine["level"], message: string) => {
       setConsoleLogs((prev) => {
-        const next = [...prev, makeLogLine(level, message)];
+        const nextLine = makeLogLine(level, message);
+
+        if (prev.length > 0) {
+          const lastLine = prev[prev.length - 1];
+          if (lastLine && lastLine.level === level && lastLine.message === message) {
+            const mergedLine: ConsoleLogLine = {
+              ...lastLine,
+              time: nextLine.time,
+              count: (lastLine.count ?? 1) + 1,
+            };
+            const merged = [...prev.slice(0, -1), mergedLine];
+            return merged;
+          }
+        }
+
+        const next = [...prev, nextLine];
         if (next.length > CONSOLE_MAX_LINES) {
           return next.slice(next.length - CONSOLE_MAX_LINES);
         }
@@ -296,6 +283,7 @@ export default function QueueModal({
   useEffect(() => {
     if (!mode) {
       setConsoleLogs([]);
+      setIsCancelConfirmOpen(false);
       snapshotRef.current = {
         mode: null,
         waitingCount: 0,
@@ -340,6 +328,12 @@ export default function QueueModal({
     terminalMessage,
     waitingCount,
   ]);
+
+  useEffect(() => {
+    if (mode !== "SEARCHING") {
+      setIsCancelConfirmOpen(false);
+    }
+  }, [mode]);
 
   useEffect(() => {
     if (!mode) {
@@ -501,18 +495,6 @@ export default function QueueModal({
     logViewportRef.current.scrollTop = logViewportRef.current.scrollHeight;
   }, [consoleLogs.length]);
 
-  const modalTone = useMemo(() => {
-    if (mode === "TERMINAL") {
-      return "danger";
-    }
-
-    if (mode === "ROOM_READY") {
-      return "success";
-    }
-
-    return "warn";
-  }, [mode]);
-
   const modeStatus = useMemo(() => {
     if (mode === "SEARCHING") {
       return "매칭 대기 중";
@@ -528,35 +510,183 @@ export default function QueueModal({
 
     return "매칭 종료";
   }, [mode]);
-
-  const modeStatusLine = useMemo(
-    () => {
-      if (!mode) {
-        return "";
-      }
-
-      return getModeStatusLine({
-        mode,
-        waitingCount,
-        requiredCount,
-        queueElapsedSeconds,
-        countdownSeconds,
-        readyCheck,
-        roomId,
-      });
-    },
-    [
-      countdownSeconds,
-      mode,
-      queueElapsedSeconds,
-      readyCheck,
-      requiredCount,
-      roomId,
-      waitingCount,
-    ],
-  );
-
   const actionButtonClass = "rounded-md border border-zinc-600 bg-[#171f2c] px-3 py-1.5 text-xs font-semibold text-zinc-100 transition hover:border-violet-400/55 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-[#141a24] disabled:text-zinc-500";
+  const actionPrimaryButtonClass = "rounded-md border border-violet-400/45 bg-gradient-to-r from-violet-600 to-violet-500 px-3 py-1.5 text-xs font-semibold text-white shadow-[0_0_0_1px_rgba(168,85,247,0.25)] transition hover:from-violet-500 hover:to-violet-400 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-700 disabled:text-zinc-300";
+  const headerStatusChipClass = "inline-flex items-center rounded-full border border-amber-400/45 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-200";
+  const headerMetaChipClass = "inline-flex items-center rounded-full border border-zinc-700 bg-zinc-900/55 px-2.5 py-0.5 text-[11px] font-medium text-zinc-400";
+  const headerMetaText = useMemo(() => {
+    if (!mode) {
+      return "";
+    }
+
+    if (mode === "SEARCHING") {
+      return `대기 인원 ${waitingCount}/${requiredCount}명 · 경과 ${formatClock(queueElapsedSeconds)}`;
+    }
+
+    if (mode === "READY_CHECK") {
+      return `수락 ${readyCheck?.acceptedCount ?? 0}/${readyCheck?.requiredCount ?? requiredCount}명 · 남은 시간 ${formatClock(countdownSeconds)}`;
+    }
+
+    if (mode === "ROOM_READY") {
+      return `방 입장 준비 완료 · 방 번호 ${roomId ?? "확인 중"}`;
+    }
+
+    return "매칭 종료";
+  }, [
+    countdownSeconds,
+    mode,
+    queueElapsedSeconds,
+    readyCheck?.acceptedCount,
+    readyCheck?.requiredCount,
+    requiredCount,
+    roomId,
+    waitingCount,
+  ]);
+
+  const footerMessage = useMemo(() => {
+    if (!mode) {
+      return "";
+    }
+
+    if (error) {
+      return error;
+    }
+
+    if (terminalMessage) {
+      return terminalMessage;
+    }
+
+    if (feedback.trim().length > 0) {
+      return feedback;
+    }
+
+    return getModeDescription(mode);
+  }, [error, feedback, mode, terminalMessage]);
+
+  const summaryCountText = useMemo(() => {
+    if (!mode) {
+      return "";
+    }
+
+    if (mode === "SEARCHING") {
+      return `${waitingCount}/${requiredCount}`;
+    }
+
+    if (mode === "READY_CHECK" || mode === "ROOM_READY") {
+      return `${readyCheck?.acceptedCount ?? 0}/${readyCheck?.requiredCount ?? requiredCount}`;
+    }
+
+    return "0/0";
+  }, [
+    mode,
+    readyCheck?.acceptedCount,
+    readyCheck?.requiredCount,
+    requiredCount,
+    waitingCount,
+  ]);
+
+  const summaryModeText = useMemo(() => {
+    if (!mode) {
+      return "";
+    }
+
+    if (mode === "SEARCHING") {
+      return "매칭 대기중";
+    }
+
+    if (mode === "READY_CHECK") {
+      return "수락 확인중";
+    }
+
+    if (mode === "ROOM_READY") {
+      return "입장 준비중";
+    }
+
+    return "매칭 종료";
+  }, [mode]);
+
+  const handleCancelClick = useCallback(() => {
+    if (isPending) {
+      return;
+    }
+
+    setIsCancelConfirmOpen(true);
+  }, [isPending]);
+
+  const handleCancelConfirm = useCallback(() => {
+    if (isPending) {
+      return;
+    }
+
+    setIsCancelConfirmOpen(false);
+    onCancel();
+  }, [isPending, onCancel]);
+
+  const handleCancelDialogClose = useCallback(() => {
+    if (isPending) {
+      return;
+    }
+
+    setIsCancelConfirmOpen(false);
+  }, [isPending]);
+
+  const actionButtons = (
+    <>
+      {mode === "SEARCHING" ? (
+        <button
+          type="button"
+          onClick={handleCancelClick}
+          disabled={isPending}
+          className={actionPrimaryButtonClass}
+        >
+          매칭 취소
+        </button>
+      ) : null}
+
+      {mode === "READY_CHECK" ? (
+        <>
+          <button
+            type="button"
+            onClick={onDecline}
+            disabled={isPending || !readyCheck}
+            className={actionButtonClass}
+          >
+            거절
+          </button>
+          <button
+            type="button"
+            onClick={onAccept}
+            disabled={isPending || !readyCheck || readyCheck.acceptedByMe}
+            className={actionButtonClass}
+          >
+            {readyCheck?.acceptedByMe ? "수락 완료" : "수락"}
+          </button>
+        </>
+      ) : null}
+
+      {mode === "ROOM_READY" ? (
+        <button
+          type="button"
+          onClick={onRetryRoomEntry}
+          disabled={isPending}
+          className={actionButtonClass}
+        >
+          방 입장 재시도
+        </button>
+      ) : null}
+
+      {mode === "TERMINAL" ? (
+        <button
+          type="button"
+          onClick={onCloseTerminal}
+          disabled={isPending}
+          className={actionButtonClass}
+        >
+          닫기
+        </button>
+      ) : null}
+    </>
+  );
 
   if (!mode) {
     return null;
@@ -565,113 +695,44 @@ export default function QueueModal({
   return (
     <div className="absolute inset-0 z-40 flex items-end bg-zinc-950/30">
       <div className="queue-sheet w-full overflow-hidden border-t border-zinc-700 bg-[#12161f] text-zinc-200 shadow-[0_-20px_48px_rgba(0,0,0,0.55)]">
-        <div className="px-4 pb-4 pt-2">
-          <div className="mx-auto mb-2 h-1.5 w-16 rounded-full bg-zinc-600/80" />
-          <div className="flex flex-wrap items-center gap-2 border-b border-zinc-700 pb-2">
-            <StatusPill tone={modalTone}>{modeStatus}</StatusPill>
-            <StatusPill>{categoryLabel}</StatusPill>
-            <StatusPill>{difficultyLabel}</StatusPill>
+        <div className="px-4 pb-4 pt-3">
+          <div className="flex flex-wrap items-center gap-2 pb-2">
+            <span className={headerStatusChipClass}>{modeStatus}</span>
+            <span className={headerMetaChipClass}>{categoryLabel}</span>
+            <span className={headerMetaChipClass}>{difficultyLabel}</span>
             <p className="ml-auto text-xs font-medium text-zinc-400">
-              {getModeHeadline(mode)} · pid {pidRef.current}
+              {headerMetaText}
             </p>
+            <div className="flex flex-wrap items-center gap-2">{actionButtons}</div>
           </div>
-          <section className="mt-3 overflow-hidden rounded-lg border border-zinc-700 bg-[#0b1018]">
-            <div className="border-b border-zinc-700 bg-[#1a202c] px-3 py-1.5 font-mono text-[11px] text-zinc-400">
+          <section className="mt-3 overflow-hidden rounded-lg border border-zinc-700/70 bg-[#0b1018] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+            <div className="bg-[#1a202c] px-3 py-1.5 font-mono text-[11px] text-zinc-400">
               /Users/chan/Library/Java/JavaVirtualMachines/graalvm-ce-21.0.2/Contents/Home/bin/java ...
             </div>
 
-            <div className="grid max-h-[65vh] grid-cols-1 overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)]">
+            <div className="grid max-h-[65vh] grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_220px]">
               <div className="min-w-0 px-3 py-3">
-                <pre className="overflow-x-auto font-mono text-[10px] leading-4 text-zinc-500">
+                <pre className="overflow-x-auto font-mono text-[16px] leading-[1.2] text-zinc-300">
                   {SPRING_BOOT_BANNER}
                 </pre>
+                <p className="mt-2 font-mono text-sm text-emerald-400">
+                  :: Spring Boot ::({SPRING_BOOT_VERSION})
+                </p>
               </div>
 
-              <div className="min-w-0 px-3 py-3">
-                <div className="space-y-1 font-mono text-xs leading-6">
-                  <p className="text-zinc-300">
-                    <span className="text-zinc-500">$</span>{" "}
-                    <span className="text-cyan-300">{modeStatusLine}</span>
+              <div className="flex min-w-0 items-center justify-center px-3 py-3">
+                <div className="w-full rounded-lg border border-zinc-700 bg-[#111827]/70 px-3 py-5 text-center">
+                  <p className="font-mono text-4xl font-bold leading-none text-cyan-300">
+                    {summaryCountText}
                   </p>
-                  <p className="text-zinc-300">
-                    <span className="text-zinc-500">$</span>{" "}
-                    <span>{getModeDescription(mode)}</span>
-                  </p>
-                  <p className="text-zinc-400">
-                    <span className="text-zinc-500">$</span>{" "}
-                    선택 설정: 카테고리 {categoryLabel}, 난이도 {difficultyLabel}, 세션 ID {pidRef.current}
-                  </p>
-                  {readyCheck?.participants?.length ? (
-                    <p className="text-zinc-400">
-                      <span className="text-zinc-500">$</span>{" "}
-                      {readyCheck.participants
-                        .map((participant) => `${participant.nickname}${participant.userId === currentUserId ? "(ME)" : ""}:${getReadyDecisionLabel(participant.decision)}`)
-                        .join(" | ")}
-                    </p>
-                  ) : null}
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
-                  {mode === "SEARCHING" ? (
-                    <button
-                      type="button"
-                      onClick={onCancel}
-                      disabled={isPending}
-                      className={actionButtonClass}
-                    >
-                      매칭 취소
-                    </button>
-                  ) : null}
-
-                  {mode === "READY_CHECK" ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={onDecline}
-                        disabled={isPending || !readyCheck}
-                        className={actionButtonClass}
-                      >
-                        거절
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onAccept}
-                        disabled={isPending || !readyCheck || readyCheck.acceptedByMe}
-                        className={actionButtonClass}
-                      >
-                        {readyCheck?.acceptedByMe ? "수락 완료" : "수락"}
-                      </button>
-                    </>
-                  ) : null}
-
-                  {mode === "ROOM_READY" ? (
-                    <button
-                      type="button"
-                      onClick={onRetryRoomEntry}
-                      disabled={isPending}
-                      className={actionButtonClass}
-                    >
-                      방 입장 재시도
-                    </button>
-                  ) : null}
-
-                  {mode === "TERMINAL" ? (
-                    <button
-                      type="button"
-                      onClick={onCloseTerminal}
-                      disabled={isPending}
-                      className={actionButtonClass}
-                    >
-                      닫기
-                    </button>
-                  ) : null}
+                  <p className="mt-2 text-sm font-semibold text-zinc-300">{summaryModeText}</p>
                 </div>
               </div>
             </div>
 
             <div
               ref={logViewportRef}
-              className="h-[30vh] min-h-[150px] overflow-y-auto px-3 py-2"
+              className="mt-2 h-[30vh] min-h-[150px] overflow-y-auto px-3 py-2"
             >
               <div className="font-mono text-xs">
                 {consoleLogs.map((line) => (
@@ -684,6 +745,9 @@ export default function QueueModal({
                       {line.level}
                     </span>{" "}
                     <span>{line.message}</span>
+                    {line.count > 1 ? (
+                      <span className="ml-1 text-zinc-500">(x{line.count})</span>
+                    ) : null}
                   </p>
                 ))}
               </div>
@@ -696,11 +760,23 @@ export default function QueueModal({
                   : "bg-[#151d2a] text-zinc-400"
               }`}
             >
-              {error ?? terminalMessage ?? feedback}
+              {footerMessage}
             </div>
           </section>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={isCancelConfirmOpen}
+        title="매칭을 취소할까요?"
+        description="현재 대기열에서 즉시 이탈합니다. 다시 시작하려면 매칭 시작을 다시 눌러야 합니다."
+        confirmLabel="매칭 취소"
+        cancelLabel="계속 대기"
+        confirmTone="default"
+        disabled={isPending}
+        onConfirm={handleCancelConfirm}
+        onCancel={handleCancelDialogClose}
+      />
 
       <style jsx>{`
         .queue-sheet {

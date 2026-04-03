@@ -1,6 +1,7 @@
 export { ApiCallout } from "./api-callout";
 export { MathText } from "./math-text";
 export { CodeWindow } from "./code-window";
+export { ConfirmDialog } from "./confirm-dialog";
 export { DefinitionGrid } from "./definition-grid";
 export { EmptyPanel } from "./empty-panel";
 export { EventTimeline } from "./event-timeline";
