@@ -19,6 +19,10 @@ import type {
 } from "@/shared/api/contracts";
 import { useAppSession } from "@/features/layout/session-context";
 import {
+  readPreferredEditorLanguage,
+  writePreferredEditorLanguage,
+} from "@/shared/utils/editor-language";
+import {
   DefinitionGrid,
   MathText,
   Panel,
@@ -49,6 +53,9 @@ const MAX_TOP_RATIO = 100;
 const LEFT_RATIO_SNAP_POINTS = [0, 22, 32, 50, 68, 78];
 const TOP_RATIO_SNAP_POINTS = [24, 34, 50, 66, 76, 92, 100];
 const SPLIT_SNAP_GAP = 4;
+const DEFAULT_LEFT_PANE_RATIO = 50;
+const DEFAULT_RIGHT_TOP_PANE_RATIO = 100;
+const SOLO_LAYOUT_STORAGE_KEY = "bracket:solo-editor-layout:v1";
 
 interface SoloCaseRunResult {
   status: "pending" | "done" | "error";
@@ -81,6 +88,40 @@ function clamp(value: number, min: number, max: number) {
 function snapRatio(value: number, points: number[], gap: number) {
   const nearest = points.find((point) => Math.abs(value - point) <= gap);
   return nearest ?? value;
+}
+
+function readStoredLayout() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(SOLO_LAYOUT_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as {
+      leftPaneRatio?: number;
+      rightTopPaneRatio?: number;
+    };
+
+    const leftPaneRatio =
+      typeof parsed.leftPaneRatio === "number"
+        ? clamp(parsed.leftPaneRatio, MIN_LEFT_RATIO, MAX_LEFT_RATIO)
+        : DEFAULT_LEFT_PANE_RATIO;
+    const rightTopPaneRatio =
+      typeof parsed.rightTopPaneRatio === "number"
+        ? clamp(parsed.rightTopPaneRatio, MIN_TOP_RATIO, MAX_TOP_RATIO)
+        : DEFAULT_RIGHT_TOP_PANE_RATIO;
+
+    return {
+      leftPaneRatio,
+      rightTopPaneRatio,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function isRunResultEvent(payload: unknown): payload is SoloRunWsMessage {
@@ -207,6 +248,11 @@ function resolveStarterCode(problem: ProblemDetailResponse | null, language: str
 
 function resolveDefaultLanguage(problem: ProblemDetailResponse | null) {
   const languages = resolveLanguages(problem);
+  const preferredLanguage = readPreferredEditorLanguage();
+
+  if (preferredLanguage && languages.includes(preferredLanguage)) {
+    return preferredLanguage;
+  }
 
   if (problem?.defaultLanguage && languages.includes(problem.defaultLanguage)) {
     return problem.defaultLanguage;
@@ -237,16 +283,27 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
   const [problem, setProblem] = useState<ProblemDetailResponse | null>(null);
   const [problemError, setProblemError] = useState<string | null>(null);
   const [isProblemLoading, setIsProblemLoading] = useState(true);
-  const [language, setLanguage] = useState("javascript");
-  const [code, setCode] = useState(defaultCodeByLanguage.javascript);
+  const [language, setLanguage] = useState(
+    () => readPreferredEditorLanguage() ?? "javascript",
+  );
+  const [code, setCode] = useState(() => {
+    const preferredLanguage = readPreferredEditorLanguage() ?? "javascript";
+    return defaultCodeByLanguage[preferredLanguage] ?? defaultCodeByLanguage.javascript;
+  });
   const [selectedCaseIndex, setSelectedCaseIndex] = useState<number | null>(null);
   const [runningCaseIndex, setRunningCaseIndex] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [caseRunResults, setCaseRunResults] = useState<Record<number, SoloCaseRunResult>>({});
   const [leftPanelTab, setLeftPanelTab] = useState<LeftPanelTab>("description");
   const [submitState, setSubmitState] = useState<SoloSubmitState>(createInitialSubmitState);
-  const [leftPaneRatio, setLeftPaneRatio] = useState(54);
-  const [rightTopPaneRatio, setRightTopPaneRatio] = useState(52);
+  const [leftPaneRatio, setLeftPaneRatio] = useState(() => {
+    const stored = readStoredLayout();
+    return stored?.leftPaneRatio ?? DEFAULT_LEFT_PANE_RATIO;
+  });
+  const [rightTopPaneRatio, setRightTopPaneRatio] = useState(() => {
+    const stored = readStoredLayout();
+    return stored?.rightTopPaneRatio ?? DEFAULT_RIGHT_TOP_PANE_RATIO;
+  });
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
   const rightColumnRef = useRef<HTMLDivElement | null>(null);
   const runTimeoutRef = useRef<number | null>(null);
@@ -359,6 +416,20 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
   useEffect(() => {
     rightTopPaneRatioRef.current = rightTopPaneRatio;
   }, [rightTopPaneRatio]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(
+      SOLO_LAYOUT_STORAGE_KEY,
+      JSON.stringify({
+        leftPaneRatio,
+        rightTopPaneRatio,
+      }),
+    );
+  }, [leftPaneRatio, rightTopPaneRatio]);
 
   useEffect(() => {
     const memberId = session.member?.memberId;
@@ -477,6 +548,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
   function handleLanguageChange(nextLanguage: string) {
     setLanguage(nextLanguage);
     setCode(resolveStarterCode(problem, nextLanguage));
+    writePreferredEditorLanguage(nextLanguage);
   }
 
   async function handleRunCase(caseIndex: number) {
@@ -971,6 +1043,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                       </div>
                     </div>
                     <DefinitionGrid
+                      compact
                       items={[
                         { label: "problemId", value: problem.problemId },
                         { label: "difficulty", value: problem.difficulty },
@@ -1132,8 +1205,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                   <div className="space-y-4 min-h-0 flex-1 overflow-y-auto">
                     {sampleCases.length > 0 ? (
                       <>
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex flex-wrap gap-2">
+                      <div className="flex items-center gap-3">
+                        <div className="min-w-0 flex-1 overflow-x-auto pb-1">
+                          <div className="flex w-max gap-2 pr-1">
                           {sampleCases.map((_, index) => {
                             const caseResult = caseRunResults[index];
                             const badgeState = getCaseBadgeState(caseResult);
@@ -1177,8 +1251,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                               </button>
                             );
                           })}
+                          </div>
                         </div>
-                        <p className="text-xs font-medium text-zinc-500">
+                        <p className="shrink-0 text-xs font-medium text-zinc-500">
                           ⌘/Ctrl+Enter: Run · Shift+Enter: Submit
                         </p>
                       </div>
@@ -1335,6 +1410,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                   </div>
                 </div>
                 <DefinitionGrid
+                  compact
                   items={[
                     { label: "problemId", value: problem.problemId },
                     { label: "difficulty", value: problem.difficulty },
@@ -1432,8 +1508,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
           <div className="space-y-4">
             {sampleCases.length > 0 ? (
               <>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex flex-wrap gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="min-w-0 flex-1 overflow-x-auto pb-1">
+                    <div className="flex w-max gap-2 pr-1">
                     {sampleCases.map((_, index) => {
                       const caseResult = caseRunResults[index];
                       const badgeState = getCaseBadgeState(caseResult);
@@ -1477,8 +1554,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                         </button>
                       );
                     })}
+                    </div>
                   </div>
-                  <p className="text-xs font-medium text-zinc-500">
+                  <p className="shrink-0 text-xs font-medium text-zinc-500">
                     ⌘/Ctrl+Enter: Run · Shift+Enter: Submit
                   </p>
                 </div>

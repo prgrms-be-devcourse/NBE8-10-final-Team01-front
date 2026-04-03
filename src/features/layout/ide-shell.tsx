@@ -85,7 +85,7 @@ export default function IdeShell({
   const pathname = usePathname();
   const router = useRouter();
   const refreshInFlightRef = useRef<Promise<SessionResponse> | null>(null);
-  const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(true);
+  const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
   const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(true);
   const [session, setSession] = useState<SessionResponse>(initialSession);
   const [sessionLoaded, setSessionLoaded] = useState(true);
@@ -205,6 +205,15 @@ export default function IdeShell({
       window.clearInterval(intervalId);
     };
   }, [pathname, session.authenticated, session.member]);
+
+  useEffect(() => {
+    const isSoloProblemRoute = /^\/problems\/\d+$/.test(pathname);
+    const isBattleRoomRoute = /^\/battle\/rooms\/\d+$/.test(pathname);
+
+    if (isSoloProblemRoute || isBattleRoomRoute) {
+      setIsQuickMenuOpen(false);
+    }
+  }, [pathname]);
 
   useEffect(() => {
     let active = true;
