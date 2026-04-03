@@ -97,9 +97,37 @@ export interface ReadyCheckStartedWsMessage {
   match: MatchStateResponse | null;
 }
 
+export interface ReadyDecisionChangedWsMessage {
+  type: "READY_DECISION_CHANGED";
+  queue: null;
+  match: MatchStateResponse | null;
+}
+
+export interface MatchCancelledWsMessage {
+  type: "MATCH_CANCELLED";
+  queue: null;
+  match: MatchStateResponse | null;
+}
+
+export interface MatchExpiredWsMessage {
+  type: "MATCH_EXPIRED";
+  queue: null;
+  match: MatchStateResponse | null;
+}
+
+export interface RoomReadyWsMessage {
+  type: "ROOM_READY";
+  queue: null;
+  match: MatchStateResponse | null;
+}
+
 export type MatchingWsMessage =
   | QueueStateChangedWsMessage
-  | ReadyCheckStartedWsMessage;
+  | ReadyCheckStartedWsMessage
+  | ReadyDecisionChangedWsMessage
+  | MatchCancelledWsMessage
+  | MatchExpiredWsMessage
+  | RoomReadyWsMessage;
 
 export interface ParticipantInfo {
   userId: number;
