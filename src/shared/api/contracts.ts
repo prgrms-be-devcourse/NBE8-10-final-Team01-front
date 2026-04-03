@@ -104,7 +104,7 @@ export type MatchingWsMessage =
 export interface ParticipantInfo {
   userId: number;
   nickname: string;
-  status: "READY" | "PLAYING" | "EXIT";
+  status: "READY" | "PLAYING" | "EXIT" | "ABANDONED";
 }
 
 export interface RoomResponse {
@@ -120,6 +120,10 @@ export interface JoinRoomResponse {
   roomId: number;
   status: string;
   timerEnd: string | null;
+}
+
+export interface BattleRoomStateResponse {
+  myCode: string | null;
 }
 
 export interface ProblemDetailResponse {

@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 
 import type {
   ApiErrorResponse,
+  BattleRoomStateResponse,
   JoinRoomResponse,
   ProblemDetailResponse,
   RoomResponse,
@@ -17,42 +18,236 @@ import type {
   SubmissionWsMessage,
 } from "@/shared/api/contracts";
 import { useAppSession } from "@/features/layout/session-context";
+import { DefinitionGrid, MathText, Panel, StatusPill } from "@/shared/ui";
 import {
-  ApiCallout,
-  DefinitionGrid,
-  EventTimeline,
-  MathText,
-  MetricCard,
-  MetricGrid,
-  PageHero,
-  Panel,
-  StatusPill,
-} from "@/shared/ui";
-import { formatDateTime } from "@/shared/utils/format-date-time";
+  readPreferredEditorLanguage,
+  writePreferredEditorLanguage,
+} from "@/shared/utils/editor-language";
 
 import {
   getBattleRoom,
-  getBattleRoomEvents,
   getProblemDetail,
-  latestSubmission as fallbackSubmission,
   submitTemplate,
 } from "./data";
 
 const BattleCodeEditor = dynamic(() => import("./code-editor"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[26rem] items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-950 text-sm text-zinc-300">
+    <div className="flex h-[26rem] items-center justify-center rounded-2xl border border-app-border bg-app-surface text-sm text-app-secondary">
       에디터를 준비하는 중입니다.
     </div>
   ),
 });
 
-function participantTone(status: string) {
-  if (status === "PLAYING" || status === "EXIT") {
-    return "success" as const;
+const MIN_LEFT_RATIO = 0;
+const MAX_LEFT_RATIO = 78;
+const MIN_TOP_RATIO = 24;
+const MAX_TOP_RATIO = 100;
+const LEFT_RATIO_SNAP_POINTS = [0, 22, 32, 50, 68, 78];
+const TOP_RATIO_SNAP_POINTS = [24, 34, 50, 66, 76, 92, 100];
+const SPLIT_SNAP_GAP = 4;
+const DEFAULT_LEFT_PANE_RATIO = 50;
+const DEFAULT_RIGHT_TOP_PANE_RATIO = 100;
+const BATTLE_LAYOUT_STORAGE_KEY = "bracket:battle-editor-layout:v1";
+const TESTCASE_SHORTCUT_HINT = "⌘/Ctrl+Enter: Run · Shift+Enter: Submit";
+const fallbackLanguages = ["python3", "java", "javascript"];
+const defaultCodeByLanguage: Record<string, string> = {
+  javascript: `function solve(input) {\n  // TODO: implement\n}\n`,
+  java: `import java.io.*;\nimport java.util.*;\n\npublic class Main {\n  public static void main(String[] args) throws Exception {\n    BufferedReader br = new BufferedReader(new InputStreamReader(System.in));\n    // TODO: implement\n  }\n}\n`,
+  python3: `def solve():\n    # TODO: implement\n    pass\n\nif __name__ == "__main__":\n    solve()\n`,
+  python: `def solve():\n    # TODO: implement\n    pass\n\nif __name__ == "__main__":\n    solve()\n`,
+};
+
+type LeftPanelTab = "description" | "submission";
+
+interface CaseBadgeState {
+  label: string;
+  tone: "pending" | "pass" | "fail";
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function snapRatio(value: number, points: number[], gap: number) {
+  const nearest = points.find((point) => Math.abs(value - point) <= gap);
+  return nearest ?? value;
+}
+
+function readStoredLayout() {
+  if (typeof window === "undefined") {
+    return null;
   }
 
-  return "default" as const;
+  try {
+    const raw = window.localStorage.getItem(BATTLE_LAYOUT_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as {
+      leftPaneRatio?: number;
+      rightTopPaneRatio?: number;
+    };
+
+    const leftPaneRatio =
+      typeof parsed.leftPaneRatio === "number"
+        ? clamp(parsed.leftPaneRatio, MIN_LEFT_RATIO, MAX_LEFT_RATIO)
+        : DEFAULT_LEFT_PANE_RATIO;
+    const rightTopPaneRatio =
+      typeof parsed.rightTopPaneRatio === "number"
+        ? clamp(parsed.rightTopPaneRatio, MIN_TOP_RATIO, MAX_TOP_RATIO)
+        : DEFAULT_RIGHT_TOP_PANE_RATIO;
+
+    return {
+      leftPaneRatio,
+      rightTopPaneRatio,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function normalizeVerdict(verdict: string | undefined) {
+  return (verdict ?? "").trim().toUpperCase();
+}
+
+function isPassVerdict(verdict: string | undefined) {
+  const normalized = normalizeVerdict(verdict);
+  return normalized === "AC" || normalized === "PASS";
+}
+
+function isWrongAnswerVerdict(verdict: string | undefined) {
+  const normalized = normalizeVerdict(verdict);
+  return normalized === "WA" || normalized === "WRONG_ANSWER" || normalized === "WRONG ANSWER";
+}
+
+function getCaseBadgeState(
+  result: RunTestCaseResult | undefined,
+): CaseBadgeState | null {
+  if (!result) {
+    return null;
+  }
+
+  if (normalizeVerdict(result.status) === "RUNNING") {
+    return { label: "RUNNING", tone: "pending" };
+  }
+
+  if (isPassVerdict(result.status)) {
+    return { label: "PASS", tone: "pass" };
+  }
+
+  if (isWrongAnswerVerdict(result.status)) {
+    return { label: "WA", tone: "fail" };
+  }
+
+  return { label: normalizeVerdict(result.status) || "FAIL", tone: "fail" };
+}
+
+function createFallbackCaseResult(
+  status: string,
+  input: string,
+  expectedOutput: string,
+  stderr: string | null = null,
+): RunTestCaseResult {
+  return {
+    input,
+    expectedOutput,
+    actualOutput: null,
+    status,
+    stderr,
+  };
+}
+
+function mapRunResultsByCaseIndex(
+  incomingResults: RunTestCaseResult[],
+  sampleCases: ProblemDetailResponse["sampleCases"],
+): RunTestCaseResult[] {
+  const sampleCaseList = sampleCases ?? [];
+  const totalCaseCount = Math.max(sampleCaseList.length, incomingResults.length);
+
+  return Array.from({ length: totalCaseCount }, (_, index) => {
+    const result = incomingResults[index];
+
+    if (result) {
+      return result;
+    }
+
+    const sampleCase = sampleCaseList[index];
+    return createFallbackCaseResult(
+      "NO_RESULT",
+      sampleCase?.input ?? "(empty)",
+      sampleCase?.output ?? "(empty)",
+      "해당 케이스 실행 결과를 받지 못했습니다.",
+    );
+  });
+}
+
+function resolveLanguages(problem: ProblemDetailResponse | null, currentLanguage: string) {
+  const base =
+    problem?.supportedLanguages && problem.supportedLanguages.length > 0
+      ? problem.supportedLanguages
+      : fallbackLanguages;
+
+  if (base.includes(currentLanguage)) {
+    return base;
+  }
+
+  return [currentLanguage, ...base];
+}
+
+function resolveStarterCode(problem: ProblemDetailResponse | null, language: string) {
+  const fromApi = problem?.starterCodes?.find((item) => item.language === language)?.code;
+
+  if (fromApi) {
+    return fromApi;
+  }
+
+  return defaultCodeByLanguage[language] ?? defaultCodeByLanguage.javascript;
+}
+
+function resolveDefaultLanguage(problem: ProblemDetailResponse | null, currentLanguage: string) {
+  const languages = resolveLanguages(problem, currentLanguage);
+
+  if (problem?.defaultLanguage && languages.includes(problem.defaultLanguage)) {
+    return problem.defaultLanguage;
+  }
+
+  return languages[0];
+}
+
+function getSubmitHeadline(isSubmitting: boolean, result: string | null | undefined) {
+  const code = normalizeVerdict(result ?? undefined);
+
+  if (isSubmitting) {
+    return "Submitting";
+  }
+
+  if (code === "JUDGING") {
+    return "Judging";
+  }
+
+  if (code === "AC" || code === "ACCEPTED") {
+    return "Accepted";
+  }
+
+  if (code === "WA" || code === "WRONG_ANSWER" || code === "WRONG ANSWER") {
+    return "Wrong Answer";
+  }
+
+  if (code === "CE" || code === "COMPILE_ERROR" || code === "COMPILE ERROR") {
+    return "Compile Error";
+  }
+
+  if (code === "RE" || code === "RUNTIME_ERROR" || code === "RUNTIME ERROR") {
+    return "Runtime Error";
+  }
+
+  if (code === "TLE" || code === "TIME_LIMIT_EXCEEDED" || code === "TIME LIMIT EXCEEDED") {
+    return "Time Limit Exceeded";
+  }
+
+  return code || "Submission";
 }
 
 export default function BattleRoomScreen({ roomId }: { roomId: string }) {
@@ -60,17 +255,111 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   const [room, setRoom] = useState<RoomResponse | null>(null);
   const [problem, setProblem] = useState<ProblemDetailResponse | null>(null);
   const [latestSubmission, setLatestSubmission] =
-    useState<SubmissionResponse | null>(fallbackSubmission);
-  const [code, setCode] = useState(submitTemplate.code);
-  const [language, setLanguage] = useState(submitTemplate.language);
+    useState<SubmissionResponse | null>(null);
+  const [language, setLanguage] = useState(
+    () => readPreferredEditorLanguage() ?? submitTemplate.language,
+  );
+  const [code, setCode] = useState(() => {
+    const preferredLanguage = readPreferredEditorLanguage() ?? submitTemplate.language;
+    return defaultCodeByLanguage[preferredLanguage] ?? submitTemplate.code;
+  });
   const [runResults, setRunResults] = useState<RunTestCaseResult[] | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
+  const [selectedRunCaseIndex, setSelectedRunCaseIndex] = useState<number | null>(null);
+  const [runningCaseIndex, setRunningCaseIndex] = useState<number | null>(null);
+  const [leftPanelTab, setLeftPanelTab] = useState<LeftPanelTab>("description");
+  const [leftPaneRatio, setLeftPaneRatio] = useState(() => {
+    const stored = readStoredLayout();
+    return stored?.leftPaneRatio ?? DEFAULT_LEFT_PANE_RATIO;
+  });
+  const [rightTopPaneRatio, setRightTopPaneRatio] = useState(() => {
+    const stored = readStoredLayout();
+    return stored?.rightTopPaneRatio ?? DEFAULT_RIGHT_TOP_PANE_RATIO;
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState("배틀룸 정보를 불러오는 중입니다.");
   const [error, setError] = useState<string | null>(null);
-  const [source, setSource] = useState<"api" | "fallback">("api");
   const hasAttemptedJoinRef = useRef(false);
+  const joinRequestInFlightRef = useRef(false);
+  const lastRejoinAttemptAtRef = useRef(0);
   const stompClientRef = useRef<Client | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const splitContainerRef = useRef<HTMLDivElement | null>(null);
+  const rightColumnRef = useRef<HTMLDivElement | null>(null);
+  const leftPaneRatioRef = useRef(leftPaneRatio);
+  const rightTopPaneRatioRef = useRef(rightTopPaneRatio);
+  const sampleCasesRef = useRef(problem?.sampleCases ?? []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+    const body = document.body;
+    const html = document.documentElement;
+    const previousBodyOverflow = body.style.overflow;
+    const previousHtmlOverflow = html.style.overflow;
+
+    const syncOverflowLock = () => {
+      if (mediaQuery.matches) {
+        body.style.overflow = "hidden";
+        html.style.overflow = "hidden";
+        return;
+      }
+
+      body.style.overflow = previousBodyOverflow;
+      html.style.overflow = previousHtmlOverflow;
+    };
+
+    syncOverflowLock();
+    mediaQuery.addEventListener("change", syncOverflowLock);
+
+    return () => {
+      mediaQuery.removeEventListener("change", syncOverflowLock);
+      body.style.overflow = previousBodyOverflow;
+      html.style.overflow = previousHtmlOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
+    const sampleCaseCount = problem?.sampleCases?.length ?? 0;
+    const runCaseCount = runResults?.length ?? 0;
+    const totalCaseCount = Math.max(sampleCaseCount, runCaseCount);
+
+    if (totalCaseCount === 0) {
+      setSelectedRunCaseIndex(null);
+      return;
+    }
+
+    setSelectedRunCaseIndex((current) => {
+      if (current !== null && current >= 0 && current < totalCaseCount) {
+        return current;
+      }
+
+      return 0;
+    });
+  }, [problem, runResults]);
+
+  useEffect(() => {
+    leftPaneRatioRef.current = leftPaneRatio;
+  }, [leftPaneRatio]);
+
+  useEffect(() => {
+    rightTopPaneRatioRef.current = rightTopPaneRatio;
+  }, [rightTopPaneRatio]);
+
+  useEffect(() => {
+    sampleCasesRef.current = problem?.sampleCases ?? [];
+  }, [problem]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(
+      BATTLE_LAYOUT_STORAGE_KEY,
+      JSON.stringify({
+        leftPaneRatio,
+        rightTopPaneRatio,
+      }),
+    );
+  }, [leftPaneRatio, rightTopPaneRatio]);
 
   useEffect(() => {
     if (!sessionLoaded) {
@@ -84,10 +373,15 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
         if (!active) {
           return;
         }
+
         setRoom(null);
+        setProblem(null);
+        setError(null);
         setMessage("배틀룸은 로그인 후 접근할 수 있습니다.");
         return;
       }
+
+      setError(null);
 
       const roomResponse = await fetch(`/api/battle/rooms/${roomId}`, {
         cache: "no-store",
@@ -104,27 +398,36 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
           if (!active) {
             return;
           }
-          setSource("fallback");
+          const fallbackProblem = getProblemDetail(fallbackRoom.problemId);
+          const nextLanguage = resolveDefaultLanguage(fallbackProblem, submitTemplate.language);
+          const nextStarterCode = resolveStarterCode(fallbackProblem, nextLanguage);
           setRoom(fallbackRoom);
-          setProblem(getProblemDetail(fallbackRoom.problemId));
+          setProblem(fallbackProblem);
+          setLanguage(nextLanguage);
+          setCode(nextStarterCode);
           setMessage("백엔드 연결 실패로 샘플 배틀룸을 표시합니다.");
           return;
         }
 
         const payload = (await roomResponse.json().catch(() => null)) as ApiErrorResponse | null;
+
         if (!active) {
           return;
         }
+
+        setRoom(null);
+        setProblem(null);
         setError(payload?.message ?? "배틀룸을 불러오지 못했습니다.");
         return;
       }
 
       const nextRoom = (await roomResponse.json()) as RoomResponse;
+
       if (!active) {
         return;
       }
+
       setRoom(nextRoom);
-      setSource("api");
 
       const problemResponse = await fetch(`/api/problems/${nextRoom.problemId}`, {
         cache: "no-store",
@@ -134,13 +437,45 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
         if (!active) {
           return;
         }
-        setProblem((await problemResponse.json()) as ProblemDetailResponse);
-        setMessage("실제 API 기반 배틀룸을 표시합니다.");
+
+        const nextProblem = (await problemResponse.json()) as ProblemDetailResponse;
+        const fallbackProblem = getProblemDetail(nextRoom.problemId);
+        const mergedProblem =
+          fallbackProblem
+            ? {
+                ...fallbackProblem,
+                ...nextProblem,
+                sampleCases:
+                  nextProblem.sampleCases && nextProblem.sampleCases.length > 0
+                    ? nextProblem.sampleCases
+                    : fallbackProblem.sampleCases,
+                starterCodes:
+                  nextProblem.starterCodes && nextProblem.starterCodes.length > 0
+                    ? nextProblem.starterCodes
+                    : fallbackProblem.starterCodes,
+                supportedLanguages:
+                  nextProblem.supportedLanguages && nextProblem.supportedLanguages.length > 0
+                    ? nextProblem.supportedLanguages
+                    : fallbackProblem.supportedLanguages,
+                defaultLanguage: nextProblem.defaultLanguage ?? fallbackProblem.defaultLanguage,
+              }
+            : nextProblem;
+        const nextLanguage = resolveDefaultLanguage(mergedProblem, submitTemplate.language);
+        const nextStarterCode = resolveStarterCode(mergedProblem, nextLanguage);
+        setProblem(mergedProblem);
+        setLanguage(nextLanguage);
+        setCode(nextStarterCode);
+        setMessage("");
       } else {
         if (!active) {
           return;
         }
-        setProblem(getProblemDetail(nextRoom.problemId));
+        const fallbackProblem = getProblemDetail(nextRoom.problemId);
+        const nextLanguage = resolveDefaultLanguage(fallbackProblem, submitTemplate.language);
+        const nextStarterCode = resolveStarterCode(fallbackProblem, nextLanguage);
+        setProblem(fallbackProblem);
+        setLanguage(nextLanguage);
+        setCode(nextStarterCode);
         setMessage("문제 상세 조회에 실패해 샘플 설명을 함께 표시합니다.");
       }
     })();
@@ -151,13 +486,16 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   }, [refreshSession, roomId, session.authenticated, sessionLoaded]);
 
   useEffect(() => {
-    if (
-      hasAttemptedJoinRef.current ||
-      !room ||
-      !session.authenticated ||
-      room.status !== "WAITING" ||
-      !session.member
-    ) {
+    hasAttemptedJoinRef.current = false;
+    joinRequestInFlightRef.current = false;
+    lastRejoinAttemptAtRef.current = 0;
+    setLatestSubmission(null);
+    setIsSubmitting(false);
+    setLeftPanelTab("description");
+  }, [roomId]);
+
+  useEffect(() => {
+    if (!room || !session.authenticated || !session.member || joinRequestInFlightRef.current) {
       return;
     }
 
@@ -165,21 +503,54 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
       (item) => item.userId === session.member?.memberId,
     );
 
-    if (participant?.status !== "READY") {
+    const shouldJoinFromWaiting =
+      room.status === "WAITING" &&
+      participant?.status === "READY" &&
+      !hasAttemptedJoinRef.current;
+    const shouldRejoinFromPlaying =
+      room.status === "PLAYING" &&
+      (participant?.status === "ABANDONED" || participant?.status === "EXIT");
+
+    if (!shouldJoinFromWaiting && !shouldRejoinFromPlaying) {
       return;
     }
 
-    hasAttemptedJoinRef.current = true;
+    if (shouldRejoinFromPlaying) {
+      const now = Date.now();
+      // 재연결 상태에서는 짧은 텀으로 재시도하되 과도한 join 요청 폭주를 막는다.
+      if (now - lastRejoinAttemptAtRef.current < 2000) {
+        return;
+      }
+      lastRejoinAttemptAtRef.current = now;
+    }
 
-    startTransition(() => {
-      void (async () => {
+    if (shouldJoinFromWaiting) {
+      hasAttemptedJoinRef.current = true;
+    }
+
+    joinRequestInFlightRef.current = true;
+
+    const finalizeJoinAttempt = () => {
+      joinRequestInFlightRef.current = false;
+    };
+
+    if (!participant) {
+      finalizeJoinAttempt();
+      return;
+    }
+
+    void (async () => {
+      try {
         const response = await fetch(`/api/battle/rooms/${roomId}/join`, {
           method: "POST",
         });
 
         if (!response.ok) {
           const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-          setError(payload?.message ?? "배틀룸 입장에 실패했습니다.");
+          if (shouldJoinFromWaiting) {
+            setError(payload?.message ?? "배틀룸 입장에 실패했습니다.");
+            hasAttemptedJoinRef.current = false;
+          }
           return;
         }
 
@@ -193,25 +564,38 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
         if (refreshed.ok) {
           setRoom((await refreshed.json()) as RoomResponse);
         }
-      })();
-    });
+
+        const stateResponse = await fetch(`/api/battle/rooms/${roomId}/state`, {
+          cache: "no-store",
+        });
+
+        if (stateResponse.ok) {
+          const stateData = (await stateResponse.json()) as BattleRoomStateResponse;
+
+          if (typeof stateData.myCode === "string" && stateData.myCode.length > 0) {
+            setCode(stateData.myCode);
+          }
+        }
+      } finally {
+        finalizeJoinAttempt();
+      }
+    })();
   }, [room, roomId, session.authenticated, session.member?.memberId]);
 
-  // WebSocket: BATTLE_STARTED 이벤트 수신 시 방 상태 자동 갱신
   useEffect(() => {
-    if (!session.authenticated) return;
+    if (!session.authenticated) {
+      return;
+    }
 
     const client = new Client({
       webSocketFactory: () => new SockJS("/ws"),
       reconnectDelay: 3000,
-      // 연결(및 재연결) 시마다 1회용 토큰을 새로 발급해 STOMP CONNECT 헤더에 주입.
-      // 토큰은 30초 TTL이고 1회 사용 후 폐기되므로 재연결 시에도 반드시 새 토큰이 필요.
-      // 토큰 발급 실패 시 쿠키 기반 인증(로컬 환경)으로 자동 폴백됨.
       beforeConnect: async () => {
-        // 재연결 시 이전 연결에서 소비된 토큰이 재사용되지 않도록 먼저 초기화
         client.connectHeaders = {};
+
         try {
           const res = await fetch("/api/v1/ws/token", { method: "POST" });
+
           if (res.ok) {
             const data = (await res.json()) as { token: string };
             client.connectHeaders = { "X-WS-Token": data.token };
@@ -223,10 +607,10 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
       onConnect: () => {
         client.subscribe(`/topic/room/${roomId}`, (message) => {
           let payload: unknown;
+
           try {
             payload = JSON.parse(message.body) as unknown;
           } catch {
-            console.warn("[WS] 메시지 파싱 실패:", message.body);
             return;
           }
 
@@ -236,13 +620,12 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
 
           const type = (payload as { type: unknown }).type;
 
-          if (type === "BATTLE_STARTED") {
+          if (type === "BATTLE_STARTED" || type === "PARTICIPANT_DONE") {
             void fetch(`/api/battle/rooms/${roomId}`, { cache: "no-store" })
               .then((res) => (res.ok ? res.json() : null))
               .then((data: RoomResponse | null) => {
                 if (data) {
                   setRoom(data);
-                  setMessage("배틀이 시작됐습니다!");
                 }
               });
             return;
@@ -250,33 +633,36 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
 
           if (type === "SUBMISSION") {
             const msg = payload as SubmissionWsMessage;
+
             if (msg.userId === session.member?.memberId) {
+              setLeftPanelTab("submission");
               setLatestSubmission((prev) =>
                 prev
-                  ? { ...prev, result: msg.result, passedCount: msg.passedCount, totalCount: msg.totalCount }
-                  : { submissionId: 0, result: msg.result, passedCount: msg.passedCount, totalCount: msg.totalCount },
+                  ? {
+                      ...prev,
+                      result: msg.result,
+                      passedCount: msg.passedCount,
+                      totalCount: msg.totalCount,
+                    }
+                  : {
+                      submissionId: 0,
+                      result: msg.result,
+                      passedCount: msg.passedCount,
+                      totalCount: msg.totalCount,
+                    },
               );
+              setIsSubmitting(false);
               setMessage(`채점 완료: ${msg.result} (${msg.passedCount}/${msg.totalCount})`);
             }
-            return;
-          }
-
-          if (type === "PARTICIPANT_DONE") {
-            void fetch(`/api/battle/rooms/${roomId}`, { cache: "no-store" })
-              .then((res) => (res.ok ? res.json() : null))
-              .then((data: RoomResponse | null) => {
-                if (data) setRoom(data);
-              });
-            return;
           }
         });
 
         client.subscribe(`/topic/room/${roomId}/run`, (message) => {
           let payload: unknown;
+
           try {
             payload = JSON.parse(message.body) as unknown;
           } catch {
-            console.warn("[WS] run 메시지 파싱 실패:", message.body);
             return;
           }
 
@@ -285,9 +671,10 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
           }
 
           const msg = payload as RunWsMessage;
+
           if (msg.type === "RUN_RESULT" && msg.userId === session.member?.memberId) {
-            setRunResults(msg.results);
-            setIsRunning(false);
+            setRunResults(mapRunResultsByCaseIndex(msg.results, sampleCasesRef.current));
+            setRunningCaseIndex(null);
           }
         });
       },
@@ -295,54 +682,52 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
 
     client.activate();
     stompClientRef.current = client;
+
     return () => {
       stompClientRef.current = null;
       void client.deactivate();
     };
   }, [roomId, session.authenticated, session.member?.memberId]);
 
-  function handleSubmit() {
+  function handleLanguageChange(nextLanguage: string) {
+    setLanguage(nextLanguage);
+    setCode(resolveStarterCode(problem, nextLanguage));
+    writePreferredEditorLanguage(nextLanguage);
+  }
+
+  function handleCodeChange(nextCode: string) {
+    setCode(nextCode);
+
+    if (stompClientRef.current?.connected && room?.status === "PLAYING") {
+      stompClientRef.current.publish({
+        destination: `/app/room/${roomId}/code`,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: nextCode }),
+      });
+    }
+  }
+
+  async function handleRunCase(caseIndex: number) {
     if (!room) {
       return;
     }
 
-    setError(null);
-
-    startTransition(() => {
-      void (async () => {
-        const response = await fetch("/api/submissions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            roomId: room.roomId,
-            code,
-            language,
-          }),
-        });
-
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-          setError(payload?.message ?? "제출에 실패했습니다.");
-          return;
-        }
-
-        const payload = (await response.json()) as SubmissionResponse;
-        setLatestSubmission(payload);
-        setMessage(`제출 완료: ${payload.result ?? "채점 대기"}`);
-      })();
-    });
-  }
-
-  function handleRun() {
-    if (!room) return;
+    const sampleCaseList = problem?.sampleCases ?? [];
+    const totalCaseCount = Math.max(sampleCaseList.length, runResults?.length ?? 0);
+    const runningResults = Array.from({ length: totalCaseCount }, (_, index) =>
+      createFallbackCaseResult(
+        "RUNNING",
+        sampleCaseList[index]?.input ?? "(empty)",
+        sampleCaseList[index]?.output ?? "(empty)",
+      ),
+    );
 
     setError(null);
-    setIsRunning(true);
-    setRunResults(null);
+    setSelectedRunCaseIndex(caseIndex);
+    setRunningCaseIndex(caseIndex);
+    setRunResults(runningResults);
 
-    void (async () => {
+    try {
       const response = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -351,47 +736,238 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
 
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-        setError(payload?.message ?? "실행 요청에 실패했습니다.");
-        setIsRunning(false);
+        const failMessage = payload?.message ?? "실행 요청에 실패했습니다.";
+        setError(failMessage);
+        setRunResults(
+          Array.from({ length: totalCaseCount }, (_, index) =>
+            createFallbackCaseResult(
+              "REQUEST_FAILED",
+              sampleCaseList[index]?.input ?? "(empty)",
+              sampleCaseList[index]?.output ?? "(empty)",
+              failMessage,
+            ),
+          ),
+        );
+        setRunningCaseIndex((current) => (current === caseIndex ? null : current));
       }
-      // 성공 시 결과는 WebSocket(RUN_RESULT)으로 수신
-    })();
+    } catch {
+      const failMessage = "실행 요청 중 네트워크 오류가 발생했습니다.";
+      setError(failMessage);
+      setRunResults(
+        Array.from({ length: totalCaseCount }, (_, index) =>
+          createFallbackCaseResult(
+            "REQUEST_FAILED",
+            sampleCaseList[index]?.input ?? "(empty)",
+            sampleCaseList[index]?.output ?? "(empty)",
+            failMessage,
+          ),
+        ),
+      );
+      setRunningCaseIndex((current) => (current === caseIndex ? null : current));
+    }
   }
+
+  async function handleSubmit() {
+    if (!room) {
+      return;
+    }
+
+    setError(null);
+    setIsSubmitting(true);
+    setLeftPanelTab("submission");
+
+    try {
+      const response = await fetch("/api/submissions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          roomId: room.roomId,
+          code,
+          language,
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
+        setError(payload?.message ?? "제출에 실패했습니다.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      const payload = (await response.json()) as SubmissionResponse;
+      setLatestSubmission(payload);
+      setMessage(`제출 완료: ${payload.result ?? "채점 대기"}`);
+      setIsSubmitting(false);
+    } catch {
+      setError("제출 요청 중 네트워크 오류가 발생했습니다.");
+      setIsSubmitting(false);
+    }
+  }
+
+  function startVerticalResize(event: React.MouseEvent<HTMLDivElement>) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const container = splitContainerRef.current;
+
+    if (!container) {
+      return;
+    }
+
+    const onMove = (moveEvent: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      const nextRatio = ((moveEvent.clientX - rect.left) / rect.width) * 100;
+      const clamped = clamp(nextRatio, MIN_LEFT_RATIO, MAX_LEFT_RATIO);
+      leftPaneRatioRef.current = clamped;
+      setLeftPaneRatio(clamped);
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      const snapped = snapRatio(leftPaneRatioRef.current, LEFT_RATIO_SNAP_POINTS, SPLIT_SNAP_GAP);
+      leftPaneRatioRef.current = snapped;
+      setLeftPaneRatio(snapped);
+    };
+
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  function startHorizontalResize(event: React.MouseEvent<HTMLDivElement>) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const onMove = (moveEvent: MouseEvent) => {
+      const rect = rightColumnRef.current?.getBoundingClientRect();
+
+      if (!rect) {
+        return;
+      }
+
+      const nextRatio = ((moveEvent.clientY - rect.top) / rect.height) * 100;
+      const clamped = clamp(nextRatio, MIN_TOP_RATIO, MAX_TOP_RATIO);
+      rightTopPaneRatioRef.current = clamped;
+      setRightTopPaneRatio(clamped);
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      const snapped = snapRatio(rightTopPaneRatioRef.current, TOP_RATIO_SNAP_POINTS, SPLIT_SNAP_GAP);
+      rightTopPaneRatioRef.current = snapped;
+      setRightTopPaneRatio(snapped);
+    };
+
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "row-resize";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      const isRunShortcut =
+        event.key === "Enter" && (event.metaKey || event.ctrlKey) && !event.shiftKey;
+      const isSubmitShortcut = event.key === "Enter" && event.shiftKey;
+
+      if (!isRunShortcut && !isSubmitShortcut) {
+        return;
+      }
+
+      const target = event.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement) {
+        return;
+      }
+
+      if (isSubmitShortcut) {
+        if (isSubmitting) {
+          return;
+        }
+
+        event.preventDefault();
+        void handleSubmit();
+        return;
+      }
+
+      if (!room || room.status !== "PLAYING" || runningCaseIndex !== null) {
+        return;
+      }
+
+      const sampleCaseCount = problem?.sampleCases?.length ?? 0;
+      const runCaseCount = runResults?.length ?? 0;
+      const totalCaseCount = Math.max(sampleCaseCount, runCaseCount);
+      const runCaseIndex = selectedRunCaseIndex ?? (totalCaseCount > 0 ? 0 : null);
+
+      if (runCaseIndex === null) {
+        return;
+      }
+
+      event.preventDefault();
+      void handleRunCase(runCaseIndex);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [
+    handleRunCase,
+    handleSubmit,
+    isSubmitting,
+    problem,
+    room,
+    runResults,
+    runningCaseIndex,
+    selectedRunCaseIndex,
+  ]);
 
   if (!sessionLoaded && !room) {
     return (
-      <div className="space-y-8">
-        <PageHero
-          eyebrow="Battle Room"
-          title="세션을 확인하는 중입니다."
-          description="잠시만 기다려주세요."
-          actions={<StatusPill>Session</StatusPill>}
-        />
-      </div>
+      <Panel variant="dark" title="세션 확인" description="인증 상태를 확인하는 중입니다.">
+        <p className="text-sm text-app-muted">잠시만 기다려주세요.</p>
+      </Panel>
     );
   }
 
   if (!session.authenticated && !room) {
     return (
       <div className="space-y-8">
-        <PageHero
-          eyebrow="Battle Room"
-          title="로그인 후 배틀룸에 입장할 수 있습니다."
-          description="배틀룸, 제출, 결과 조회는 모두 보호된 API 흐름입니다. 메인에서 로그인 후 큐를 잡고 배틀룸으로 이동하세요."
-          actions={<StatusPill tone="warn">로그인 필요</StatusPill>}
-        />
-
-        <Panel title="이동" description="보호 화면 진입 전 처리">
+        <div className="flex items-center justify-between rounded-2xl border border-app-border bg-app-surface px-4 py-3">
+          <p className="text-sm font-medium text-app-secondary">
+            배틀룸은 로그인 후 이용할 수 있습니다.
+          </p>
+          <StatusPill tone="warn" variant="dark">로그인 필요</StatusPill>
+        </div>
+        <Panel variant="dark" title="이동" description="로그인 후 다시 배틀룸으로 돌아올 수 있습니다.">
           <div className="flex flex-wrap gap-3">
             <Link
               href={`/login?next=${encodeURIComponent(`/battle/rooms/${roomId}`)}`}
-              className="rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white"
+              className="rounded-2xl border border-app-accent/40 bg-gradient-to-r from-app-accent to-app-accent-hover px-4 py-3 text-sm font-medium text-white"
             >
               로그인하러 가기
             </Link>
             <Link
               href="/"
-              className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900"
+              className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm font-medium text-app-primary"
             >
               메인으로 돌아가기
             </Link>
@@ -404,382 +980,845 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   if (!room) {
     return (
       <div className="space-y-8">
-        <PageHero
-          eyebrow="Battle Room"
-          title="배틀룸을 열지 못했습니다."
-          description="현재 roomId에 해당하는 방을 찾을 수 없습니다."
-          actions={<StatusPill tone="danger">Load failed</StatusPill>}
-        />
-        <Panel title="오류" description="응답 메시지">
-          <p className="text-sm leading-7 text-zinc-700">{error ?? message}</p>
+        <div className="flex items-center justify-between rounded-2xl border border-app-danger/35 bg-app-danger/10 px-4 py-3">
+          <p className="text-sm font-medium text-app-danger">
+            배틀룸 정보를 가져오지 못했습니다.
+          </p>
+          <StatusPill tone="danger" variant="dark">Load failed</StatusPill>
+        </div>
+        <Panel variant="dark" title="오류" description="응답 메시지">
+          <p className="text-sm leading-7 text-app-secondary">
+            {error ?? message}
+          </p>
         </Panel>
       </div>
     );
   }
 
-  const events = getBattleRoomEvents(roomId);
+  const languages = resolveLanguages(problem, language);
+  const sampleCases = problem?.sampleCases ?? [];
+  const caseCount = Math.max(sampleCases.length, runResults?.length ?? 0);
+  const activeSampleCase =
+    selectedRunCaseIndex !== null ? sampleCases[selectedRunCaseIndex] ?? null : null;
+  const activeRunCase =
+    selectedRunCaseIndex !== null && runResults
+      ? runResults[selectedRunCaseIndex] ?? null
+      : null;
+  const activeCaseInput = activeSampleCase?.input ?? activeRunCase?.input ?? "(empty)";
+  const activeCaseExpected =
+    activeSampleCase?.output ?? activeRunCase?.expectedOutput ?? "(empty)";
+  const activeRunCasePass = isPassVerdict(activeRunCase?.status);
+  const activeRunCaseWrongAnswer = isWrongAnswerVerdict(activeRunCase?.status);
+  const isPlayable = room.status === "PLAYING";
+  const latestResultCode = normalizeVerdict(latestSubmission?.result ?? undefined);
+  const submitHeadline = getSubmitHeadline(isSubmitting, latestSubmission?.result);
+  const submitIsAccepted = latestResultCode === "AC" || latestResultCode === "ACCEPTED";
+  const submitIsWaiting = isSubmitting || latestResultCode === "JUDGING";
+  const submitHasResult = Boolean(isSubmitting || latestSubmission?.result);
+  const submitCardClass = submitIsAccepted
+    ? "border-app-success/30 bg-app-success/10"
+    : submitIsWaiting
+      ? "border-app-warn/30 bg-app-warn/10"
+      : submitHasResult
+        ? "border-app-danger/35 bg-app-danger/10"
+        : "border-app-border bg-app-elevated";
+  const submitHeadlineClass = submitIsAccepted
+    ? "text-app-success"
+    : submitIsWaiting
+      ? "text-app-warn"
+      : submitHasResult
+        ? "text-app-danger"
+        : "text-app-primary";
+  const submitBadgeClass = submitIsAccepted
+    ? "bg-app-success/15 text-app-success"
+    : submitIsWaiting
+      ? "bg-app-warn/15 text-app-warn"
+      : "bg-app-danger/15 text-app-danger";
+  const submitProgressText =
+    latestSubmission &&
+    latestSubmission.passedCount !== null &&
+    latestSubmission.totalCount !== null
+      ? `${latestSubmission.passedCount}/${latestSubmission.totalCount} testcases passed`
+      : null;
+  const runTargetCaseIndex = selectedRunCaseIndex ?? (caseCount > 0 ? 0 : null);
+  const runActionDisabled =
+    !isPlayable || runTargetCaseIndex === null || runningCaseIndex !== null;
+  const runActionLabel = runningCaseIndex !== null ? "Running..." : "Run";
+  const submitActionLabel = isSubmitting ? "Submitting..." : "Submit";
+  const isLeftPaneCollapsed = leftPaneRatio <= 8;
+  const isTestcaseCollapsed = rightTopPaneRatio >= 96;
 
   return (
-    <div className="space-y-8">
-      <PageHero
-        eyebrow="Battle Room"
-        title={`Room ${room.roomId} / ${room.status}`}
-        description="READY 상태 참여자는 화면 진입 시 자동으로 join 요청을 보냅니다. 문제 조회와 제출은 실제 API를 우선하고, 연결 실패 시에만 샘플 데이터를 보조로 사용합니다."
-        actions={
-          <>
-            <StatusPill tone={room.status === "PLAYING" ? "success" : "warn"}>
-              {room.status}
-            </StatusPill>
-            <StatusPill>problemId {room.problemId}</StatusPill>
-            <StatusPill>{source === "api" ? "API" : "Fallback"}</StatusPill>
-          </>
-        }
-      />
-
-      <MetricGrid>
-        <MetricCard label="Room ID" value={room.roomId} />
-        <MetricCard label="Max Players" value={room.maxPlayers} />
-        <MetricCard label="Participants" value={room.participants.length} />
-        <MetricCard label="Timer End" value={formatDateTime(room.timerEnd)} />
-      </MetricGrid>
-
-      <div
-        className={`rounded-2xl border px-4 py-3 text-sm ${
-          error
-            ? "border-rose-300 bg-rose-50 text-rose-900"
-            : "border-zinc-300 bg-white text-zinc-700"
-        }`}
-      >
-        {error ?? message}
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
-        <Panel
-          title="참가자 상태"
-          description="`RoomResponse.participants`를 그대로 참가자 보드에 투영합니다."
+    <div className="h-full space-y-6 lg:space-y-0">
+      {error && (
+        <div
+          className="rounded-2xl border border-app-danger/35 bg-app-danger/10 px-4 py-3 text-sm text-app-danger"
         >
-          <div className="space-y-3">
-            {room.participants.map((participant) => (
-              <div
-                key={participant.userId}
-                className="flex items-center justify-between rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3"
-              >
-                <div>
-                  <p className="font-medium text-zinc-950">{participant.nickname}</p>
-                  <p className="text-sm text-zinc-500">userId {participant.userId}</p>
-                </div>
-                <StatusPill tone={participantTone(participant.status)}>
-                  {participant.status}
-                </StatusPill>
-              </div>
-            ))}
-          </div>
-        </Panel>
-
-        <Panel
-          title="입장과 상태 변화"
-          description="현재 백엔드는 READY 참여자가 모두 PLAYING이 되면 배틀을 시작합니다."
-        >
-          <ul className="space-y-3 text-sm leading-7 text-zinc-700">
-            <li>메인에서 매칭 성사 메시지에 포함된 `roomId`를 읽어 이 화면으로 이동합니다.</li>
-            <li>이 화면은 내 참여자 상태가 `READY`이면 자동으로 `join` 요청을 한 번 보냅니다.</li>
-            <li>모든 참여자가 `PLAYING`으로 바뀌면 방 상태가 `PLAYING`이 되고 타이머가 시작됩니다.</li>
-          </ul>
-        </Panel>
-      </div>
-
-      {room.status === "WAITING" ? (
-        <div className="grid gap-6 xl:grid-cols-2">
-          <Panel
-            title="WAITING 상태"
-            description="아직 전원이 입장하지 않았을 때는 참여자 상태 위주로 보여줍니다."
-          >
-            <ul className="space-y-3 text-sm leading-7 text-zinc-700">
-              <li>문제는 이미 할당됐지만 실제 풀이 타이머는 아직 시작되지 않았을 수 있습니다.</li>
-              <li>현재 사용자에게 `READY`가 보이면 자동 입장 요청이 한 번 전송됩니다.</li>
-              <li>다른 참여자가 모두 들어오면 방 상태가 `PLAYING`으로 전환됩니다.</li>
-            </ul>
-          </Panel>
-
-          <Panel title="대기 상태 API" description="현재 화면에서 실제로 붙는 엔드포인트">
-            <div className="space-y-4">
-              <ApiCallout
-                method="GET"
-                path={`/api/battle/rooms/${room.roomId}`}
-                note="방 상태와 참여자 목록을 조회합니다."
-              />
-              <ApiCallout
-                method="POST"
-                path={`/api/battle/rooms/${room.roomId}/join`}
-                note="현재 참여자를 READY에서 PLAYING으로 전환합니다."
-              />
-              <ApiCallout
-                method="GET"
-                path={`/api/problems/${room.problemId}`}
-                note="문제 상세는 플레이 전에도 선조회할 수 있게 준비합니다."
-              />
-            </div>
-          </Panel>
+          {error}
         </div>
-      ) : (
-        <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <div className="space-y-6">
-            <Panel
-              title="문제 상세"
-              description="백엔드 `ProblemDetailResponse`를 문제 본문 섹션으로 사용합니다."
-            >
-              {problem ? (
-                <div className="space-y-4">
-                  <DefinitionGrid
-                    items={[
-                      { label: "title", value: problem.title },
-                      { label: "difficulty", value: problem.difficulty },
-                      { label: "timeLimitMs", value: problem.timeLimitMs },
-                      { label: "memoryLimitMb", value: problem.memoryLimitMb },
-                    ]}
-                  />
-                  <div className="space-y-4 rounded-2xl border border-zinc-300 bg-zinc-50 p-4">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                        Content
-                      </p>
-                      <p className="mt-2 text-sm leading-7 text-zinc-700">
-                        <MathText>{problem.content}</MathText>
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                        Input
-                      </p>
-                      <p className="mt-2 text-sm leading-7 text-zinc-700">
-                        <MathText>{problem.inputFormat}</MathText>
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                        Output
-                      </p>
-                      <p className="mt-2 text-sm leading-7 text-zinc-700">
-                        <MathText>{problem.outputFormat}</MathText>
-                      </p>
+      )}
+
+      <div className="hidden h-full min-h-0 lg:flex lg:flex-col lg:gap-4">
+        <div ref={splitContainerRef} className="flex min-h-0 flex-1">
+          <div
+            className={`h-full ${isLeftPaneCollapsed ? "" : "min-w-0"}`}
+            style={isLeftPaneCollapsed ? { width: "44px" } : { width: `${leftPaneRatio}%` }}
+          >
+            {isLeftPaneCollapsed ? (
+              <div
+                className="group relative flex h-full flex-col items-center gap-2 rounded-xl border border-app-border bg-app-surface px-1 py-3"
+                onClick={(event) => {
+                  if (event.target === event.currentTarget) {
+                    setLeftPaneRatio(32);
+                  }
+                }}
+              >
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  onMouseDown={startVerticalResize}
+                  onDoubleClick={() => setLeftPaneRatio(50)}
+                  className="absolute inset-y-0 -right-1 z-10 flex w-4 cursor-col-resize items-center justify-center"
+                >
+                  <div className="relative flex h-full w-full items-center justify-center">
+                    <div className="h-full w-px rounded bg-app-elevated transition group-hover:bg-app-accent/80" />
+                    <div className="absolute flex h-16 w-1.5 items-center justify-center rounded-full border border-app-border-strong bg-app-surface shadow-[0_0_0_1px_rgba(255,255,255,0.02)] transition group-hover:border-app-accent/60 group-hover:bg-app-accent/15">
+                      <div className="h-8 w-0.5 rounded-full bg-app-border-strong transition group-hover:bg-app-accent-soft" />
                     </div>
                   </div>
                 </div>
-              ) : (
-                <p className="text-sm text-zinc-600">문제 상세를 불러오지 못했습니다.</p>
-              )}
-            </Panel>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLeftPanelTab("description");
+                    setLeftPaneRatio(32);
+                  }}
+                  className={`w-full rounded-md border px-1 py-2 text-xs font-semibold transition ${
+                    leftPanelTab === "description"
+                      ? "border-app-border-strong bg-app-elevated text-app-primary"
+                      : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
+                  }`}
+                  style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
+                >
+                  Description
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLeftPanelTab("submission");
+                    setLeftPaneRatio(32);
+                  }}
+                  className={`w-full rounded-md border px-1 py-2 text-xs font-semibold transition ${
+                    leftPanelTab === "submission"
+                      ? "border-app-border-strong bg-app-elevated text-app-primary"
+                      : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
+                  }`}
+                  style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
+                >
+                  Submission
+                </button>
+              </div>
+            ) : (
+              <Panel variant="dark" title="문제 상세" className="flex h-full min-h-0 flex-col">
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setLeftPanelTab("description")}
+                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                        leftPanelTab === "description"
+                          ? "border-app-border-strong bg-app-elevated text-app-primary"
+                          : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
+                      }`}
+                    >
+                      Description
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLeftPanelTab("submission")}
+                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                        leftPanelTab === "submission"
+                          ? "border-app-border-strong bg-app-elevated text-app-primary"
+                          : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
+                      }`}
+                    >
+                      Submission
+                    </button>
+                  </div>
 
-            <Panel
-              title="실시간 이벤트 채널"
-              description="현재 소켓 연결은 아직 붙이지 않았고, 채널 경로와 이벤트 의미를 먼저 고정합니다."
-            >
-              <EventTimeline events={events} />
-            </Panel>
+                {leftPanelTab === "description" ? (
+                  <>
+                    <div className="rounded-2xl border border-app-border bg-app-elevated p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                        Battle
+                      </p>
+                      <h1 className="mt-2 text-2xl font-semibold tracking-tight text-app-primary">
+                        {problem ? `${problem.problemId}. ${problem.title}` : `Problem ${room.problemId}`}
+                      </h1>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <StatusPill variant="dark">{problem?.difficulty ?? "UNKNOWN"}</StatusPill>
+                        <StatusPill variant="dark">멀티 배틀</StatusPill>
+                      </div>
+                    </div>
+
+                    <DefinitionGrid
+                      compact
+                      variant="dark"
+                      items={[
+                        { label: "timeLimitMs", value: problem?.timeLimitMs ?? "-" },
+                        { label: "memoryLimitMb", value: problem?.memoryLimitMb ?? "-" },
+                      ]}
+                    />
+
+                    {problem ? (
+                      <div className="space-y-4 rounded-2xl border border-app-border bg-app-elevated p-4">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                            Content
+                          </p>
+                          <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
+                            {problem.content}
+                          </MathText>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                            Input
+                          </p>
+                          <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
+                            {problem.inputFormat}
+                          </MathText>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                            Output
+                          </p>
+                          <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
+                            {problem.outputFormat}
+                          </MathText>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm text-app-muted">
+                        문제 상세를 불러오는 중입니다.
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  submitHasResult ? (
+                    <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                        Submit Result
+                      </p>
+                      <div className="flex flex-wrap items-start gap-3">
+                        <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
+                          {submitHeadline}
+                        </p>
+                        {submitProgressText ? (
+                          <p className="pt-1 text-sm text-app-muted">{submitProgressText}</p>
+                        ) : null}
+                        <div className="ml-auto flex flex-col items-end gap-1 text-right">
+                          {latestResultCode ? (
+                            <span
+                              className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${submitBadgeClass}`}
+                            >
+                              {latestResultCode}
+                            </span>
+                          ) : null}
+                          <p className="text-xs text-app-muted">language: {language}</p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-app-border bg-app-base/80 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                          Current Submission
+                        </p>
+                        <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
+                          {code}
+                        </pre>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm text-app-muted">
+                      아직 제출 결과가 없습니다.
+                    </div>
+                  )
+                )}
+                </div>
+              </Panel>
+            )}
           </div>
 
-          <div className="space-y-6">
-            <Panel
-              title="코드 에디터"
-              description="LeetCode처럼 Run과 Submit을 분리하되, 현재 실제 실행은 Submit만 연결되어 있습니다."
-            >
-              <div className="space-y-4">
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium text-zinc-700">언어</span>
-                  <select
-                    value={language}
-                    onChange={(event) => setLanguage(event.target.value)}
-                    className="w-full rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500"
-                  >
-                    <option value="javascript">javascript</option>
-                    <option value="java">java</option>
-                    <option value="python">python</option>
-                  </select>
-                </label>
-
-                <div className="space-y-2">
-                  <span className="text-sm font-medium text-zinc-700">코드</span>
-                  <BattleCodeEditor
-                    language={language}
-                    value={code}
-                    onChange={(newCode) => {
-                      setCode(newCode);
-                      if (stompClientRef.current?.connected && room?.status === "PLAYING") {
-                        stompClientRef.current.publish({
-                          destination: `/app/room/${roomId}/code`,
-                          headers: { "content-type": "application/json" },
-                          body: JSON.stringify({ code: newCode }),
-                        });
-                      }
-                    }}
-                  />
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={handleRun}
-                    disabled={isRunning}
-                    className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
-                  >
-                    {isRunning ? "실행 중..." : "Run"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={isPending}
-                    className="w-full rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-500"
-                  >
-                    {isPending ? "제출 중..." : "Submit"}
-                  </button>
-                </div>
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={startVerticalResize}
+            onDoubleClick={() => setLeftPaneRatio(50)}
+            className={`group mx-1 items-center justify-center ${
+              isLeftPaneCollapsed ? "pointer-events-none hidden opacity-0" : "flex w-3 cursor-col-resize opacity-100"
+            }`}
+          >
+            <div className="relative flex h-full w-full items-center justify-center">
+              <div className="h-full w-px rounded bg-app-elevated transition group-hover:bg-app-accent/80" />
+              <div className="absolute top-1/2 flex h-20 w-2 -translate-y-1/2 items-center justify-center rounded-full border border-app-border-strong bg-app-surface shadow-[0_0_0_1px_rgba(255,255,255,0.02)] transition group-hover:border-app-accent/60 group-hover:bg-app-accent/15">
+                <div className="h-10 w-0.5 rounded-full bg-app-border-strong transition group-hover:bg-app-accent-soft" />
               </div>
-            </Panel>
+            </div>
+          </div>
 
-            <Panel
-              title="테스트 실행 결과"
-              description="Run을 누르면 문제의 샘플 테스트케이스를 실행하고 결과를 표시합니다."
+          <div
+            ref={rightColumnRef}
+            className={`relative flex h-full min-w-0 flex-col overflow-hidden ${isLeftPaneCollapsed ? "flex-1" : ""}`}
+            style={isLeftPaneCollapsed ? undefined : { width: `${100 - leftPaneRatio}%` }}
+          >
+            <div
+              className={`min-h-0 ${isTestcaseCollapsed ? "pb-[3.25rem]" : ""}`}
+              style={isTestcaseCollapsed ? { height: "100%" } : { height: `${rightTopPaneRatio}%` }}
             >
-              {isRunning && (
-                <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-500">
-                  채점 서버에서 실행 중입니다...
-                </div>
-              )}
-
-              {!isRunning && runResults === null && (
-                <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-500">
-                  Run 버튼을 누르면 샘플 테스트케이스 결과가 여기에 표시됩니다.
-                </div>
-              )}
-
-              {!isRunning && runResults !== null && runResults.length === 0 && (
-                <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-500">
-                  이 문제에 샘플 테스트케이스가 없습니다.
-                </div>
-              )}
-
-              {!isRunning && runResults !== null && runResults.length > 0 && (
-                <div className="space-y-4">
-                  {runResults.map((result, index) => {
-                    const isPassed = result.status === "AC";
-                    return (
-                      <div
-                        key={index}
-                        className={`rounded-2xl border p-4 ${
-                          isPassed
-                            ? "border-emerald-300 bg-emerald-50"
-                            : "border-rose-300 bg-rose-50"
-                        }`}
-                      >
-                        <div className="mb-3 flex items-center justify-between">
-                          <span className="text-sm font-medium text-zinc-700">
-                            테스트케이스 {index + 1}
-                          </span>
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                              isPassed
-                                ? "bg-emerald-100 text-emerald-800"
-                                : result.status === "CE"
-                                  ? "bg-amber-100 text-amber-800"
-                                  : "bg-rose-100 text-rose-800"
-                            }`}
-                          >
-                            {result.status}
-                          </span>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                              Input
-                            </p>
-                            <pre className="mt-1 whitespace-pre-wrap font-mono text-sm leading-6 text-zinc-700">
-                              {result.input || "-"}
-                            </pre>
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                              Expected
-                            </p>
-                            <pre className="mt-1 whitespace-pre-wrap font-mono text-sm leading-6 text-zinc-700">
-                              {result.expectedOutput || "-"}
-                            </pre>
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                              Output
-                            </p>
-                            <pre className="mt-1 whitespace-pre-wrap font-mono text-sm leading-6 text-zinc-700">
-                              {result.actualOutput ?? "-"}
-                            </pre>
-                          </div>
-                        </div>
-
-                        {result.stderr && (
-                          <div className="mt-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-rose-500">
-                              stderr
-                            </p>
-                            <pre className="mt-1 whitespace-pre-wrap font-mono text-sm leading-6 text-rose-700">
-                              {result.stderr}
-                            </pre>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Panel>
-
-            <Panel title="최근 제출 응답" description="실제 제출 결과를 이 영역에 바로 표시합니다.">
-              <DefinitionGrid
-                items={[
-                  { label: "submissionId", value: latestSubmission?.submissionId ?? "-" },
-                  { label: "result", value: latestSubmission?.result ?? "-" },
-                  { label: "passedCount", value: latestSubmission?.passedCount ?? "-" },
-                  { label: "totalCount", value: latestSubmission?.totalCount ?? "-" },
-                ]}
+              <BattleCodeEditor
+                languages={languages}
+                language={language}
+                onLanguageChange={handleLanguageChange}
+                value={code}
+                onChange={handleCodeChange}
+                onRun={() => {
+                  if (runTargetCaseIndex !== null) {
+                    void handleRunCase(runTargetCaseIndex);
+                  }
+                }}
+                onSubmit={() => void handleSubmit()}
+                runDisabled={runActionDisabled}
+                submitDisabled={!isPlayable || isSubmitting}
+                runLabel={runActionLabel}
+                submitLabel={submitActionLabel}
+                height="100%"
+                className="h-full"
               />
-            </Panel>
+            </div>
 
-            <Panel title="연결 엔드포인트" description="플레이 중 방에서 붙는 API와 소켓 경로">
-              <div className="space-y-4">
-                <ApiCallout
-                  method="GET"
-                  path={`/api/problems/${room.problemId}`}
-                  note="문제 상세를 단건으로 조회합니다."
-                />
-                <ApiCallout
-                  method="POST"
-                  path="/api/submissions"
-                  note="프론트가 JWT subject를 memberId로 읽어 제출 본문을 완성합니다."
-                />
-                <ApiCallout
-                  method="WS"
-                  path={`/topic/room/${room.roomId}`}
-                  note="배틀 시작, 제출, 참가자 종료, 정산 완료 이벤트를 수신할 경로입니다."
-                />
+            <div
+              role="separator"
+              aria-orientation="horizontal"
+              onMouseDown={startHorizontalResize}
+              onDoubleClick={() => setRightTopPaneRatio(50)}
+              className={`group flex cursor-row-resize items-center justify-center transition-all ${
+                isTestcaseCollapsed
+                  ? "pointer-events-none my-0 h-0 opacity-0"
+                  : "my-1 h-3 opacity-100"
+              }`}
+            >
+              <div className="relative flex h-full w-full items-center justify-center">
+                <div className="h-px w-full rounded bg-app-elevated transition group-hover:bg-app-accent/80" />
+                <div className="absolute left-1/2 flex h-2.5 w-12 -translate-x-1/2 items-center justify-center rounded-full border border-app-border bg-app-surface/90 transition group-hover:border-app-accent/50 group-hover:bg-app-accent/10">
+                  <div className="h-0.5 w-6 rounded-full bg-app-elevated transition group-hover:bg-app-accent-soft" />
+                </div>
               </div>
-            </Panel>
+            </div>
 
-            <div className="flex flex-wrap gap-3">
-              <Link
-                href={`/battle/results/${room.roomId}`}
-                className="rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white"
-              >
-                결과 화면 보기
-              </Link>
-              <Link
-                href="/"
-                className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900"
-              >
-                메인으로 돌아가기
-              </Link>
+            <div
+              className={isTestcaseCollapsed ? "absolute inset-x-0 bottom-0 z-10 h-10" : "min-h-0"}
+              style={isTestcaseCollapsed ? undefined : { height: `${100 - rightTopPaneRatio}%` }}
+            >
+              {isTestcaseCollapsed ? (
+                <div
+                  role="separator"
+                  aria-orientation="horizontal"
+                  onMouseDown={startHorizontalResize}
+                  onDoubleClick={() => setRightTopPaneRatio(50)}
+                  onClick={() => {
+                    if (isTestcaseCollapsed) {
+                      setRightTopPaneRatio(76);
+                    }
+                  }}
+                  className="group relative flex h-full cursor-row-resize items-center rounded-xl border border-app-border bg-app-surface px-4"
+                >
+                  <div className="pointer-events-none absolute inset-x-0 top-1.5 flex h-2.5 items-center justify-center">
+                    <div className="flex h-2.5 w-12 items-center justify-center rounded-full border border-app-border bg-app-surface/90 transition group-hover:border-app-accent/50 group-hover:bg-app-accent/10">
+                      <div className="h-0.5 w-6 rounded-full bg-app-elevated transition group-hover:bg-app-accent-soft" />
+                    </div>
+                  </div>
+                  <p className="text-base font-semibold text-app-primary">TestCase</p>
+                </div>
+              ) : (
+                <section className="flex h-full min-h-0 flex-col rounded-2xl border border-app-border bg-app-surface p-5 shadow-[0_14px_32px_rgba(0,0,0,0.28)]">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <h2 className="text-lg font-semibold text-app-primary">TestCase</h2>
+                    <p className="shrink-0 text-xs font-medium text-app-dim">
+                      {TESTCASE_SHORTCUT_HINT}
+                    </p>
+                  </div>
+                  <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+                    {caseCount > 0 ? (
+                      <>
+                      <div className="flex items-center gap-3">
+                        <div className="min-w-0 flex-1 overflow-x-auto pb-1">
+                          <div className="flex w-max gap-2 pr-1">
+                          {Array.from({ length: caseCount }, (_, index) => {
+                            const caseResult = runResults?.[index];
+                            const badgeState = getCaseBadgeState(caseResult);
+                            const isSelected = selectedRunCaseIndex === index;
+                            const idleClass = "border-app-border bg-app-elevated text-app-secondary hover:bg-app-elevated";
+                            const passClass = "border-app-success/30 bg-app-success/10 text-app-success hover:bg-app-success/15";
+                            const failClass = "border-app-danger/35 bg-app-danger/10 text-app-danger hover:bg-app-danger/15";
+                            const pendingClass = "border-app-warn/30 bg-app-warn/10 text-app-warn hover:bg-app-warn/15";
+
+                            const colorClass = isSelected
+                              ? "border-app-border-strong bg-app-elevated text-app-primary"
+                              : badgeState?.tone === "pass"
+                                ? passClass
+                                : badgeState?.tone === "fail"
+                                  ? failClass
+                                  : badgeState?.tone === "pending"
+                                    ? pendingClass
+                                    : idleClass;
+
+                            return (
+                              <button
+                                key={`battle-case-${index}`}
+                                type="button"
+                                onClick={() => setSelectedRunCaseIndex(index)}
+                                className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${colorClass}`}
+                              >
+                                <span>Case {index + 1}</span>
+                                {badgeState ? (
+                                  <span
+                                    className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${
+                                      badgeState.tone === "pass"
+                                        ? "bg-app-success/15 text-app-success"
+                                        : badgeState.tone === "fail"
+                                          ? "bg-app-danger/15 text-app-danger"
+                                          : "bg-app-warn/15 text-app-warn"
+                                    }`}
+                                  >
+                                    {badgeState.label}
+                                  </span>
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {selectedRunCaseIndex !== null ? (
+                        <div className="grid gap-3 lg:grid-cols-[1fr_0.95fr]">
+                          <div className="space-y-3 rounded-2xl border border-app-border bg-app-elevated p-4">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                                Input
+                              </p>
+                              <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
+                                {activeCaseInput}
+                              </MathText>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                                Output
+                              </p>
+                              <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
+                                {activeCaseExpected}
+                              </MathText>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3 rounded-2xl border border-app-border bg-app-elevated p-4">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                              Run Result
+                            </p>
+                            <div
+                              className={`rounded-xl border p-3 text-sm ${
+                                !activeRunCase
+                                  ? "border-app-border bg-app-base text-app-secondary"
+                                  : activeRunCasePass
+                                    ? "border-app-success/30 bg-app-success/10 text-app-success"
+                                    : "border-app-danger/35 bg-app-danger/10 text-app-danger"
+                              }`}
+                            >
+                              {runningCaseIndex === selectedRunCaseIndex ? (
+                                <p className="text-app-warn">실행 요청 중입니다...</p>
+                              ) : activeRunCase ? (
+                                <div className="space-y-2">
+                                  <p
+                                    className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${
+                                      activeRunCasePass
+                                        ? "bg-app-success/15 text-app-success"
+                                        : "bg-app-danger/15 text-app-danger"
+                                    }`}
+                                  >
+                                    {activeRunCasePass
+                                      ? "PASS"
+                                      : activeRunCaseWrongAnswer
+                                        ? "WRONG ANSWER"
+                                        : normalizeVerdict(activeRunCase.status)}
+                                  </p>
+                                  {activeRunCase.stderr ? (
+                                    <div className="rounded-lg border border-app-danger/35 bg-app-base/80 p-2">
+                                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-danger">
+                                        Error
+                                      </p>
+                                      <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-danger">
+                                        {activeRunCase.stderr}
+                                      </pre>
+                                    </div>
+                                  ) : (
+                                    <div className="grid gap-2">
+                                      <div className="rounded-lg border border-app-border bg-app-base/80 p-2">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-dim">
+                                          Output
+                                        </p>
+                                        <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
+                                          {activeRunCase.actualOutput ?? "(empty)"}
+                                        </pre>
+                                      </div>
+                                      <div className="rounded-lg border border-app-border bg-app-base/80 p-2">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-dim">
+                                          Expected
+                                        </p>
+                                        <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
+                                          {activeRunCase.expectedOutput ?? "(empty)"}
+                                        </pre>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="text-app-muted">
+                                  아직 실행 결과가 없습니다. Run 버튼으로 해당 케이스를 실행하세요.
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+                      </>
+                    ) : (
+                      <div className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm text-app-muted">
+                        실행 가능한 샘플 케이스가 없습니다.
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
             </div>
           </div>
         </div>
-      )}
+      </div>
+
+      <div className="space-y-6 lg:hidden">
+        <Panel variant="dark" title="문제 상세">
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setLeftPanelTab("description")}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                  leftPanelTab === "description"
+                    ? "border-app-border-strong bg-app-elevated text-app-primary"
+                    : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
+                }`}
+              >
+                Description
+              </button>
+              <button
+                type="button"
+                onClick={() => setLeftPanelTab("submission")}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                  leftPanelTab === "submission"
+                    ? "border-app-border-strong bg-app-elevated text-app-primary"
+                    : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
+                }`}
+              >
+                Submission
+              </button>
+            </div>
+
+            {leftPanelTab === "description" ? (
+              <>
+                <div className="rounded-2xl border border-app-border bg-app-elevated p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                    Battle
+                  </p>
+                  <h1 className="mt-2 text-2xl font-semibold tracking-tight text-app-primary">
+                    {problem ? `${problem.problemId}. ${problem.title}` : `Problem ${room.problemId}`}
+                  </h1>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <StatusPill variant="dark">{problem?.difficulty ?? "UNKNOWN"}</StatusPill>
+                    <StatusPill variant="dark">멀티 배틀</StatusPill>
+                  </div>
+                </div>
+                <DefinitionGrid
+                  compact
+                  variant="dark"
+                  items={[
+                    { label: "timeLimitMs", value: problem?.timeLimitMs ?? "-" },
+                    { label: "memoryLimitMb", value: problem?.memoryLimitMb ?? "-" },
+                  ]}
+                />
+                {problem ? (
+                  <div className="space-y-4 rounded-2xl border border-app-border bg-app-elevated p-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                        Content
+                      </p>
+                      <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
+                        {problem.content}
+                      </MathText>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                        Input
+                      </p>
+                      <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
+                        {problem.inputFormat}
+                      </MathText>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                        Output
+                      </p>
+                      <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
+                        {problem.outputFormat}
+                      </MathText>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm text-app-muted">
+                    문제 상세를 불러오는 중입니다.
+                  </div>
+                )}
+              </>
+            ) : (
+              submitHasResult ? (
+                <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                    Submit Result
+                  </p>
+                  <div className="flex flex-wrap items-start gap-3">
+                    <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
+                      {submitHeadline}
+                    </p>
+                    {submitProgressText ? (
+                      <p className="pt-1 text-sm text-app-muted">{submitProgressText}</p>
+                    ) : null}
+                    <div className="ml-auto flex flex-col items-end gap-1 text-right">
+                      {latestResultCode ? (
+                        <span className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${submitBadgeClass}`}>
+                          {latestResultCode}
+                        </span>
+                      ) : null}
+                      <p className="text-xs text-app-muted">language: {language}</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-app-border bg-app-base/80 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                      Current Submission
+                    </p>
+                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
+                      {code}
+                    </pre>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm text-app-muted">
+                  아직 제출 결과가 없습니다.
+                </div>
+              )
+            )}
+          </div>
+        </Panel>
+
+        <BattleCodeEditor
+          languages={languages}
+          language={language}
+          onLanguageChange={handleLanguageChange}
+          value={code}
+          onChange={handleCodeChange}
+          onRun={() => {
+            if (runTargetCaseIndex !== null) {
+              void handleRunCase(runTargetCaseIndex);
+            }
+          }}
+          onSubmit={() => void handleSubmit()}
+          runDisabled={runActionDisabled}
+          submitDisabled={!isPlayable || isSubmitting}
+          runLabel={runActionLabel}
+          submitLabel={submitActionLabel}
+        />
+
+        <section className="rounded-2xl border border-app-border bg-app-surface p-5 shadow-[0_14px_32px_rgba(0,0,0,0.28)]">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-app-primary">TestCase</h2>
+            <p className="shrink-0 text-xs font-medium text-app-dim">
+              {TESTCASE_SHORTCUT_HINT}
+            </p>
+          </div>
+          <div className="space-y-4">
+            {caseCount > 0 ? (
+              <>
+                <div className="flex items-center gap-3">
+                  <div className="min-w-0 flex-1 overflow-x-auto pb-1">
+                    <div className="flex w-max gap-2 pr-1">
+                    {Array.from({ length: caseCount }, (_, index) => {
+                      const caseResult = runResults?.[index];
+                      const badgeState = getCaseBadgeState(caseResult);
+                      const isSelected = selectedRunCaseIndex === index;
+                      const idleClass = "border-app-border bg-app-elevated text-app-secondary hover:bg-app-elevated";
+                      const passClass = "border-app-success/30 bg-app-success/10 text-app-success hover:bg-app-success/15";
+                      const failClass = "border-app-danger/35 bg-app-danger/10 text-app-danger hover:bg-app-danger/15";
+                      const pendingClass = "border-app-warn/30 bg-app-warn/10 text-app-warn hover:bg-app-warn/15";
+
+                      const colorClass = isSelected
+                        ? "border-app-border-strong bg-app-elevated text-app-primary"
+                        : badgeState?.tone === "pass"
+                          ? passClass
+                          : badgeState?.tone === "fail"
+                            ? failClass
+                            : badgeState?.tone === "pending"
+                              ? pendingClass
+                              : idleClass;
+
+                      return (
+                        <button
+                          key={`battle-case-mobile-${index}`}
+                          type="button"
+                          onClick={() => setSelectedRunCaseIndex(index)}
+                          className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${colorClass}`}
+                        >
+                          <span>Case {index + 1}</span>
+                          {badgeState ? (
+                            <span
+                              className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${
+                                badgeState.tone === "pass"
+                                  ? "bg-app-success/15 text-app-success"
+                                  : badgeState.tone === "fail"
+                                    ? "bg-app-danger/15 text-app-danger"
+                                    : "bg-app-warn/15 text-app-warn"
+                              }`}
+                            >
+                              {badgeState.label}
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                    </div>
+                  </div>
+                </div>
+
+                {selectedRunCaseIndex !== null ? (
+                  <div className="grid gap-3">
+                    <div className="space-y-3 rounded-2xl border border-app-border bg-app-elevated p-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                          Input
+                        </p>
+                        <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
+                          {activeCaseInput}
+                        </MathText>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                          Output
+                        </p>
+                        <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
+                          {activeCaseExpected}
+                        </MathText>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 rounded-2xl border border-app-border bg-app-elevated p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                        Run Result
+                      </p>
+                      <div
+                        className={`rounded-xl border p-3 text-sm ${
+                          !activeRunCase
+                            ? "border-app-border bg-app-base text-app-secondary"
+                            : activeRunCasePass
+                              ? "border-app-success/30 bg-app-success/10 text-app-success"
+                              : "border-app-danger/35 bg-app-danger/10 text-app-danger"
+                        }`}
+                      >
+                        {runningCaseIndex === selectedRunCaseIndex ? (
+                          <p className="text-app-warn">실행 요청 중입니다...</p>
+                        ) : activeRunCase ? (
+                          <div className="space-y-2">
+                            <p
+                              className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${
+                                activeRunCasePass
+                                  ? "bg-app-success/15 text-app-success"
+                                  : "bg-app-danger/15 text-app-danger"
+                              }`}
+                            >
+                              {activeRunCasePass
+                                ? "PASS"
+                                : activeRunCaseWrongAnswer
+                                  ? "WRONG ANSWER"
+                                  : normalizeVerdict(activeRunCase.status)}
+                            </p>
+                            {activeRunCase.stderr ? (
+                              <div className="rounded-lg border border-app-danger/35 bg-app-base/80 p-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-danger">
+                                  Error
+                                </p>
+                                <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-danger">
+                                  {activeRunCase.stderr}
+                                </pre>
+                              </div>
+                            ) : (
+                              <div className="grid gap-2">
+                                <div className="rounded-lg border border-app-border bg-app-base/80 p-2">
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-dim">
+                                    Output
+                                  </p>
+                                  <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
+                                    {activeRunCase.actualOutput ?? "(empty)"}
+                                  </pre>
+                                </div>
+                                <div className="rounded-lg border border-app-border bg-app-base/80 p-2">
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-dim">
+                                    Expected
+                                  </p>
+                                  <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
+                                    {activeRunCase.expectedOutput ?? "(empty)"}
+                                  </pre>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-app-muted">
+                            아직 실행 결과가 없습니다. Run 버튼으로 해당 케이스를 실행하세요.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm text-app-muted">
+                실행 가능한 샘플 케이스가 없습니다.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href={`/battle/results/${room.roomId}`}
+            className="rounded-2xl bg-app-base px-4 py-3 text-sm font-medium text-white"
+          >
+            결과 화면 보기
+          </Link>
+          <Link
+            href="/"
+            className="rounded-2xl border border-app-border bg-app-surface px-4 py-3 text-sm font-medium text-app-primary"
+          >
+            메인으로 돌아가기
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

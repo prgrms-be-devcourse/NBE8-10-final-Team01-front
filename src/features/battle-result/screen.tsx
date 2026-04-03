@@ -73,13 +73,13 @@ export default function BattleResultScreen({ roomId }: { roomId: string }) {
           <div className="flex flex-wrap gap-3">
             <Link
               href={`/login?next=${encodeURIComponent(`/battle/results/${roomId}`)}`}
-              className="rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white"
+              className="rounded-2xl bg-app-base px-4 py-3 text-sm font-medium text-white"
             >
               로그인하러 가기
             </Link>
             <Link
               href="/"
-              className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900"
+              className="rounded-2xl border border-app-border bg-app-surface px-4 py-3 text-sm font-medium text-app-primary"
             >
               메인으로 돌아가기
             </Link>
@@ -99,7 +99,7 @@ export default function BattleResultScreen({ roomId }: { roomId: string }) {
           actions={<StatusPill tone="danger">Load failed</StatusPill>}
         />
         <Panel title="오류" description="응답 메시지">
-          <p className="text-sm leading-7 text-zinc-700">{error ?? message}</p>
+          <p className="text-sm leading-7 text-app-secondary">{error ?? message}</p>
         </Panel>
       </div>
     );
@@ -121,7 +121,7 @@ export default function BattleResultScreen({ roomId }: { roomId: string }) {
         }
       />
 
-      <div className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-700">
+      <div className="rounded-2xl border border-app-border bg-app-surface px-4 py-3 text-sm text-app-secondary">
         {error ?? message}
       </div>
 
@@ -161,7 +161,7 @@ export default function BattleResultScreen({ roomId }: { roomId: string }) {
           title="정산 정책 메모"
           description="현재 백엔드 서비스에 정의된 점수 정책"
         >
-          <ul className="space-y-3 text-sm leading-7 text-zinc-700">
+          <ul className="space-y-3 text-sm leading-7 text-app-secondary">
             <li>1등 +100, 2등 +70, 3등 +40, 4등 +20</li>
             <li>WA 1회당 20초 패널티가 순위 계산에 반영됩니다.</li>
             <li>AC가 없는 참여자는 뒤 순위로 밀립니다.</li>

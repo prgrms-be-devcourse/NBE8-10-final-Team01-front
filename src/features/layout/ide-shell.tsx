@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   MyBattleResultItem,
   MyBattleResultsResponse,
+  RoomResponse,
   SessionResponse,
 } from "@/shared/api/contracts";
 
@@ -16,6 +17,32 @@ import QuickMenuPane, {
 import SessionContext from "@/features/layout/session-context";
 
 const PREVIEW_RESULTS_SIZE = 5;
+
+interface BattleSidebarState {
+  status: RoomResponse["status"];
+  remainingTime: string;
+  participants: RoomResponse["participants"];
+  myStatus: string | null;
+  myUserId: number | null;
+}
+
+function formatRemainingTime(timerEnd: string | null) {
+  if (!timerEnd) {
+    return "--:--";
+  }
+
+  const end = new Date(timerEnd).getTime();
+
+  if (!Number.isFinite(end)) {
+    return "--:--";
+  }
+
+  const remainingMs = Math.max(0, end - Date.now());
+  const totalSeconds = Math.floor(remainingMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
 
 async function readSession() {
   const response = await fetch("/api/auth/session", {
@@ -58,7 +85,7 @@ export default function IdeShell({
   const pathname = usePathname();
   const router = useRouter();
   const refreshInFlightRef = useRef<Promise<SessionResponse> | null>(null);
-  const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(true);
+  const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
   const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(true);
   const [session, setSession] = useState<SessionResponse>(initialSession);
   const [sessionLoaded, setSessionLoaded] = useState(true);
@@ -67,6 +94,7 @@ export default function IdeShell({
     "로그인 후 최근 전적을 확인할 수 있습니다.",
   );
   const [resultsPreviewError, setResultsPreviewError] = useState<string | null>(null);
+  const [battleSidebarState, setBattleSidebarState] = useState<BattleSidebarState | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const applySession = useCallback((nextSession: SessionResponse) => {
     setSession(nextSession);
@@ -120,6 +148,72 @@ export default function IdeShell({
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [refreshSession]);
+
+  useEffect(() => {
+    const battleRoomMatch = pathname.match(/^\/battle\/rooms\/(\d+)$/);
+
+    if (!battleRoomMatch) {
+      setBattleSidebarState(null);
+      return;
+    }
+
+    const targetRoomId = Number(battleRoomMatch[1]);
+    const memberId = session.member?.memberId ?? null;
+
+    if (!session.authenticated || memberId === null) {
+      setBattleSidebarState(null);
+      return;
+    }
+
+    let active = true;
+
+    const poll = async () => {
+      const response = await fetch(`/api/battle/rooms/${targetRoomId}`, {
+        cache: "no-store",
+        credentials: "include",
+      });
+
+      if (!active) {
+        return;
+      }
+
+      if (!response.ok) {
+        setBattleSidebarState(null);
+        return;
+      }
+
+      const payload = (await response.json()) as RoomResponse;
+      const me = payload.participants.find((item) => item.userId === memberId) ?? null;
+
+      setBattleSidebarState({
+        status: payload.status,
+        remainingTime: formatRemainingTime(payload.timerEnd),
+        participants: payload.participants,
+        myStatus: me?.status ?? null,
+        myUserId: memberId,
+      });
+    };
+
+    void poll();
+
+    const intervalId = window.setInterval(() => {
+      void poll();
+    }, 1000);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [pathname, session.authenticated, session.member]);
+
+  useEffect(() => {
+    const isSoloProblemRoute = /^\/problems\/\d+$/.test(pathname);
+    const isBattleRoomRoute = /^\/battle\/rooms\/\d+$/.test(pathname);
+
+    if (isSoloProblemRoute || isBattleRoomRoute) {
+      setIsQuickMenuOpen(false);
+    }
+  }, [pathname]);
 
   useEffect(() => {
     let active = true;
@@ -267,11 +361,13 @@ export default function IdeShell({
     pathname === "/signup" ||
     pathname === "/login" ||
     pathname === "/problems" ||
-    pathname === "/mypage";
+    pathname.startsWith("/problems/") ||
+    pathname === "/mypage" ||
+    pathname.startsWith("/battle/rooms/");
 
   return (
     <SessionContext.Provider value={{ session, sessionLoaded, refreshSession, applySession }}>
-      <div className="flex min-h-0 flex-1 overflow-hidden bg-[#1e1f22]">
+      <div className="flex h-full min-h-0 flex-1 overflow-hidden bg-app-base">
         <div className={`grid h-full w-full ${layoutColumnsClass}`}>
           <QuickMenuPane
             isQuickMenuOpen={isQuickMenuOpen}
@@ -280,7 +376,7 @@ export default function IdeShell({
             projectTreeItems={projectTreeItems}
           />
 
-          <section className="min-h-0 overflow-hidden bg-[#1e1f22]">
+          <section className="h-full min-h-0 overflow-hidden bg-app-base">
             {isFullBleedCenter ? (
               <div className="h-full min-h-0">{children}</div>
             ) : (
@@ -294,6 +390,7 @@ export default function IdeShell({
             isProfilePanelOpen={isProfilePanelOpen}
             onToggleProfilePanel={() => setIsProfilePanelOpen((current) => !current)}
             session={session}
+            battleSidebarState={battleSidebarState}
             previewPlayedCount={previewPlayedCount}
             previewSolvedCount={previewSolvedCount}
             previewWinRate={previewWinRate}

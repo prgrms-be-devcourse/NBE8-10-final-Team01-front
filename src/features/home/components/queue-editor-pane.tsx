@@ -50,12 +50,12 @@ export default function QueueEditorPane({
   terminalMessage,
 }: QueueEditorPaneProps) {
   return (
-    <main className="h-full overflow-hidden border-b border-zinc-700/80 bg-[#1e1f22] lg:border-b-0 lg:border-r">
+    <main className="h-full overflow-hidden border-b border-app-border/80 bg-app-base lg:border-b-0 lg:border-r">
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex h-12 items-center justify-between border-b border-zinc-700/80 bg-[#1e1f22] px-3">
+        <div className="flex h-12 items-center justify-between border-b border-app-border/80 bg-app-base px-3">
           <div className="flex h-full items-end gap-0.5 pt-1">
-            <div className="relative flex h-10 items-center gap-2 border-r border-zinc-700/70 bg-[#1e1f22] px-3 font-mono text-xs text-zinc-200">
-              <span className="inline-flex h-4 w-4 items-center justify-center text-[#7da2f7]">
+            <div className="relative flex h-10 items-center gap-2 border-r border-app-border/70 bg-app-base px-3 font-mono text-xs text-app-primary">
+              <span className="inline-flex h-4 w-4 items-center justify-center text-app-accent-soft">
                 <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4">
                   <path
                     d="M4 2.5h5l3 3V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z"
@@ -67,18 +67,18 @@ export default function QueueEditorPane({
                 </svg>
               </span>
               <span>.env.queue.match</span>
-              <span className="text-zinc-500">×</span>
-              <span className="absolute inset-x-0 bottom-0 h-[2px] bg-zinc-300" />
+              <span className="text-app-dim">×</span>
+              <span className="absolute inset-x-0 bottom-0 h-[2px] bg-app-border-strong" />
             </div>
           </div>
           <button
             type="button"
             onClick={onStartMatch}
             disabled={!canStartMatch}
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-[#b08cff]/45 bg-[#9146ff] px-3 text-sm font-semibold text-white transition hover:bg-[#7f39fa] disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-600 disabled:text-zinc-300"
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-app-accent/45 bg-app-accent px-3 text-sm font-semibold text-white transition hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:border-app-border disabled:bg-app-elevated disabled:text-app-secondary"
             aria-label="매칭 시작"
           >
-            <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4 text-[#7dd48c]">
+            <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4 text-app-syntax-icon">
               <path
                 d="M8 2.3v3M5 3.4A4.9 4.9 0 1 0 11 3.4"
                 stroke="currentColor"
@@ -87,44 +87,44 @@ export default function QueueEditorPane({
               />
             </svg>
             <span>매칭 시작</span>
-            <span className="mx-0.5 h-4 w-px bg-white/35" />
-            <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4 text-[#74cc84]">
+            <span className="mx-0.5 h-4 w-px bg-app-surface/35" />
+            <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4 text-app-success">
               <path d="m6 4 5 4-5 4V4Z" fill="currentColor" />
             </svg>
           </button>
         </div>
 
-        <div ref={editorPaneRef} className="flex-1 overflow-hidden bg-[#1e1f22]">
+        <div ref={editorPaneRef} className="flex-1 overflow-hidden bg-app-base">
           <div
-            className="grid h-full grid-cols-[56px_minmax(0,1fr)] bg-[#1e1f22] font-mono"
+            className="grid h-full grid-cols-[56px_minmax(0,1fr)] bg-app-base font-mono"
             style={editorContentStyle}
           >
-            <div className="border-r border-zinc-700/70 bg-[#1e1f22] px-3 py-4 text-right text-[#606366]">
+            <div className="border-r border-app-border/70 bg-app-base px-3 py-4 text-right text-app-syntax-line-number">
               {editorLineNumbers.map((line) => (
                 <div key={line} style={editorLineStyle}>
                   {line}
                 </div>
               ))}
             </div>
-            <div className="px-4 py-4 text-[#a9b7c6]">
-              <div className="whitespace-nowrap text-[#6a717d]" style={editorLineStyle}>
+            <div className="px-4 py-4 text-app-syntax-default">
+              <div className="whitespace-nowrap text-app-syntax-comment" style={editorLineStyle}>
                 # queue config
               </div>
-              <div className="whitespace-nowrap text-[#6a717d]" style={editorLineStyle}>
-                <span className="font-semibold text-[#ffcc66]"># TODO:</span>
-                <span className="text-[#ffcc66]">
+              <div className="whitespace-nowrap text-app-syntax-comment" style={editorLineStyle}>
+                <span className="font-semibold text-app-syntax-keyword"># TODO:</span>
+                <span className="text-app-syntax-keyword">
                   {" "}
                   카테고리와 난이도를 선택하고 매칭 시작을 눌러 대기열에 참가합니다.
                 </span>
               </div>
               <div className="flex items-center gap-2" style={editorRowStyle}>
-                <span className="w-40 text-[#9cdcfe]">QUEUE_CATEGORY</span>
-                <span className="text-[#80889a]">=</span>
+                <span className="w-40 text-app-syntax-name">QUEUE_CATEGORY</span>
+                <span className="text-app-syntax-operator">=</span>
                 <div className="relative min-w-[11rem] max-w-[18rem] flex-1 leading-none">
                   <select
                     value={category}
                     onChange={(event) => onCategoryChange(event.target.value as QueueCategoryValue)}
-                    className="h-7 w-full appearance-none rounded-sm border border-zinc-700 bg-[#2b2d30] px-2 pr-6 text-xs text-[#ce9178] outline-none transition focus:border-[#4e89ff]/70"
+                    className="h-7 w-full appearance-none rounded-sm border border-app-border bg-app-elevated px-2 pr-6 text-xs text-app-syntax-string outline-none transition focus:border-app-accent/60"
                   >
                     {categoryOptions.map((item) => (
                       <option
@@ -136,22 +136,22 @@ export default function QueueEditorPane({
                       </option>
                     ))}
                   </select>
-                  <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-zinc-500">
+                  <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-app-dim">
                     ▾
                   </span>
                 </div>
               </div>
               <div className="flex items-center gap-2" style={editorRowStyle}>
-                <span className="w-40 text-[#9cdcfe]">QUEUE_LEVEL</span>
-                <span className="text-[#80889a]">=</span>
+                <span className="w-40 text-app-syntax-name">QUEUE_LEVEL</span>
+                <span className="text-app-syntax-operator">=</span>
                 <div className="flex flex-wrap gap-1 leading-none">
                   {difficultyOptions.map((option) => (
                     <label
                       key={option.value}
                       className={`rounded-sm border px-2 py-1 text-xs transition ${
                         difficulty === option.value
-                          ? "border-[#4e89ff]/60 bg-[#2b3a52] text-[#dcdcaa]"
-                          : "border-zinc-700 bg-[#2b2d30] text-[#9aa5b1] hover:bg-zinc-700/40"
+                          ? "border-app-syntax-selected-border/60 bg-app-syntax-selected-bg text-app-syntax-selected-text"
+                          : "border-app-border bg-app-elevated text-app-syntax-value hover:bg-app-elevated/90"
                       }`}
                     >
                       <input
@@ -168,30 +168,30 @@ export default function QueueEditorPane({
                 </div>
               </div>
               <div className="flex items-center gap-2" style={editorRowStyle}>
-                <span className="w-40 text-[#9cdcfe]">QUEUE_PARTY_SIZE</span>
-                <span className="text-[#80889a]">=</span>
-                <span className="inline-flex min-w-8 items-center justify-center rounded-sm border border-zinc-700 bg-[#2b2d30] px-2 text-xs text-[#b5cea8]">
+                <span className="w-40 text-app-syntax-name">QUEUE_PARTY_SIZE</span>
+                <span className="text-app-syntax-operator">=</span>
+                <span className="inline-flex min-w-8 items-center justify-center rounded-sm border border-app-border bg-app-elevated px-2 text-xs text-app-syntax-constant">
                   4
                 </span>
               </div>
               <div className="flex items-start gap-2" style={editorRowStyle}>
-                <span className="w-40 text-[#9cdcfe]">QUEUE_MEMO</span>
-                <span className="pt-1 text-[#80889a]">=</span>
+                <span className="w-40 text-app-syntax-name">QUEUE_MEMO</span>
+                <span className="pt-1 text-app-syntax-operator">=</span>
                 <input
                   type="text"
                   value={queueMemo}
                   onChange={(event) => onQueueMemoChange(event.target.value)}
-                  className="mt-0.5 h-7 w-full rounded-sm border border-zinc-700 bg-[#2b2d30] px-2 text-xs text-[#ce9178] outline-none transition focus:border-[#4e89ff]/70"
+                  className="mt-0.5 h-7 w-full rounded-sm border border-app-border bg-app-elevated px-2 text-xs text-app-syntax-string outline-none transition focus:border-app-accent/60"
                 />
               </div>
 
-              <div className="mt-2 text-[#6a717d]" style={editorLineStyle}>
+              <div className="mt-2 text-app-syntax-comment" style={editorLineStyle}>
                 {showStopQueueButton ? (
                   <button
                     type="button"
                     onClick={onCancelQueue}
                     disabled={isBusy}
-                    className="rounded-sm border border-zinc-700 bg-[#2b2d30] px-2 py-0.5 text-xs text-zinc-100 transition hover:bg-zinc-700/40 disabled:cursor-not-allowed disabled:text-zinc-500"
+                    className="rounded-sm border border-app-border bg-app-elevated px-2 py-0.5 text-xs text-app-primary transition hover:bg-app-elevated/90 disabled:cursor-not-allowed disabled:text-app-dim"
                   >
                     stopQueue();
                   </button>
@@ -201,8 +201,8 @@ export default function QueueEditorPane({
                 <div
                   className={`mt-1 rounded-sm border px-3 py-2 text-xs ${
                     error
-                      ? "border-rose-400/60 bg-rose-900/20 text-rose-200"
-                      : "border-zinc-700 bg-[#2b2d30] text-zinc-300"
+                      ? "border-app-danger/60 bg-app-danger/20 text-app-danger"
+                      : "border-app-border bg-app-elevated text-app-secondary"
                   }`}
                 >
                   {error ?? terminalMessage}
