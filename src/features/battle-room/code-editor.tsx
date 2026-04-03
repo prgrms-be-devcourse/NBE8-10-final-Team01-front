@@ -8,6 +8,12 @@ interface BattleCodeEditorProps {
   onLanguageChange: (nextLanguage: string) => void;
   value: string;
   onChange: (nextValue: string) => void;
+  onRun?: () => void;
+  onSubmit?: () => void;
+  runDisabled?: boolean;
+  submitDisabled?: boolean;
+  runLabel?: string;
+  submitLabel?: string;
   height?: string;
   className?: string;
 }
@@ -36,6 +42,12 @@ export default function BattleCodeEditor({
   onLanguageChange,
   value,
   onChange,
+  onRun,
+  onSubmit,
+  runDisabled = false,
+  submitDisabled = false,
+  runLabel = "Run",
+  submitLabel = "Submit",
   height = "26rem",
   className = "",
 }: BattleCodeEditorProps) {
@@ -64,22 +76,40 @@ export default function BattleCodeEditor({
             ▼
           </span>
         </div>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={runDisabled || !onRun}
+            className="rounded-md border border-zinc-600 bg-zinc-800 px-2.5 py-1 text-xs font-semibold text-zinc-100 transition hover:border-zinc-400 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:text-zinc-500"
+          >
+            {runLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={submitDisabled || !onSubmit}
+            className="rounded-md border border-zinc-200 bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-900 transition hover:bg-white disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-800 disabled:text-zinc-500"
+          >
+            {submitLabel}
+          </button>
+        </div>
       </div>
       <div className="min-h-0 flex-1">
-      <Editor
-        height={height}
-        defaultLanguage={monacoLanguage}
-        language={monacoLanguage}
-        value={value}
-        onChange={(nextValue) => onChange(nextValue ?? "")}
-        theme="vs-dark"
-        options={editorOptions}
-        loading={
-          <div className="flex items-center justify-center text-sm text-zinc-300" style={{ height }}>
-            에디터를 불러오는 중입니다.
-          </div>
-        }
-      />
+        <Editor
+          height={height}
+          defaultLanguage={monacoLanguage}
+          language={monacoLanguage}
+          value={value}
+          onChange={(nextValue) => onChange(nextValue ?? "")}
+          theme="vs-dark"
+          options={editorOptions}
+          loading={
+            <div className="flex items-center justify-center text-sm text-zinc-300" style={{ height }}>
+              에디터를 불러오는 중입니다.
+            </div>
+          }
+        />
       </div>
     </div>
   );

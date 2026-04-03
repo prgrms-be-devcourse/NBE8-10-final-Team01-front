@@ -244,7 +244,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
   const runTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(min-width: 1280px)");
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
     const body = document.body;
     const html = document.documentElement;
     const previousBodyOverflow = body.style.overflow;
@@ -683,6 +683,56 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
     window.addEventListener("mouseup", onUp);
   }
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      const isRunShortcut =
+        event.key === "Enter" && (event.metaKey || event.ctrlKey) && !event.shiftKey;
+      const isSubmitShortcut = event.key === "Enter" && event.shiftKey;
+
+      if (!isRunShortcut && !isSubmitShortcut) {
+        return;
+      }
+
+      const target = event.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement) {
+        return;
+      }
+
+      if (isSubmitShortcut) {
+        if (isSubmitting) {
+          return;
+        }
+
+        event.preventDefault();
+        void handleSubmit();
+        return;
+      }
+
+      if (runningCaseIndex !== null) {
+        return;
+      }
+
+      const sampleCaseCount = problem?.sampleCases?.length ?? 0;
+      const runCaseIndex = selectedCaseIndex ?? (sampleCaseCount > 0 ? 0 : null);
+
+      if (runCaseIndex === null) {
+        return;
+      }
+
+      event.preventDefault();
+      void handleRunCase(runCaseIndex);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [handleRunCase, handleSubmit, isSubmitting, problem, runningCaseIndex, selectedCaseIndex]);
+
   if (!sessionLoaded) {
     return (
       <Panel title="세션 확인" description="인증 상태를 확인하는 중입니다.">
@@ -783,6 +833,10 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
     submitState.passedCount !== null && submitState.totalCount !== null
       ? `${submitState.passedCount}/${submitState.totalCount} testcases passed`
       : null;
+  const runTargetCaseIndex = selectedCaseIndex ?? (sampleCases.length > 0 ? 0 : null);
+  const runActionDisabled = runTargetCaseIndex === null || runningCaseIndex !== null;
+  const runActionLabel = runningCaseIndex !== null ? "Running..." : "Run";
+  const submitActionLabel = isSubmitting ? "Submitting..." : "Submit";
 
   return (
     <div className="space-y-6">
@@ -794,38 +848,28 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
               className="flex h-full min-h-0 flex-col"
             >
               <div className="space-y-4 min-h-0 flex-1 overflow-y-auto pr-1">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setLeftPanelTab("description")}
-                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                        leftPanelTab === "description"
-                          ? "border-zinc-900 bg-zinc-900 text-white"
-                          : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                      }`}
-                    >
-                      Description
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setLeftPanelTab("submission")}
-                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                        leftPanelTab === "submission"
-                          ? "border-zinc-900 bg-zinc-900 text-white"
-                          : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                      }`}
-                    >
-                      Submission
-                    </button>
-                  </div>
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => void handleSubmit()}
-                    disabled={isSubmitting}
-                    className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                    onClick={() => setLeftPanelTab("description")}
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                      leftPanelTab === "description"
+                        ? "border-zinc-900 bg-zinc-900 text-white"
+                        : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                    }`}
                   >
-                    {isSubmitting ? "Submitting..." : "Submit"}
+                    Description
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLeftPanelTab("submission")}
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                      leftPanelTab === "submission"
+                        ? "border-zinc-900 bg-zinc-900 text-white"
+                        : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                    }`}
+                  >
+                    Submission
                   </button>
                 </div>
 
@@ -880,6 +924,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                   </>
                 ) : (
                   <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                      Submit Result
+                    </p>
                     <div className="flex flex-wrap items-start gap-3">
                       <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
                         {submitHeadline}
@@ -938,6 +985,16 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                 onLanguageChange={(nextLanguage) => handleLanguageChange(nextLanguage)}
                 value={code}
                 onChange={setCode}
+                onRun={() => {
+                  if (runTargetCaseIndex !== null) {
+                    void handleRunCase(runTargetCaseIndex);
+                  }
+                }}
+                onSubmit={() => void handleSubmit()}
+                runDisabled={runActionDisabled}
+                submitDisabled={isSubmitting}
+                runLabel={runActionLabel}
+                submitLabel={submitActionLabel}
                 height="100%"
                 className="h-full"
               />
@@ -1006,20 +1063,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                             );
                           })}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              selectedCaseIndex !== null
-                                ? void handleRunCase(selectedCaseIndex)
-                                : null
-                            }
-                            disabled={selectedCaseIndex === null || runningCaseIndex !== null}
-                            className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-900 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:text-zinc-400"
-                          >
-                            {runningCaseIndex !== null ? "실행 중..." : "▶ Run"}
-                          </button>
-                        </div>
+                        <p className="text-xs font-medium text-zinc-500">
+                          ⌘/Ctrl+Enter: Run · Shift+Enter: Submit
+                        </p>
                       </div>
 
                       {activeCase ? (
@@ -1133,38 +1179,28 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
       <div className="space-y-6 lg:hidden">
         <Panel title="문제 상세">
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setLeftPanelTab("description")}
-                  className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                    leftPanelTab === "description"
-                      ? "border-zinc-900 bg-zinc-900 text-white"
-                      : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                  }`}
-                >
-                  Description
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLeftPanelTab("submission")}
-                  className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                    leftPanelTab === "submission"
-                      ? "border-zinc-900 bg-zinc-900 text-white"
-                      : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                  }`}
-                >
-                  Submission
-                </button>
-              </div>
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => void handleSubmit()}
-                disabled={isSubmitting}
-                className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                onClick={() => setLeftPanelTab("description")}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                  leftPanelTab === "description"
+                    ? "border-zinc-900 bg-zinc-900 text-white"
+                    : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                }`}
               >
-                {isSubmitting ? "Submitting..." : "Submit"}
+                Description
+              </button>
+              <button
+                type="button"
+                onClick={() => setLeftPanelTab("submission")}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                  leftPanelTab === "submission"
+                    ? "border-zinc-900 bg-zinc-900 text-white"
+                    : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                }`}
+              >
+                Submission
               </button>
             </div>
 
@@ -1219,6 +1255,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
               </>
             ) : (
               <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                  Submit Result
+                </p>
                 <div className="flex flex-wrap items-start gap-3">
                   <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
                     {submitHeadline}
@@ -1261,6 +1300,16 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
           onLanguageChange={(nextLanguage) => handleLanguageChange(nextLanguage)}
           value={code}
           onChange={setCode}
+          onRun={() => {
+            if (runTargetCaseIndex !== null) {
+              void handleRunCase(runTargetCaseIndex);
+            }
+          }}
+          onSubmit={() => void handleSubmit()}
+          runDisabled={runActionDisabled}
+          submitDisabled={isSubmitting}
+          runLabel={runActionLabel}
+          submitLabel={submitActionLabel}
         />
 
         <Panel title="TestCase">
@@ -1313,18 +1362,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                       );
                     })}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        selectedCaseIndex !== null ? void handleRunCase(selectedCaseIndex) : null
-                      }
-                      disabled={selectedCaseIndex === null || runningCaseIndex !== null}
-                      className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-900 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:text-zinc-400"
-                    >
-                      {runningCaseIndex !== null ? "실행 중..." : "▶ Run"}
-                    </button>
-                  </div>
+                  <p className="text-xs font-medium text-zinc-500">
+                    ⌘/Ctrl+Enter: Run · Shift+Enter: Submit
+                  </p>
                 </div>
                 {activeCase ? (
                   <div className="grid gap-3">

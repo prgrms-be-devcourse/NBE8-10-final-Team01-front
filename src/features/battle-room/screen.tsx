@@ -186,7 +186,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   const rightColumnRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(min-width: 1280px)");
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
     const body = document.body;
     const html = document.documentElement;
     const previousBodyOverflow = body.style.overflow;
@@ -669,6 +669,67 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
     window.addEventListener("mouseup", onUp);
   }
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      const isRunShortcut =
+        event.key === "Enter" && (event.metaKey || event.ctrlKey) && !event.shiftKey;
+      const isSubmitShortcut = event.key === "Enter" && event.shiftKey;
+
+      if (!isRunShortcut && !isSubmitShortcut) {
+        return;
+      }
+
+      const target = event.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement) {
+        return;
+      }
+
+      if (isSubmitShortcut) {
+        if (isSubmitting) {
+          return;
+        }
+
+        event.preventDefault();
+        void handleSubmit();
+        return;
+      }
+
+      if (!room || room.status !== "PLAYING" || runningCaseIndex !== null) {
+        return;
+      }
+
+      const sampleCaseCount = problem?.sampleCases?.length ?? 0;
+      const runCaseCount = runResults?.length ?? 0;
+      const totalCaseCount = Math.max(sampleCaseCount, runCaseCount);
+      const runCaseIndex = selectedRunCaseIndex ?? (totalCaseCount > 0 ? 0 : null);
+
+      if (runCaseIndex === null) {
+        return;
+      }
+
+      event.preventDefault();
+      void handleRunCase(runCaseIndex);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [
+    handleRunCase,
+    handleSubmit,
+    isSubmitting,
+    problem,
+    room,
+    runResults,
+    runningCaseIndex,
+    selectedRunCaseIndex,
+  ]);
+
   if (!sessionLoaded && !room) {
     return (
       <Panel title="세션 확인" description="인증 상태를 확인하는 중입니다.">
@@ -769,6 +830,11 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
     latestSubmission.totalCount !== null
       ? `${latestSubmission.passedCount}/${latestSubmission.totalCount} testcases passed`
       : null;
+  const runTargetCaseIndex = selectedRunCaseIndex ?? (caseCount > 0 ? 0 : null);
+  const runActionDisabled =
+    !isPlayable || runTargetCaseIndex === null || runningCaseIndex !== null;
+  const runActionLabel = runningCaseIndex !== null ? "Running..." : "Run";
+  const submitActionLabel = isSubmitting ? "Submitting..." : "Submit";
 
   return (
     <div className="space-y-6">
@@ -785,38 +851,28 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
           <div className="h-full min-w-0" style={{ width: `${leftPaneRatio}%` }}>
             <Panel title="문제 상세" className="flex h-full min-h-0 flex-col">
               <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setLeftPanelTab("description")}
-                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                        leftPanelTab === "description"
-                          ? "border-zinc-900 bg-zinc-900 text-white"
-                          : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                      }`}
-                    >
-                      Description
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setLeftPanelTab("submission")}
-                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                        leftPanelTab === "submission"
-                          ? "border-zinc-900 bg-zinc-900 text-white"
-                          : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                      }`}
-                    >
-                      Submission
-                    </button>
-                  </div>
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => void handleSubmit()}
-                    disabled={!isPlayable || isSubmitting}
-                    className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                    onClick={() => setLeftPanelTab("description")}
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                      leftPanelTab === "description"
+                        ? "border-zinc-900 bg-zinc-900 text-white"
+                        : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                    }`}
                   >
-                    {isSubmitting ? "Submitting..." : "Submit"}
+                    Description
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLeftPanelTab("submission")}
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                      leftPanelTab === "submission"
+                        ? "border-zinc-900 bg-zinc-900 text-white"
+                        : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                    }`}
+                  >
+                    Submission
                   </button>
                 </div>
 
@@ -877,6 +933,9 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                   </>
                 ) : (
                   <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                      Submit Result
+                    </p>
                     <div className="flex flex-wrap items-start gap-3">
                       <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
                         {submitHeadline}
@@ -931,6 +990,16 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                 onLanguageChange={handleLanguageChange}
                 value={code}
                 onChange={handleCodeChange}
+                onRun={() => {
+                  if (runTargetCaseIndex !== null) {
+                    void handleRunCase(runTargetCaseIndex);
+                  }
+                }}
+                onSubmit={() => void handleSubmit()}
+                runDisabled={runActionDisabled}
+                submitDisabled={!isPlayable || isSubmitting}
+                runLabel={runActionLabel}
+                submitLabel={submitActionLabel}
                 height="100%"
                 className="h-full"
               />
@@ -999,19 +1068,9 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                             );
                           })}
                         </div>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            selectedRunCaseIndex !== null
-                              ? void handleRunCase(selectedRunCaseIndex)
-                              : null
-                          }
-                          disabled={!isPlayable || selectedRunCaseIndex === null || runningCaseIndex !== null}
-                          className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-900 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:text-zinc-400"
-                        >
-                          {runningCaseIndex !== null ? "실행 중..." : isPlayable ? "▶ Run" : "대기 중"}
-                        </button>
+                        <p className="text-xs font-medium text-zinc-500">
+                          ⌘/Ctrl+Enter: Run · Shift+Enter: Submit
+                        </p>
                       </div>
 
                       {selectedRunCaseIndex !== null ? (
@@ -1120,38 +1179,28 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
       <div className="space-y-6 lg:hidden">
         <Panel title="문제 상세">
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setLeftPanelTab("description")}
-                  className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                    leftPanelTab === "description"
-                      ? "border-zinc-900 bg-zinc-900 text-white"
-                      : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                  }`}
-                >
-                  Description
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLeftPanelTab("submission")}
-                  className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                    leftPanelTab === "submission"
-                      ? "border-zinc-900 bg-zinc-900 text-white"
-                      : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                  }`}
-                >
-                  Submission
-                </button>
-              </div>
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => void handleSubmit()}
-                disabled={!isPlayable || isSubmitting}
-                className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                onClick={() => setLeftPanelTab("description")}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                  leftPanelTab === "description"
+                    ? "border-zinc-900 bg-zinc-900 text-white"
+                    : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                }`}
               >
-                {isSubmitting ? "Submitting..." : "Submit"}
+                Description
+              </button>
+              <button
+                type="button"
+                onClick={() => setLeftPanelTab("submission")}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                  leftPanelTab === "submission"
+                    ? "border-zinc-900 bg-zinc-900 text-white"
+                    : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                }`}
+              >
+                Submission
               </button>
             </div>
 
@@ -1210,6 +1259,9 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
               </>
             ) : (
               <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                  Submit Result
+                </p>
                 <div className="flex flex-wrap items-start gap-3">
                   <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
                     {submitHeadline}
@@ -1246,6 +1298,16 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
           onLanguageChange={handleLanguageChange}
           value={code}
           onChange={handleCodeChange}
+          onRun={() => {
+            if (runTargetCaseIndex !== null) {
+              void handleRunCase(runTargetCaseIndex);
+            }
+          }}
+          onSubmit={() => void handleSubmit()}
+          runDisabled={runActionDisabled}
+          submitDisabled={!isPlayable || isSubmitting}
+          runLabel={runActionLabel}
+          submitLabel={submitActionLabel}
         />
 
         <Panel title="TestCase">
@@ -1301,18 +1363,9 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                       );
                     })}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      selectedRunCaseIndex !== null
-                        ? void handleRunCase(selectedRunCaseIndex)
-                        : null
-                    }
-                    disabled={!isPlayable || selectedRunCaseIndex === null || runningCaseIndex !== null}
-                    className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-900 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:text-zinc-400"
-                  >
-                    {runningCaseIndex !== null ? "실행 중..." : isPlayable ? "▶ Run" : "대기 중"}
-                  </button>
+                  <p className="text-xs font-medium text-zinc-500">
+                    ⌘/Ctrl+Enter: Run · Shift+Enter: Submit
+                  </p>
                 </div>
 
                 {selectedRunCaseIndex !== null ? (

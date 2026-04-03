@@ -8,6 +8,12 @@ interface SoloCodeEditorProps {
   onLanguageChange: (nextLanguage: string) => void;
   value: string;
   onChange: (nextValue: string) => void;
+  onRun?: () => void;
+  onSubmit?: () => void;
+  runDisabled?: boolean;
+  submitDisabled?: boolean;
+  runLabel?: string;
+  submitLabel?: string;
   height?: string;
   className?: string;
 }
@@ -44,6 +50,12 @@ export default function SoloCodeEditor({
   onLanguageChange,
   value,
   onChange,
+  onRun,
+  onSubmit,
+  runDisabled = false,
+  submitDisabled = false,
+  runLabel = "Run",
+  submitLabel = "Submit",
   height = "26rem",
   className = "",
 }: SoloCodeEditorProps) {
@@ -69,6 +81,24 @@ export default function SoloCodeEditor({
           <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-zinc-400">
             ▼
           </span>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={runDisabled || !onRun}
+            className="rounded-md border border-zinc-600 bg-zinc-800 px-2.5 py-1 text-xs font-semibold text-zinc-100 transition hover:border-zinc-400 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:text-zinc-500"
+          >
+            {runLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={submitDisabled || !onSubmit}
+            className="rounded-md border border-zinc-200 bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-900 transition hover:bg-white disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-800 disabled:text-zinc-500"
+          >
+            {submitLabel}
+          </button>
         </div>
       </div>
       <div className="min-h-0 flex-1">
