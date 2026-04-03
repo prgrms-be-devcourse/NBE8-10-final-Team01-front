@@ -1,33 +1,33 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0f1118;
+  --background: #111315;
   --foreground: #e5e7eb;
-  --panel: #171c26;
+  --panel: #1a1d21;
   --app-header-h: 56px;
 
   /* Graphite Dark + Purple Accent */
-  --app-bg-base: #0f1118;
-  --app-bg-surface: #171c26;
-  --app-bg-elevated: #1f2633;
-  --app-bg-rail: #1a1f2b;
-  --app-bg-header: #121722;
-  --app-bg-shell-gradient: radial-gradient(circle at 14% 0%, rgba(145, 70, 255, 0.18), transparent 38%),
-    radial-gradient(circle at 86% 100%, rgba(145, 70, 255, 0.09), transparent 44%),
-    linear-gradient(180deg, #0f1118 0%, #111624 48%, #0d1018 100%);
+  --app-bg-base: #111315;
+  --app-bg-surface: #1a1d21;
+  --app-bg-elevated: #23272d;
+  --app-bg-rail: #16191d;
+  --app-bg-header: #171a1f;
+  --app-bg-shell-gradient: radial-gradient(circle at 14% 0%, rgba(155, 92, 255, 0.2), transparent 38%),
+    radial-gradient(circle at 86% 100%, rgba(155, 92, 255, 0.08), transparent 44%),
+    linear-gradient(180deg, #111315 0%, #15181d 48%, #101215 100%);
 
   --app-text-primary: #e5e7eb;
-  --app-text-secondary: #a7b0bf;
-  --app-text-muted: #7d8596;
-  --app-text-dim: #6b7280;
+  --app-text-secondary: #b6bbc6;
+  --app-text-muted: #8e95a3;
+  --app-text-dim: #6e7685;
 
-  --app-border: #3f475a;
-  --app-border-strong: #59627a;
+  --app-border: #343941;
+  --app-border-strong: #454c57;
 
-  --app-accent: #9146ff;
-  --app-accent-hover: #7f39fa;
-  --app-accent-soft: #c8adff;
-  --app-accent-glow: rgba(145, 70, 255, 0.22);
+  --app-accent: #9b5cff;
+  --app-accent-hover: #8c4dff;
+  --app-accent-soft: #c8abff;
+  --app-accent-glow: rgba(155, 92, 255, 0.28);
 
   --app-success: #34d399;
   --app-warn: #fbbf24;
