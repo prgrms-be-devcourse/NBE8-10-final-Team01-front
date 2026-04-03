@@ -8,6 +8,7 @@ import SockJS from "sockjs-client";
 
 import type {
   ApiErrorResponse,
+  BattleRoomStateResponse,
   JoinRoomResponse,
   ProblemDetailResponse,
   RoomResponse,
@@ -151,11 +152,14 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   }, [refreshSession, roomId, session.authenticated, sessionLoaded]);
 
   useEffect(() => {
+    hasAttemptedJoinRef.current = false;
+  }, [roomId]);
+
+  useEffect(() => {
     if (
       hasAttemptedJoinRef.current ||
       !room ||
       !session.authenticated ||
-      room.status !== "WAITING" ||
       !session.member
     ) {
       return;
@@ -165,7 +169,11 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
       (item) => item.userId === session.member?.memberId,
     );
 
-    if (participant?.status !== "READY") {
+    const shouldJoin =
+      (room.status === "WAITING" && participant?.status === "READY") ||
+      (room.status === "PLAYING" && participant?.status === "ABANDONED");
+
+    if (!shouldJoin) {
       return;
     }
 
@@ -180,6 +188,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
         if (!response.ok) {
           const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
           setError(payload?.message ?? "배틀룸 입장에 실패했습니다.");
+          hasAttemptedJoinRef.current = false;
           return;
         }
 
@@ -192,6 +201,17 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
 
         if (refreshed.ok) {
           setRoom((await refreshed.json()) as RoomResponse);
+        }
+
+        const stateResponse = await fetch(`/api/battle/rooms/${roomId}/state`, {
+          cache: "no-store",
+        });
+
+        if (stateResponse.ok) {
+          const stateData = (await stateResponse.json()) as BattleRoomStateResponse;
+          if (typeof stateData.myCode === "string" && stateData.myCode.length > 0) {
+            setCode(stateData.myCode);
+          }
         }
       })();
     });
