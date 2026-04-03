@@ -948,7 +948,7 @@ export default function HomeScreen() {
   };
 
   return (
-    <div className="h-full min-h-0">
+    <div className="relative h-full min-h-0">
       <QueueEditorPane
         editorPaneRef={editorPaneRef}
         editorContentStyle={editorContentStyle}
