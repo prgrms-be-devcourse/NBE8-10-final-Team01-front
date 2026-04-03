@@ -42,10 +42,13 @@ const defaultCodeByLanguage: Record<string, string> = {
 };
 
 const fallbackLanguages = ["python3", "java", "javascript"];
-const MIN_LEFT_RATIO = 32;
-const MAX_LEFT_RATIO = 68;
-const MIN_TOP_RATIO = 28;
-const MAX_TOP_RATIO = 72;
+const MIN_LEFT_RATIO = 22;
+const MAX_LEFT_RATIO = 78;
+const MIN_TOP_RATIO = 24;
+const MAX_TOP_RATIO = 76;
+const LEFT_RATIO_SNAP_POINTS = [22, 32, 50, 68, 78];
+const TOP_RATIO_SNAP_POINTS = [24, 34, 50, 66, 76];
+const SPLIT_SNAP_GAP = 2;
 
 interface SoloCaseRunResult {
   status: "pending" | "done" | "error";
@@ -73,6 +76,11 @@ interface SoloSubmitState {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function snapRatio(value: number, points: number[], gap: number) {
+  const nearest = points.find((point) => Math.abs(value - point) <= gap);
+  return nearest ?? value;
 }
 
 function isRunResultEvent(payload: unknown): payload is SoloRunWsMessage {
@@ -242,6 +250,8 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
   const rightColumnRef = useRef<HTMLDivElement | null>(null);
   const runTimeoutRef = useRef<number | null>(null);
+  const leftPaneRatioRef = useRef(leftPaneRatio);
+  const rightTopPaneRatioRef = useRef(rightTopPaneRatio);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 1024px)");
@@ -341,6 +351,14 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
       }
     };
   }, []);
+
+  useEffect(() => {
+    leftPaneRatioRef.current = leftPaneRatio;
+  }, [leftPaneRatio]);
+
+  useEffect(() => {
+    rightTopPaneRatioRef.current = rightTopPaneRatio;
+  }, [rightTopPaneRatio]);
 
   useEffect(() => {
     const memberId = session.member?.memberId;
@@ -637,7 +655,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
     const onMove = (moveEvent: MouseEvent) => {
       const rect = container.getBoundingClientRect();
       const nextRatio = ((moveEvent.clientX - rect.left) / rect.width) * 100;
-      setLeftPaneRatio(clamp(nextRatio, MIN_LEFT_RATIO, MAX_LEFT_RATIO));
+      const clamped = clamp(nextRatio, MIN_LEFT_RATIO, MAX_LEFT_RATIO);
+      leftPaneRatioRef.current = clamped;
+      setLeftPaneRatio(clamped);
     };
 
     const onUp = () => {
@@ -645,6 +665,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
       window.removeEventListener("mouseup", onUp);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
+      const snapped = snapRatio(leftPaneRatioRef.current, LEFT_RATIO_SNAP_POINTS, SPLIT_SNAP_GAP);
+      leftPaneRatioRef.current = snapped;
+      setLeftPaneRatio(snapped);
     };
 
     document.body.style.userSelect = "none";
@@ -667,7 +690,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
       }
 
       const nextRatio = ((moveEvent.clientY - rect.top) / rect.height) * 100;
-      setRightTopPaneRatio(clamp(nextRatio, MIN_TOP_RATIO, MAX_TOP_RATIO));
+      const clamped = clamp(nextRatio, MIN_TOP_RATIO, MAX_TOP_RATIO);
+      rightTopPaneRatioRef.current = clamped;
+      setRightTopPaneRatio(clamped);
     };
 
     const onUp = () => {
@@ -675,6 +700,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
       window.removeEventListener("mouseup", onUp);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
+      const snapped = snapRatio(rightTopPaneRatioRef.current, TOP_RATIO_SNAP_POINTS, SPLIT_SNAP_GAP);
+      rightTopPaneRatioRef.current = snapped;
+      setRightTopPaneRatio(snapped);
     };
 
     document.body.style.userSelect = "none";
@@ -968,6 +996,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
             role="separator"
             aria-orientation="vertical"
             onMouseDown={startVerticalResize}
+            onDoubleClick={() => setLeftPaneRatio(50)}
             className="group mx-1 flex w-3 cursor-col-resize items-center justify-center"
           >
             <div className="h-full w-px rounded bg-zinc-300 transition group-hover:bg-zinc-500" />
@@ -1004,6 +1033,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
               role="separator"
               aria-orientation="horizontal"
               onMouseDown={startHorizontalResize}
+              onDoubleClick={() => setRightTopPaneRatio(50)}
               className="group my-1 flex h-3 cursor-row-resize items-center justify-center"
             >
               <div className="h-px w-full rounded bg-zinc-300 transition group-hover:bg-zinc-500" />
