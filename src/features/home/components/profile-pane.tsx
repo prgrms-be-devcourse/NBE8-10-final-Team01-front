@@ -26,7 +26,7 @@ function renderDbRailIcon(name: string) {
       return (
         <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
           <path d="M8 3a3 3 0 0 0-3 3v2.2l-1 1.6h8l-1-1.6V6a3 3 0 0 0-3-3Z" stroke="currentColor" strokeWidth="1.2" />
-          <circle cx="12.2" cy="3.8" r="1.4" fill="#ff5f6d" />
+          <circle cx="12.2" cy="3.8" r="1.4" fill="var(--app-danger)" />
         </svg>
       );
     case "search":
@@ -155,16 +155,16 @@ export default function ProfilePane({
   };
 
   return (
-    <aside className="min-h-0 bg-[#2b2d30] md:col-span-2 lg:col-span-1">
+    <aside className="min-h-0 bg-app-elevated md:col-span-2 lg:col-span-1">
       <div className={`grid h-full ${isProfilePanelOpen ? "grid-cols-[minmax(0,1fr)_38px]" : "grid-cols-[38px]"}`}>
         <div className={`min-h-0 ${isProfilePanelOpen ? "block" : "hidden"}`}>
-          <div className="flex h-12 items-center justify-between border-b border-zinc-800/90 px-4">
-            <p className="text-sm font-semibold text-zinc-200">프로필</p>
+          <div className="flex h-12 items-center justify-between border-b border-app-border-strong/80 px-4">
+            <p className="text-sm font-semibold text-app-primary">프로필</p>
           </div>
-          <div className="h-full overflow-y-auto p-3 text-xs text-zinc-300">
-            <div className="rounded-md border border-zinc-800/90 bg-[#1f222b] p-3">
+          <div className="h-full overflow-y-auto p-3 text-xs text-app-secondary">
+            <div className="rounded-md border border-app-border-strong/80 bg-app-surface p-3">
               <div className="flex items-center justify-between">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-app-dim">
                   계정
                 </p>
                 <StatusPill tone={session.authenticated ? "success" : "warn"}>
@@ -172,10 +172,10 @@ export default function ProfilePane({
                 </StatusPill>
               </div>
               <div className="mt-3 space-y-1">
-                <p className="text-base font-semibold text-zinc-100">
+                <p className="text-base font-semibold text-app-primary">
                   {session.member?.nickname ?? "게스트"}
                 </p>
-                <p className="text-zinc-400">
+                <p className="text-app-muted">
                   {session.authenticated
                     ? formatRoleLabel(session.member?.role)
                     : "로그인이 필요합니다."}
@@ -184,9 +184,9 @@ export default function ProfilePane({
             </div>
 
             {battleSidebarState ? (
-              <div className="mt-3 rounded-md border border-zinc-800/90 bg-[#1f222b] p-3">
+              <div className="mt-3 rounded-md border border-app-border-strong/80 bg-app-surface p-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-app-dim">
                     배틀 상태
                   </p>
                   <StatusPill tone={battleStatusTone}>
@@ -194,13 +194,13 @@ export default function ProfilePane({
                   </StatusPill>
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2">
-                  <div className="rounded border border-zinc-700 bg-[#171a22] px-2 py-1.5">
-                    <p className="text-[10px] text-zinc-500">남은 시간</p>
-                    <p className="text-sm font-semibold text-zinc-100">{battleSidebarState.remainingTime}</p>
+                  <div className="rounded border border-app-border bg-app-base px-2 py-1.5">
+                    <p className="text-[10px] text-app-dim">남은 시간</p>
+                    <p className="text-sm font-semibold text-app-primary">{battleSidebarState.remainingTime}</p>
                   </div>
-                  <div className="rounded border border-zinc-700 bg-[#171a22] px-2 py-1.5">
-                    <p className="text-[10px] text-zinc-500">내 상태</p>
-                    <p className="text-sm font-semibold text-zinc-100">
+                  <div className="rounded border border-app-border bg-app-base px-2 py-1.5">
+                    <p className="text-[10px] text-app-dim">내 상태</p>
+                    <p className="text-sm font-semibold text-app-primary">
                       {battleSidebarState.myStatus ?? "-"}
                     </p>
                   </div>
@@ -213,14 +213,14 @@ export default function ProfilePane({
                         key={`profile-battle-participant-${participant.userId}`}
                         className={`flex items-center justify-between rounded border px-2 py-1.5 ${
                           isMe
-                            ? "border-violet-500/40 bg-violet-500/10"
-                            : "border-zinc-700 bg-[#171a22]"
+                            ? "border-app-accent/40 bg-app-accent/10"
+                            : "border-app-border bg-app-base"
                         }`}
                       >
                         <div className="flex items-center gap-2">
-                          <p className="text-xs font-medium text-zinc-100">{participant.nickname}</p>
+                          <p className="text-xs font-medium text-app-primary">{participant.nickname}</p>
                           {isMe ? (
-                            <span className="rounded bg-violet-600/20 px-1.5 py-0.5 text-[10px] font-semibold text-violet-300">
+                            <span className="rounded bg-app-accent/20 px-1.5 py-0.5 text-[10px] font-semibold text-app-accent-soft">
                               나
                             </span>
                           ) : null}
@@ -235,40 +235,40 @@ export default function ProfilePane({
               </div>
             ) : null}
 
-            <div className="mt-3 rounded-md border border-zinc-800/90 bg-[#1f222b] p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+            <div className="mt-3 rounded-md border border-app-border-strong/80 bg-app-surface p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-app-dim">
                 전적 요약
               </p>
               {session.authenticated ? (
                 <>
                   <div className="mt-2 grid grid-cols-2 gap-2">
-                    <div className="rounded border border-zinc-700 bg-[#171a22] px-2 py-1.5">
-                      <p className="text-[10px] text-zinc-500">최근 경기</p>
-                      <p className="text-sm font-semibold text-zinc-100">{previewPlayedCount}</p>
+                    <div className="rounded border border-app-border bg-app-base px-2 py-1.5">
+                      <p className="text-[10px] text-app-dim">최근 경기</p>
+                      <p className="text-sm font-semibold text-app-primary">{previewPlayedCount}</p>
                     </div>
-                    <div className="rounded border border-zinc-700 bg-[#171a22] px-2 py-1.5">
-                      <p className="text-[10px] text-zinc-500">클리어</p>
-                      <p className="text-sm font-semibold text-zinc-100">{previewSolvedCount}</p>
+                    <div className="rounded border border-app-border bg-app-base px-2 py-1.5">
+                      <p className="text-[10px] text-app-dim">클리어</p>
+                      <p className="text-sm font-semibold text-app-primary">{previewSolvedCount}</p>
                     </div>
-                    <div className="rounded border border-zinc-700 bg-[#171a22] px-2 py-1.5">
-                      <p className="text-[10px] text-zinc-500">승률</p>
-                      <p className="text-sm font-semibold text-zinc-100">{previewWinRate}%</p>
+                    <div className="rounded border border-app-border bg-app-base px-2 py-1.5">
+                      <p className="text-[10px] text-app-dim">승률</p>
+                      <p className="text-sm font-semibold text-app-primary">{previewWinRate}%</p>
                     </div>
-                    <div className="rounded border border-zinc-700 bg-[#171a22] px-2 py-1.5">
-                      <p className="text-[10px] text-zinc-500">점수 변화</p>
-                      <p className="text-sm font-semibold text-zinc-100">{previewScoreDeltaLabel}</p>
+                    <div className="rounded border border-app-border bg-app-base px-2 py-1.5">
+                      <p className="text-[10px] text-app-dim">점수 변화</p>
+                      <p className="text-sm font-semibold text-app-primary">{previewScoreDeltaLabel}</p>
                     </div>
                   </div>
                   <p
                     className={`mt-2 text-[11px] ${
-                      resultsPreviewError ? "text-rose-300" : "text-zinc-500"
+                      resultsPreviewError ? "text-app-danger" : "text-app-dim"
                     }`}
                   >
                     {resultsPreviewError ?? resultsPreviewMessage}
                   </p>
                 </>
               ) : (
-                <p className="mt-2 text-[11px] text-zinc-500">
+                <p className="mt-2 text-[11px] text-app-dim">
                   로그인 후 전적 요약을 확인할 수 있습니다.
                 </p>
               )}
@@ -279,7 +279,7 @@ export default function ProfilePane({
                 <>
                   <Link
                     href="/mypage"
-                    className="block w-full rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2 text-center text-sm font-medium text-zinc-100 transition hover:bg-zinc-700/30"
+                    className="block w-full rounded-md border border-app-border bg-app-base px-3 py-2 text-center text-sm font-medium text-app-primary transition hover:bg-app-elevated/90"
                   >
                     내 프로필
                   </Link>
@@ -287,7 +287,7 @@ export default function ProfilePane({
                     type="button"
                     onClick={onLogout}
                     disabled={isBusy}
-                    className="w-full rounded-md bg-[#9146ff] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#7f39fa] disabled:cursor-not-allowed disabled:bg-zinc-600 disabled:text-zinc-300"
+                    className="w-full rounded-md bg-app-accent px-3 py-2 text-sm font-semibold text-white transition hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:bg-app-elevated disabled:text-app-secondary"
                   >
                     로그아웃
                   </button>
@@ -296,13 +296,13 @@ export default function ProfilePane({
                 <>
                   <Link
                     href="/signup"
-                    className="block w-full rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2 text-center text-sm font-medium text-zinc-100 transition hover:bg-zinc-700/30"
+                    className="block w-full rounded-md border border-app-border bg-app-base px-3 py-2 text-center text-sm font-medium text-app-primary transition hover:bg-app-elevated/90"
                   >
                     회원가입
                   </Link>
                   <Link
                     href="/login?next=/"
-                    className="block w-full rounded-md bg-[#9146ff] px-3 py-2 text-center text-sm font-semibold text-white transition hover:bg-[#7f39fa]"
+                    className="block w-full rounded-md bg-app-accent px-3 py-2 text-center text-sm font-semibold text-white transition hover:bg-app-accent-hover"
                   >
                     로그인
                   </Link>
@@ -312,7 +312,7 @@ export default function ProfilePane({
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-col items-center justify-between border-l border-zinc-800/90 bg-[#25272d] py-2">
+        <div className="flex min-h-0 flex-col items-center justify-between border-l border-app-border-strong/80 bg-app-rail py-2">
           <div className="flex flex-col items-center gap-2">
             {ideDbRailTopItems.map((item) => (
               <button
@@ -327,8 +327,8 @@ export default function ProfilePane({
                 aria-label={item.title}
                 className={`h-8 w-8 rounded-md border transition ${
                   item.icon === "database" && isProfilePanelOpen
-                    ? "border-[#2f77ff] bg-[#2f77ff] text-white shadow-[0_0_0_1px_rgba(80,130,255,0.35)]"
-                    : "border-transparent text-zinc-400 hover:bg-zinc-700/30 hover:text-zinc-200"
+                    ? "border-app-accent/70 bg-app-accent text-white shadow-[0_0_0_1px_var(--app-accent-glow)]"
+                    : "border-transparent text-app-muted hover:bg-app-elevated/90 hover:text-app-primary"
                 }`}
               >
                 <span className="flex items-center justify-center">{renderDbRailIcon(item.icon)}</span>
@@ -342,7 +342,7 @@ export default function ProfilePane({
                 type="button"
                 title={item.title}
                 aria-label={item.title}
-                className="h-8 w-8 rounded-md border border-transparent text-zinc-500 transition hover:bg-zinc-700/30 hover:text-zinc-200"
+                className="h-8 w-8 rounded-md border border-transparent text-app-dim transition hover:bg-app-elevated/90 hover:text-app-primary"
               >
                 <span className="flex items-center justify-center">{renderDbRailIcon(item.icon)}</span>
               </button>

@@ -367,7 +367,7 @@ export default function IdeShell({
 
   return (
     <SessionContext.Provider value={{ session, sessionLoaded, refreshSession, applySession }}>
-      <div className="flex h-full min-h-0 flex-1 overflow-hidden bg-[#1e1f22]">
+      <div className="flex h-full min-h-0 flex-1 overflow-hidden bg-app-base">
         <div className={`grid h-full w-full ${layoutColumnsClass}`}>
           <QuickMenuPane
             isQuickMenuOpen={isQuickMenuOpen}
@@ -376,7 +376,7 @@ export default function IdeShell({
             projectTreeItems={projectTreeItems}
           />
 
-          <section className="h-full min-h-0 overflow-hidden bg-[#1e1f22]">
+          <section className="h-full min-h-0 overflow-hidden bg-app-base">
             {isFullBleedCenter ? (
               <div className="h-full min-h-0">{children}</div>
             ) : (

@@ -11,10 +11,10 @@ export function DefinitionGrid({
 }) {
   const cardClass =
     variant === "dark"
-      ? "rounded-2xl border border-zinc-700 bg-[#1b2130]"
-      : "rounded-2xl border border-zinc-300 bg-zinc-50";
-  const labelClass = variant === "dark" ? "text-zinc-500" : "text-zinc-500";
-  const valueClass = variant === "dark" ? "text-zinc-100" : "text-zinc-900";
+      ? "rounded-2xl border border-app-border bg-app-elevated"
+      : "rounded-2xl border border-app-border bg-app-surface";
+  const labelClass = "text-app-dim";
+  const valueClass = variant === "dark" ? "text-app-primary" : "text-app-secondary";
 
   return (
     <dl className={`grid sm:grid-cols-2 ${compact ? "gap-3" : "gap-4"}`}>

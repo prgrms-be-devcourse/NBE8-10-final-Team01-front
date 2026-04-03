@@ -33,7 +33,7 @@ import {
 const BattleCodeEditor = dynamic(() => import("./code-editor"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[26rem] items-center justify-center rounded-2xl border border-zinc-700 bg-[#171c26] text-sm text-zinc-300">
+    <div className="flex h-[26rem] items-center justify-center rounded-2xl border border-app-border bg-app-surface text-sm text-app-secondary">
       에디터를 준비하는 중입니다.
     </div>
   ),
@@ -943,7 +943,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   if (!sessionLoaded && !room) {
     return (
       <Panel variant="dark" title="세션 확인" description="인증 상태를 확인하는 중입니다.">
-        <p className="text-sm text-zinc-400">잠시만 기다려주세요.</p>
+        <p className="text-sm text-app-muted">잠시만 기다려주세요.</p>
       </Panel>
     );
   }
@@ -951,8 +951,8 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   if (!session.authenticated && !room) {
     return (
       <div className="space-y-8">
-        <div className="flex items-center justify-between rounded-2xl border border-zinc-700 bg-[#171c26] px-4 py-3">
-          <p className="text-sm font-medium text-zinc-300">
+        <div className="flex items-center justify-between rounded-2xl border border-app-border bg-app-surface px-4 py-3">
+          <p className="text-sm font-medium text-app-secondary">
             배틀룸은 로그인 후 이용할 수 있습니다.
           </p>
           <StatusPill tone="warn" variant="dark">로그인 필요</StatusPill>
@@ -961,13 +961,13 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
           <div className="flex flex-wrap gap-3">
             <Link
               href={`/login?next=${encodeURIComponent(`/battle/rooms/${roomId}`)}`}
-              className="rounded-2xl border border-violet-400/40 bg-gradient-to-r from-violet-600 to-violet-500 px-4 py-3 text-sm font-medium text-white"
+              className="rounded-2xl border border-app-accent/40 bg-gradient-to-r from-app-accent to-app-accent-hover px-4 py-3 text-sm font-medium text-white"
             >
               로그인하러 가기
             </Link>
             <Link
               href="/"
-              className="rounded-2xl border border-zinc-700 bg-[#1b2130] px-4 py-3 text-sm font-medium text-zinc-200"
+              className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm font-medium text-app-primary"
             >
               메인으로 돌아가기
             </Link>
@@ -980,14 +980,14 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   if (!room) {
     return (
       <div className="space-y-8">
-        <div className="flex items-center justify-between rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3">
-          <p className="text-sm font-medium text-rose-200">
+        <div className="flex items-center justify-between rounded-2xl border border-app-danger/35 bg-app-danger/10 px-4 py-3">
+          <p className="text-sm font-medium text-app-danger">
             배틀룸 정보를 가져오지 못했습니다.
           </p>
           <StatusPill tone="danger" variant="dark">Load failed</StatusPill>
         </div>
         <Panel variant="dark" title="오류" description="응답 메시지">
-          <p className="text-sm leading-7 text-zinc-300">
+          <p className="text-sm leading-7 text-app-secondary">
             {error ?? message}
           </p>
         </Panel>
@@ -1016,24 +1016,24 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   const submitIsWaiting = isSubmitting || latestResultCode === "JUDGING";
   const submitHasResult = Boolean(isSubmitting || latestSubmission?.result);
   const submitCardClass = submitIsAccepted
-    ? "border-emerald-500/30 bg-emerald-500/10"
+    ? "border-app-success/30 bg-app-success/10"
     : submitIsWaiting
-      ? "border-amber-500/30 bg-amber-500/10"
+      ? "border-app-warn/30 bg-app-warn/10"
       : submitHasResult
-        ? "border-rose-500/30 bg-rose-500/10"
-        : "border-zinc-700 bg-[#1b2130]";
+        ? "border-app-danger/35 bg-app-danger/10"
+        : "border-app-border bg-app-elevated";
   const submitHeadlineClass = submitIsAccepted
-    ? "text-emerald-300"
+    ? "text-app-success"
     : submitIsWaiting
-      ? "text-amber-300"
+      ? "text-app-warn"
       : submitHasResult
-        ? "text-rose-300"
-        : "text-zinc-200";
+        ? "text-app-danger"
+        : "text-app-primary";
   const submitBadgeClass = submitIsAccepted
-    ? "bg-emerald-500/15 text-emerald-300"
+    ? "bg-app-success/15 text-app-success"
     : submitIsWaiting
-      ? "bg-amber-500/15 text-amber-300"
-      : "bg-rose-500/15 text-rose-300";
+      ? "bg-app-warn/15 text-app-warn"
+      : "bg-app-danger/15 text-app-danger";
   const submitProgressText =
     latestSubmission &&
     latestSubmission.passedCount !== null &&
@@ -1052,7 +1052,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
     <div className="h-full space-y-6 lg:space-y-0">
       {error && (
         <div
-          className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200"
+          className="rounded-2xl border border-app-danger/35 bg-app-danger/10 px-4 py-3 text-sm text-app-danger"
         >
           {error}
         </div>
@@ -1066,7 +1066,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
           >
             {isLeftPaneCollapsed ? (
               <div
-                className="group relative flex h-full flex-col items-center gap-2 rounded-xl border border-zinc-700 bg-[#171c26] px-1 py-3"
+                className="group relative flex h-full flex-col items-center gap-2 rounded-xl border border-app-border bg-app-surface px-1 py-3"
                 onClick={(event) => {
                   if (event.target === event.currentTarget) {
                     setLeftPaneRatio(32);
@@ -1081,9 +1081,9 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                   className="absolute inset-y-0 -right-1 z-10 flex w-4 cursor-col-resize items-center justify-center"
                 >
                   <div className="relative flex h-full w-full items-center justify-center">
-                    <div className="h-full w-px rounded bg-zinc-700 transition group-hover:bg-violet-500/80" />
-                    <div className="absolute flex h-16 w-1.5 items-center justify-center rounded-full border border-zinc-600 bg-[#171c26] shadow-[0_0_0_1px_rgba(255,255,255,0.02)] transition group-hover:border-violet-500/60 group-hover:bg-violet-500/15">
-                      <div className="h-8 w-0.5 rounded-full bg-zinc-500 transition group-hover:bg-violet-300" />
+                    <div className="h-full w-px rounded bg-app-elevated transition group-hover:bg-app-accent/80" />
+                    <div className="absolute flex h-16 w-1.5 items-center justify-center rounded-full border border-app-border-strong bg-app-surface shadow-[0_0_0_1px_rgba(255,255,255,0.02)] transition group-hover:border-app-accent/60 group-hover:bg-app-accent/15">
+                      <div className="h-8 w-0.5 rounded-full bg-app-border-strong transition group-hover:bg-app-accent-soft" />
                     </div>
                   </div>
                 </div>
@@ -1095,8 +1095,8 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                   }}
                   className={`w-full rounded-md border px-1 py-2 text-xs font-semibold transition ${
                     leftPanelTab === "description"
-                      ? "border-zinc-100 bg-zinc-100 text-zinc-950"
-                      : "border-zinc-700 bg-[#1b2130] text-zinc-400 hover:bg-[#222b3c] hover:text-zinc-200"
+                      ? "border-app-border-strong bg-app-elevated text-app-primary"
+                      : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
                   }`}
                   style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
                 >
@@ -1110,8 +1110,8 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                   }}
                   className={`w-full rounded-md border px-1 py-2 text-xs font-semibold transition ${
                     leftPanelTab === "submission"
-                      ? "border-zinc-100 bg-zinc-100 text-zinc-950"
-                      : "border-zinc-700 bg-[#1b2130] text-zinc-400 hover:bg-[#222b3c] hover:text-zinc-200"
+                      ? "border-app-border-strong bg-app-elevated text-app-primary"
+                      : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
                   }`}
                   style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
                 >
@@ -1127,8 +1127,8 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                       onClick={() => setLeftPanelTab("description")}
                       className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
                         leftPanelTab === "description"
-                          ? "border-zinc-100 bg-zinc-100 text-zinc-950"
-                          : "border-zinc-700 bg-[#1b2130] text-zinc-400 hover:bg-[#222b3c] hover:text-zinc-200"
+                          ? "border-app-border-strong bg-app-elevated text-app-primary"
+                          : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
                       }`}
                     >
                       Description
@@ -1138,8 +1138,8 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                       onClick={() => setLeftPanelTab("submission")}
                       className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
                         leftPanelTab === "submission"
-                          ? "border-zinc-100 bg-zinc-100 text-zinc-950"
-                          : "border-zinc-700 bg-[#1b2130] text-zinc-400 hover:bg-[#222b3c] hover:text-zinc-200"
+                          ? "border-app-border-strong bg-app-elevated text-app-primary"
+                          : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
                       }`}
                     >
                       Submission
@@ -1148,11 +1148,11 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
 
                 {leftPanelTab === "description" ? (
                   <>
-                    <div className="rounded-2xl border border-zinc-700 bg-[#1b2130] p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                    <div className="rounded-2xl border border-app-border bg-app-elevated p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                         Battle
                       </p>
-                      <h1 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-100">
+                      <h1 className="mt-2 text-2xl font-semibold tracking-tight text-app-primary">
                         {problem ? `${problem.problemId}. ${problem.title}` : `Problem ${room.problemId}`}
                       </h1>
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -1171,34 +1171,34 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                     />
 
                     {problem ? (
-                      <div className="space-y-4 rounded-2xl border border-zinc-700 bg-[#1b2130] p-4">
+                      <div className="space-y-4 rounded-2xl border border-app-border bg-app-elevated p-4">
                         <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                             Content
                           </p>
-                          <MathText className="mt-2 block text-sm leading-7 text-zinc-300">
+                          <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
                             {problem.content}
                           </MathText>
                         </div>
                         <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                             Input
                           </p>
-                          <MathText className="mt-2 block text-sm leading-7 text-zinc-300">
+                          <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
                             {problem.inputFormat}
                           </MathText>
                         </div>
                         <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                             Output
                           </p>
-                          <MathText className="mt-2 block text-sm leading-7 text-zinc-300">
+                          <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
                             {problem.outputFormat}
                           </MathText>
                         </div>
                       </div>
                     ) : (
-                      <div className="rounded-2xl border border-zinc-700 bg-[#1b2130] px-4 py-3 text-sm text-zinc-400">
+                      <div className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm text-app-muted">
                         문제 상세를 불러오는 중입니다.
                       </div>
                     )}
@@ -1206,7 +1206,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                 ) : (
                   submitHasResult ? (
                     <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                         Submit Result
                       </p>
                       <div className="flex flex-wrap items-start gap-3">
@@ -1214,7 +1214,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                           {submitHeadline}
                         </p>
                         {submitProgressText ? (
-                          <p className="pt-1 text-sm text-zinc-400">{submitProgressText}</p>
+                          <p className="pt-1 text-sm text-app-muted">{submitProgressText}</p>
                         ) : null}
                         <div className="ml-auto flex flex-col items-end gap-1 text-right">
                           {latestResultCode ? (
@@ -1224,21 +1224,21 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                               {latestResultCode}
                             </span>
                           ) : null}
-                          <p className="text-xs text-zinc-400">language: {language}</p>
+                          <p className="text-xs text-app-muted">language: {language}</p>
                         </div>
                       </div>
 
-                      <div className="rounded-xl border border-zinc-700 bg-[#0f1521]/80 p-3">
-                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                      <div className="rounded-xl border border-app-border bg-app-base/80 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                           Current Submission
                         </p>
-                        <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-200">
+                        <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
                           {code}
                         </pre>
                       </div>
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-zinc-700 bg-[#1b2130] px-4 py-3 text-sm text-zinc-400">
+                    <div className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm text-app-muted">
                       아직 제출 결과가 없습니다.
                     </div>
                   )
@@ -1258,9 +1258,9 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
             }`}
           >
             <div className="relative flex h-full w-full items-center justify-center">
-              <div className="h-full w-px rounded bg-zinc-700 transition group-hover:bg-violet-500/80" />
-              <div className="absolute top-1/2 flex h-20 w-2 -translate-y-1/2 items-center justify-center rounded-full border border-zinc-600 bg-[#171c26] shadow-[0_0_0_1px_rgba(255,255,255,0.02)] transition group-hover:border-violet-500/60 group-hover:bg-violet-500/15">
-                <div className="h-10 w-0.5 rounded-full bg-zinc-500 transition group-hover:bg-violet-300" />
+              <div className="h-full w-px rounded bg-app-elevated transition group-hover:bg-app-accent/80" />
+              <div className="absolute top-1/2 flex h-20 w-2 -translate-y-1/2 items-center justify-center rounded-full border border-app-border-strong bg-app-surface shadow-[0_0_0_1px_rgba(255,255,255,0.02)] transition group-hover:border-app-accent/60 group-hover:bg-app-accent/15">
+                <div className="h-10 w-0.5 rounded-full bg-app-border-strong transition group-hover:bg-app-accent-soft" />
               </div>
             </div>
           </div>
@@ -1307,9 +1307,9 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
               }`}
             >
               <div className="relative flex h-full w-full items-center justify-center">
-                <div className="h-px w-full rounded bg-zinc-700 transition group-hover:bg-violet-500/80" />
-                <div className="absolute left-1/2 flex h-2.5 w-12 -translate-x-1/2 items-center justify-center rounded-full border border-zinc-700 bg-[#171c26]/90 transition group-hover:border-violet-500/50 group-hover:bg-violet-500/10">
-                  <div className="h-0.5 w-6 rounded-full bg-zinc-600 transition group-hover:bg-violet-300" />
+                <div className="h-px w-full rounded bg-app-elevated transition group-hover:bg-app-accent/80" />
+                <div className="absolute left-1/2 flex h-2.5 w-12 -translate-x-1/2 items-center justify-center rounded-full border border-app-border bg-app-surface/90 transition group-hover:border-app-accent/50 group-hover:bg-app-accent/10">
+                  <div className="h-0.5 w-6 rounded-full bg-app-elevated transition group-hover:bg-app-accent-soft" />
                 </div>
               </div>
             </div>
@@ -1329,20 +1329,20 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                       setRightTopPaneRatio(76);
                     }
                   }}
-                  className="group relative flex h-full cursor-row-resize items-center rounded-xl border border-zinc-700 bg-[#171c26] px-4"
+                  className="group relative flex h-full cursor-row-resize items-center rounded-xl border border-app-border bg-app-surface px-4"
                 >
                   <div className="pointer-events-none absolute inset-x-0 top-1.5 flex h-2.5 items-center justify-center">
-                    <div className="flex h-2.5 w-12 items-center justify-center rounded-full border border-zinc-700 bg-[#171c26]/90 transition group-hover:border-violet-500/50 group-hover:bg-violet-500/10">
-                      <div className="h-0.5 w-6 rounded-full bg-zinc-600 transition group-hover:bg-violet-300" />
+                    <div className="flex h-2.5 w-12 items-center justify-center rounded-full border border-app-border bg-app-surface/90 transition group-hover:border-app-accent/50 group-hover:bg-app-accent/10">
+                      <div className="h-0.5 w-6 rounded-full bg-app-elevated transition group-hover:bg-app-accent-soft" />
                     </div>
                   </div>
-                  <p className="text-base font-semibold text-zinc-100">TestCase</p>
+                  <p className="text-base font-semibold text-app-primary">TestCase</p>
                 </div>
               ) : (
-                <section className="flex h-full min-h-0 flex-col rounded-2xl border border-zinc-700 bg-[#171c26] p-5 shadow-[0_14px_32px_rgba(0,0,0,0.28)]">
+                <section className="flex h-full min-h-0 flex-col rounded-2xl border border-app-border bg-app-surface p-5 shadow-[0_14px_32px_rgba(0,0,0,0.28)]">
                   <div className="mb-4 flex items-center justify-between gap-3">
-                    <h2 className="text-lg font-semibold text-zinc-100">TestCase</h2>
-                    <p className="shrink-0 text-xs font-medium text-zinc-500">
+                    <h2 className="text-lg font-semibold text-app-primary">TestCase</h2>
+                    <p className="shrink-0 text-xs font-medium text-app-dim">
                       {TESTCASE_SHORTCUT_HINT}
                     </p>
                   </div>
@@ -1356,13 +1356,13 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                             const caseResult = runResults?.[index];
                             const badgeState = getCaseBadgeState(caseResult);
                             const isSelected = selectedRunCaseIndex === index;
-                            const idleClass = "border-zinc-700 bg-[#1b2130] text-zinc-300 hover:bg-[#222b3c]";
-                            const passClass = "border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/15";
-                            const failClass = "border-rose-500/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/15";
-                            const pendingClass = "border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15";
+                            const idleClass = "border-app-border bg-app-elevated text-app-secondary hover:bg-app-elevated";
+                            const passClass = "border-app-success/30 bg-app-success/10 text-app-success hover:bg-app-success/15";
+                            const failClass = "border-app-danger/35 bg-app-danger/10 text-app-danger hover:bg-app-danger/15";
+                            const pendingClass = "border-app-warn/30 bg-app-warn/10 text-app-warn hover:bg-app-warn/15";
 
                             const colorClass = isSelected
-                              ? "border-zinc-100 bg-zinc-100 text-zinc-950"
+                              ? "border-app-border-strong bg-app-elevated text-app-primary"
                               : badgeState?.tone === "pass"
                                 ? passClass
                                 : badgeState?.tone === "fail"
@@ -1383,10 +1383,10 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                                   <span
                                     className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${
                                       badgeState.tone === "pass"
-                                        ? "bg-emerald-500/15 text-emerald-200"
+                                        ? "bg-app-success/15 text-app-success"
                                         : badgeState.tone === "fail"
-                                          ? "bg-rose-500/15 text-rose-200"
-                                          : "bg-amber-500/15 text-amber-200"
+                                          ? "bg-app-danger/15 text-app-danger"
+                                          : "bg-app-warn/15 text-app-warn"
                                     }`}
                                   >
                                     {badgeState.label}
@@ -1401,47 +1401,47 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
 
                       {selectedRunCaseIndex !== null ? (
                         <div className="grid gap-3 lg:grid-cols-[1fr_0.95fr]">
-                          <div className="space-y-3 rounded-2xl border border-zinc-700 bg-[#1b2130] p-4">
+                          <div className="space-y-3 rounded-2xl border border-app-border bg-app-elevated p-4">
                             <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                                 Input
                               </p>
-                              <MathText className="mt-2 block text-sm leading-7 text-zinc-300">
+                              <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
                                 {activeCaseInput}
                               </MathText>
                             </div>
                             <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                                 Output
                               </p>
-                              <MathText className="mt-2 block text-sm leading-7 text-zinc-300">
+                              <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
                                 {activeCaseExpected}
                               </MathText>
                             </div>
                           </div>
 
-                          <div className="space-y-3 rounded-2xl border border-zinc-700 bg-[#1b2130] p-4">
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                          <div className="space-y-3 rounded-2xl border border-app-border bg-app-elevated p-4">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                               Run Result
                             </p>
                             <div
                               className={`rounded-xl border p-3 text-sm ${
                                 !activeRunCase
-                                  ? "border-zinc-700 bg-[#0f1521] text-zinc-300"
+                                  ? "border-app-border bg-app-base text-app-secondary"
                                   : activeRunCasePass
-                                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-                                    : "border-rose-500/30 bg-rose-500/10 text-rose-200"
+                                    ? "border-app-success/30 bg-app-success/10 text-app-success"
+                                    : "border-app-danger/35 bg-app-danger/10 text-app-danger"
                               }`}
                             >
                               {runningCaseIndex === selectedRunCaseIndex ? (
-                                <p className="text-amber-300">실행 요청 중입니다...</p>
+                                <p className="text-app-warn">실행 요청 중입니다...</p>
                               ) : activeRunCase ? (
                                 <div className="space-y-2">
                                   <p
                                     className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${
                                       activeRunCasePass
-                                        ? "bg-emerald-500/15 text-emerald-200"
-                                        : "bg-rose-500/15 text-rose-200"
+                                        ? "bg-app-success/15 text-app-success"
+                                        : "bg-app-danger/15 text-app-danger"
                                     }`}
                                   >
                                     {activeRunCasePass
@@ -1451,29 +1451,29 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                                         : normalizeVerdict(activeRunCase.status)}
                                   </p>
                                   {activeRunCase.stderr ? (
-                                    <div className="rounded-lg border border-rose-500/30 bg-[#0f1521]/80 p-2">
-                                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-300">
+                                    <div className="rounded-lg border border-app-danger/35 bg-app-base/80 p-2">
+                                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-danger">
                                         Error
                                       </p>
-                                      <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-rose-200">
+                                      <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-danger">
                                         {activeRunCase.stderr}
                                       </pre>
                                     </div>
                                   ) : (
                                     <div className="grid gap-2">
-                                      <div className="rounded-lg border border-zinc-700 bg-[#0f1521]/80 p-2">
-                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                                      <div className="rounded-lg border border-app-border bg-app-base/80 p-2">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-dim">
                                           Output
                                         </p>
-                                        <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-200">
+                                        <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
                                           {activeRunCase.actualOutput ?? "(empty)"}
                                         </pre>
                                       </div>
-                                      <div className="rounded-lg border border-zinc-700 bg-[#0f1521]/80 p-2">
-                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                                      <div className="rounded-lg border border-app-border bg-app-base/80 p-2">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-dim">
                                           Expected
                                         </p>
-                                        <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-200">
+                                        <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
                                           {activeRunCase.expectedOutput ?? "(empty)"}
                                         </pre>
                                       </div>
@@ -1481,7 +1481,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                                   )}
                                 </div>
                               ) : (
-                                <p className="text-zinc-400">
+                                <p className="text-app-muted">
                                   아직 실행 결과가 없습니다. Run 버튼으로 해당 케이스를 실행하세요.
                                 </p>
                               )}
@@ -1491,7 +1491,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                       ) : null}
                       </>
                     ) : (
-                      <div className="rounded-2xl border border-zinc-700 bg-[#1b2130] px-4 py-3 text-sm text-zinc-400">
+                      <div className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm text-app-muted">
                         실행 가능한 샘플 케이스가 없습니다.
                       </div>
                     )}
@@ -1512,8 +1512,8 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                 onClick={() => setLeftPanelTab("description")}
                 className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
                   leftPanelTab === "description"
-                    ? "border-zinc-100 bg-zinc-100 text-zinc-950"
-                    : "border-zinc-700 bg-[#1b2130] text-zinc-400 hover:bg-[#222b3c] hover:text-zinc-200"
+                    ? "border-app-border-strong bg-app-elevated text-app-primary"
+                    : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
                 }`}
               >
                 Description
@@ -1523,8 +1523,8 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                 onClick={() => setLeftPanelTab("submission")}
                 className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
                   leftPanelTab === "submission"
-                    ? "border-zinc-100 bg-zinc-100 text-zinc-950"
-                    : "border-zinc-700 bg-[#1b2130] text-zinc-400 hover:bg-[#222b3c] hover:text-zinc-200"
+                    ? "border-app-border-strong bg-app-elevated text-app-primary"
+                    : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
                 }`}
               >
                 Submission
@@ -1533,11 +1533,11 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
 
             {leftPanelTab === "description" ? (
               <>
-                <div className="rounded-2xl border border-zinc-700 bg-[#1b2130] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                <div className="rounded-2xl border border-app-border bg-app-elevated p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                     Battle
                   </p>
-                  <h1 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-100">
+                  <h1 className="mt-2 text-2xl font-semibold tracking-tight text-app-primary">
                     {problem ? `${problem.problemId}. ${problem.title}` : `Problem ${room.problemId}`}
                   </h1>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -1554,34 +1554,34 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                   ]}
                 />
                 {problem ? (
-                  <div className="space-y-4 rounded-2xl border border-zinc-700 bg-[#1b2130] p-4">
+                  <div className="space-y-4 rounded-2xl border border-app-border bg-app-elevated p-4">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                         Content
                       </p>
-                      <MathText className="mt-2 block text-sm leading-7 text-zinc-300">
+                      <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
                         {problem.content}
                       </MathText>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                         Input
                       </p>
-                      <MathText className="mt-2 block text-sm leading-7 text-zinc-300">
+                      <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
                         {problem.inputFormat}
                       </MathText>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                         Output
                       </p>
-                      <MathText className="mt-2 block text-sm leading-7 text-zinc-300">
+                      <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
                         {problem.outputFormat}
                       </MathText>
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-zinc-700 bg-[#1b2130] px-4 py-3 text-sm text-zinc-400">
+                  <div className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm text-app-muted">
                     문제 상세를 불러오는 중입니다.
                   </div>
                 )}
@@ -1589,7 +1589,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
             ) : (
               submitHasResult ? (
                 <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                     Submit Result
                   </p>
                   <div className="flex flex-wrap items-start gap-3">
@@ -1597,7 +1597,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                       {submitHeadline}
                     </p>
                     {submitProgressText ? (
-                      <p className="pt-1 text-sm text-zinc-400">{submitProgressText}</p>
+                      <p className="pt-1 text-sm text-app-muted">{submitProgressText}</p>
                     ) : null}
                     <div className="ml-auto flex flex-col items-end gap-1 text-right">
                       {latestResultCode ? (
@@ -1605,21 +1605,21 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                           {latestResultCode}
                         </span>
                       ) : null}
-                      <p className="text-xs text-zinc-400">language: {language}</p>
+                      <p className="text-xs text-app-muted">language: {language}</p>
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-zinc-700 bg-[#0f1521]/80 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                  <div className="rounded-xl border border-app-border bg-app-base/80 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                       Current Submission
                     </p>
-                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-200">
+                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
                       {code}
                     </pre>
                   </div>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-zinc-700 bg-[#1b2130] px-4 py-3 text-sm text-zinc-400">
+                <div className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm text-app-muted">
                   아직 제출 결과가 없습니다.
                 </div>
               )
@@ -1645,10 +1645,10 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
           submitLabel={submitActionLabel}
         />
 
-        <section className="rounded-2xl border border-zinc-700 bg-[#171c26] p-5 shadow-[0_14px_32px_rgba(0,0,0,0.28)]">
+        <section className="rounded-2xl border border-app-border bg-app-surface p-5 shadow-[0_14px_32px_rgba(0,0,0,0.28)]">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-zinc-100">TestCase</h2>
-            <p className="shrink-0 text-xs font-medium text-zinc-500">
+            <h2 className="text-lg font-semibold text-app-primary">TestCase</h2>
+            <p className="shrink-0 text-xs font-medium text-app-dim">
               {TESTCASE_SHORTCUT_HINT}
             </p>
           </div>
@@ -1662,13 +1662,13 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                       const caseResult = runResults?.[index];
                       const badgeState = getCaseBadgeState(caseResult);
                       const isSelected = selectedRunCaseIndex === index;
-                      const idleClass = "border-zinc-700 bg-[#1b2130] text-zinc-300 hover:bg-[#222b3c]";
-                      const passClass = "border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/15";
-                      const failClass = "border-rose-500/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/15";
-                      const pendingClass = "border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15";
+                      const idleClass = "border-app-border bg-app-elevated text-app-secondary hover:bg-app-elevated";
+                      const passClass = "border-app-success/30 bg-app-success/10 text-app-success hover:bg-app-success/15";
+                      const failClass = "border-app-danger/35 bg-app-danger/10 text-app-danger hover:bg-app-danger/15";
+                      const pendingClass = "border-app-warn/30 bg-app-warn/10 text-app-warn hover:bg-app-warn/15";
 
                       const colorClass = isSelected
-                        ? "border-zinc-100 bg-zinc-100 text-zinc-950"
+                        ? "border-app-border-strong bg-app-elevated text-app-primary"
                         : badgeState?.tone === "pass"
                           ? passClass
                           : badgeState?.tone === "fail"
@@ -1689,10 +1689,10 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                             <span
                               className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${
                                 badgeState.tone === "pass"
-                                  ? "bg-emerald-500/15 text-emerald-200"
+                                  ? "bg-app-success/15 text-app-success"
                                   : badgeState.tone === "fail"
-                                    ? "bg-rose-500/15 text-rose-200"
-                                    : "bg-amber-500/15 text-amber-200"
+                                    ? "bg-app-danger/15 text-app-danger"
+                                    : "bg-app-warn/15 text-app-warn"
                               }`}
                             >
                               {badgeState.label}
@@ -1707,47 +1707,47 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
 
                 {selectedRunCaseIndex !== null ? (
                   <div className="grid gap-3">
-                    <div className="space-y-3 rounded-2xl border border-zinc-700 bg-[#1b2130] p-4">
+                    <div className="space-y-3 rounded-2xl border border-app-border bg-app-elevated p-4">
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                           Input
                         </p>
-                        <MathText className="mt-2 block text-sm leading-7 text-zinc-300">
+                        <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
                           {activeCaseInput}
                         </MathText>
                       </div>
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                           Output
                         </p>
-                        <MathText className="mt-2 block text-sm leading-7 text-zinc-300">
+                        <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
                           {activeCaseExpected}
                         </MathText>
                       </div>
                     </div>
 
-                    <div className="space-y-3 rounded-2xl border border-zinc-700 bg-[#1b2130] p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                    <div className="space-y-3 rounded-2xl border border-app-border bg-app-elevated p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                         Run Result
                       </p>
                       <div
                         className={`rounded-xl border p-3 text-sm ${
                           !activeRunCase
-                            ? "border-zinc-700 bg-[#0f1521] text-zinc-300"
+                            ? "border-app-border bg-app-base text-app-secondary"
                             : activeRunCasePass
-                              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-                              : "border-rose-500/30 bg-rose-500/10 text-rose-200"
+                              ? "border-app-success/30 bg-app-success/10 text-app-success"
+                              : "border-app-danger/35 bg-app-danger/10 text-app-danger"
                         }`}
                       >
                         {runningCaseIndex === selectedRunCaseIndex ? (
-                          <p className="text-amber-300">실행 요청 중입니다...</p>
+                          <p className="text-app-warn">실행 요청 중입니다...</p>
                         ) : activeRunCase ? (
                           <div className="space-y-2">
                             <p
                               className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${
                                 activeRunCasePass
-                                  ? "bg-emerald-500/15 text-emerald-200"
-                                  : "bg-rose-500/15 text-rose-200"
+                                  ? "bg-app-success/15 text-app-success"
+                                  : "bg-app-danger/15 text-app-danger"
                               }`}
                             >
                               {activeRunCasePass
@@ -1757,29 +1757,29 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                                   : normalizeVerdict(activeRunCase.status)}
                             </p>
                             {activeRunCase.stderr ? (
-                              <div className="rounded-lg border border-rose-500/30 bg-[#0f1521]/80 p-2">
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-300">
+                              <div className="rounded-lg border border-app-danger/35 bg-app-base/80 p-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-danger">
                                   Error
                                 </p>
-                                <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-rose-200">
+                                <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-danger">
                                   {activeRunCase.stderr}
                                 </pre>
                               </div>
                             ) : (
                               <div className="grid gap-2">
-                                <div className="rounded-lg border border-zinc-700 bg-[#0f1521]/80 p-2">
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                                <div className="rounded-lg border border-app-border bg-app-base/80 p-2">
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-dim">
                                     Output
                                   </p>
-                                  <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-200">
+                                  <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
                                     {activeRunCase.actualOutput ?? "(empty)"}
                                   </pre>
                                 </div>
-                                <div className="rounded-lg border border-zinc-700 bg-[#0f1521]/80 p-2">
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                                <div className="rounded-lg border border-app-border bg-app-base/80 p-2">
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-dim">
                                     Expected
                                   </p>
-                                  <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-200">
+                                  <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
                                     {activeRunCase.expectedOutput ?? "(empty)"}
                                   </pre>
                                 </div>
@@ -1787,7 +1787,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                             )}
                           </div>
                         ) : (
-                          <p className="text-zinc-400">
+                          <p className="text-app-muted">
                             아직 실행 결과가 없습니다. Run 버튼으로 해당 케이스를 실행하세요.
                           </p>
                         )}
@@ -1797,7 +1797,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                 ) : null}
               </>
             ) : (
-              <div className="rounded-2xl border border-zinc-700 bg-[#1b2130] px-4 py-3 text-sm text-zinc-400">
+              <div className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm text-app-muted">
                 실행 가능한 샘플 케이스가 없습니다.
               </div>
             )}
@@ -1807,13 +1807,13 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
         <div className="flex flex-wrap gap-3">
           <Link
             href={`/battle/results/${room.roomId}`}
-            className="rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white"
+            className="rounded-2xl bg-app-base px-4 py-3 text-sm font-medium text-white"
           >
             결과 화면 보기
           </Link>
           <Link
             href="/"
-            className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900"
+            className="rounded-2xl border border-app-border bg-app-surface px-4 py-3 text-sm font-medium text-app-primary"
           >
             메인으로 돌아가기
           </Link>

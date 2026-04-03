@@ -12,19 +12,19 @@ export function StatusPill({
   const toneClass =
     variant === "dark"
       ? tone === "success"
-        ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-200"
+        ? "border-app-success/35 bg-app-success/10 text-app-success"
         : tone === "warn"
-          ? "border-amber-500/35 bg-amber-500/10 text-amber-200"
+          ? "border-app-warn/35 bg-app-warn/10 text-app-warn"
           : tone === "danger"
-            ? "border-rose-500/35 bg-rose-500/10 text-rose-200"
-            : "border-zinc-700 bg-[#1f2736] text-zinc-200"
+            ? "border-app-danger/35 bg-app-danger/10 text-app-danger"
+            : "border-app-border bg-app-elevated text-app-secondary"
       : tone === "success"
-        ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+        ? "border-app-success/35 bg-app-success/10 text-app-success"
         : tone === "warn"
-          ? "border-amber-300 bg-amber-50 text-amber-900"
+          ? "border-app-warn/35 bg-app-warn/10 text-app-warn"
           : tone === "danger"
-            ? "border-rose-300 bg-rose-50 text-rose-900"
-            : "border-zinc-300 bg-zinc-100 text-zinc-800";
+            ? "border-app-danger/35 bg-app-danger/10 text-app-danger"
+            : "border-app-border bg-app-elevated text-app-secondary";
 
   return (
     <span

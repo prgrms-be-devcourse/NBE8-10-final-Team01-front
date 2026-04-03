@@ -14,12 +14,12 @@ export function MetricCard({
   hint?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+    <div className="rounded-2xl border border-app-border bg-app-elevated p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
         {label}
       </p>
-      <div className="mt-2 text-2xl font-semibold text-zinc-950">{value}</div>
-      {hint ? <p className="mt-2 text-sm text-zinc-600">{hint}</p> : null}
+      <div className="mt-2 text-2xl font-semibold text-app-primary">{value}</div>
+      {hint ? <p className="mt-2 text-sm text-app-secondary">{hint}</p> : null}
     </div>
   );
 }

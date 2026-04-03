@@ -61,13 +61,13 @@ export default function SpectateScreen() {
           <div className="flex flex-wrap gap-3">
             <Link
               href="/login?next=/spectate"
-              className="rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white"
+              className="rounded-2xl bg-app-base px-4 py-3 text-sm font-medium text-white"
             >
               로그인하러 가기
             </Link>
             <Link
               href="/"
-              className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900"
+              className="rounded-2xl border border-app-border bg-app-surface px-4 py-3 text-sm font-medium text-app-primary"
             >
               메인으로 돌아가기
             </Link>
@@ -91,7 +91,7 @@ export default function SpectateScreen() {
         }
       />
 
-      <div className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-700">
+      <div className="rounded-2xl border border-app-border bg-app-surface px-4 py-3 text-sm text-app-secondary">
         {error ?? message}
       </div>
 
@@ -111,31 +111,31 @@ export default function SpectateScreen() {
           <Link
             key={room.roomId}
             href={`/spectate/rooms/${room.roomId}`}
-            className="rounded-2xl border border-zinc-300 bg-white p-5 shadow-sm transition hover:border-zinc-500"
+            className="rounded-2xl border border-app-border bg-app-surface p-5 shadow-sm transition hover:border-app-border-strong"
           >
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm text-zinc-500">roomId {room.roomId}</p>
-                <h2 className="mt-1 text-xl font-semibold text-zinc-950">
+                <p className="text-sm text-app-dim">roomId {room.roomId}</p>
+                <h2 className="mt-1 text-xl font-semibold text-app-primary">
                   {room.problemTitle}
                 </h2>
               </div>
               <StatusPill tone="success">{room.status}</StatusPill>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-zinc-600">
-              <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+            <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-app-secondary">
+              <div className="rounded-2xl border border-app-border bg-app-elevated p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                   Current Players
                 </p>
-                <p className="mt-2 text-lg font-semibold text-zinc-950">
+                <p className="mt-2 text-lg font-semibold text-app-primary">
                   {room.currentPlayers} / {room.maxPlayers}
                 </p>
               </div>
-              <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+              <div className="rounded-2xl border border-app-border bg-app-elevated p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                   Detail Route
                 </p>
-                <p className="mt-2 font-medium text-zinc-950">
+                <p className="mt-2 font-medium text-app-primary">
                   /spectate/rooms/{room.roomId}
                 </p>
               </div>

@@ -1,16 +1,88 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0f1115;
+  --background: #0f1118;
   --foreground: #e5e7eb;
-  --panel: #171a21;
+  --panel: #171c26;
   --app-header-h: 56px;
+
+  /* Graphite Dark + Purple Accent */
+  --app-bg-base: #0f1118;
+  --app-bg-surface: #171c26;
+  --app-bg-elevated: #1f2633;
+  --app-bg-rail: #1a1f2b;
+  --app-bg-header: #121722;
+  --app-bg-shell-gradient: radial-gradient(circle at 14% 0%, rgba(145, 70, 255, 0.18), transparent 38%),
+    radial-gradient(circle at 86% 100%, rgba(145, 70, 255, 0.09), transparent 44%),
+    linear-gradient(180deg, #0f1118 0%, #111624 48%, #0d1018 100%);
+
+  --app-text-primary: #e5e7eb;
+  --app-text-secondary: #a7b0bf;
+  --app-text-muted: #7d8596;
+  --app-text-dim: #6b7280;
+
+  --app-border: #3f475a;
+  --app-border-strong: #59627a;
+
+  --app-accent: #9146ff;
+  --app-accent-hover: #7f39fa;
+  --app-accent-soft: #c8adff;
+  --app-accent-glow: rgba(145, 70, 255, 0.22);
+
+  --app-success: #34d399;
+  --app-warn: #fbbf24;
+  --app-danger: #fb7185;
+
+  /* IDE syntax accents */
+  --app-syntax-icon: #7dd48c;
+  --app-syntax-line-number: #606366;
+  --app-syntax-default: #a9b7c6;
+  --app-syntax-comment: #6a717d;
+  --app-syntax-keyword: #ffcc66;
+  --app-syntax-name: #9cdcfe;
+  --app-syntax-operator: #80889a;
+  --app-syntax-string: #ce9178;
+  --app-syntax-value: #9aa5b1;
+  --app-syntax-constant: #b5cea8;
+  --app-syntax-selected-border: #4e89ff;
+  --app-syntax-selected-bg: #2b3a52;
+  --app-syntax-selected-text: #dcdcaa;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-panel: var(--panel);
+  --color-app-base: var(--app-bg-base);
+  --color-app-surface: var(--app-bg-surface);
+  --color-app-elevated: var(--app-bg-elevated);
+  --color-app-rail: var(--app-bg-rail);
+  --color-app-header: var(--app-bg-header);
+  --color-app-primary: var(--app-text-primary);
+  --color-app-secondary: var(--app-text-secondary);
+  --color-app-muted: var(--app-text-muted);
+  --color-app-dim: var(--app-text-dim);
+  --color-app-border: var(--app-border);
+  --color-app-border-strong: var(--app-border-strong);
+  --color-app-accent: var(--app-accent);
+  --color-app-accent-hover: var(--app-accent-hover);
+  --color-app-accent-soft: var(--app-accent-soft);
+  --color-app-success: var(--app-success);
+  --color-app-warn: var(--app-warn);
+  --color-app-danger: var(--app-danger);
+  --color-app-syntax-icon: var(--app-syntax-icon);
+  --color-app-syntax-line-number: var(--app-syntax-line-number);
+  --color-app-syntax-default: var(--app-syntax-default);
+  --color-app-syntax-comment: var(--app-syntax-comment);
+  --color-app-syntax-keyword: var(--app-syntax-keyword);
+  --color-app-syntax-name: var(--app-syntax-name);
+  --color-app-syntax-operator: var(--app-syntax-operator);
+  --color-app-syntax-string: var(--app-syntax-string);
+  --color-app-syntax-value: var(--app-syntax-value);
+  --color-app-syntax-constant: var(--app-syntax-constant);
+  --color-app-syntax-selected-border: var(--app-syntax-selected-border);
+  --color-app-syntax-selected-bg: var(--app-syntax-selected-bg);
+  --color-app-syntax-selected-text: var(--app-syntax-selected-text);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -20,8 +92,8 @@
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--app-bg-base);
+  color: var(--app-text-primary);
   font-family: var(--font-geist-sans), sans-serif;
 }
 
@@ -36,6 +108,6 @@ pre {
 }
 
 ::selection {
-  background: #a78bfa;
-  color: #09090b;
+  background: var(--app-accent);
+  color: #0b0f16;
 }

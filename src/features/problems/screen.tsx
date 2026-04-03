@@ -123,10 +123,10 @@ export default function ProblemsScreen() {
   const pageTokens = getPageTokens(problemPage, totalPages);
 
   return (
-    <main className="flex h-full min-h-0 flex-col border-b border-zinc-700/80 bg-[#1e1f22] lg:border-b-0 lg:border-r">
-      <div className="flex h-12 items-center border-b border-zinc-700/80 bg-[#1e1f22] px-3">
-        <div className="relative flex h-10 items-center gap-2 border-r border-zinc-700/70 bg-[#1e1f22] px-3 font-mono text-xs text-zinc-200">
-          <span className="inline-flex h-4 w-4 items-center justify-center text-[#a78bfa]">
+    <main className="flex h-full min-h-0 flex-col border-b border-app-border/80 bg-app-base lg:border-b-0 lg:border-r">
+      <div className="flex h-12 items-center border-b border-app-border/80 bg-app-base px-3">
+        <div className="relative flex h-10 items-center gap-2 border-r border-app-border/70 bg-app-base px-3 font-mono text-xs text-app-primary">
+          <span className="inline-flex h-4 w-4 items-center justify-center text-app-accent-soft">
             <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4">
               <path
                 d="M4 2.5h5l3 3V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z"
@@ -138,20 +138,20 @@ export default function ProblemsScreen() {
             </svg>
           </span>
           <span>problem-list.json</span>
-          <span className="text-zinc-500">×</span>
-          <span className="absolute inset-x-0 bottom-0 h-[2px] bg-zinc-300" />
+          <span className="text-app-dim">×</span>
+          <span className="absolute inset-x-0 bottom-0 h-[2px] bg-app-border-strong" />
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto bg-[#1e1f22]">
+      <div className="flex-1 overflow-auto bg-app-base">
         <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
-          <div className="mb-5 flex flex-wrap items-end justify-between gap-2 border-b border-zinc-700/70 pb-3">
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-2 border-b border-app-border/70 pb-3">
             <div>
-              <h1 className="text-xl font-semibold text-zinc-100">문제 목록</h1>
-              <p className="mt-1 text-sm text-zinc-400">문제를 선택해 개인 풀이 화면으로 이동합니다.</p>
+              <h1 className="text-xl font-semibold text-app-primary">문제 목록</h1>
+              <p className="mt-1 text-sm text-app-muted">문제를 선택해 개인 풀이 화면으로 이동합니다.</p>
             </div>
             {session.authenticated ? (
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-app-dim">
                 {problemPageInfo
                   ? `총 ${problemPageInfo.totalElements.toLocaleString()}개 · ${problemPageInfo.page + 1}/${problemPageInfo.totalPages} 페이지`
                   : isProblemLoading
@@ -162,24 +162,24 @@ export default function ProblemsScreen() {
           </div>
 
           {!sessionLoaded ? (
-            <div className="rounded-md border border-zinc-700 bg-[#2b2d30] px-4 py-4 text-sm text-zinc-300">
+            <div className="rounded-md border border-app-border bg-app-elevated px-4 py-4 text-sm text-app-secondary">
               세션 상태를 확인하는 중입니다.
             </div>
           ) : !session.authenticated ? (
-            <div className="space-y-4 rounded-md border border-zinc-700 bg-[#2b2d30] px-4 py-4">
-              <p className="text-sm text-zinc-300">
+            <div className="space-y-4 rounded-md border border-app-border bg-app-elevated px-4 py-4">
+              <p className="text-sm text-app-secondary">
                 문제 목록 조회는 로그인 후 이용할 수 있습니다.
               </p>
               <div className="flex flex-wrap gap-2">
                 <Link
                   href="/login?next=/problems"
-                  className="inline-flex h-10 items-center justify-center rounded-md bg-[#9146ff] px-4 text-sm font-semibold text-white transition hover:bg-[#7f39fa]"
+                  className="inline-flex h-10 items-center justify-center rounded-md bg-app-accent px-4 text-sm font-semibold text-white transition hover:bg-app-accent-hover"
                 >
                   로그인
                 </Link>
                 <Link
                   href="/"
-                  className="inline-flex h-10 items-center justify-center rounded-md border border-zinc-700 bg-[#1e1f22] px-4 text-sm font-medium text-zinc-200 transition hover:bg-zinc-700/30"
+                  className="inline-flex h-10 items-center justify-center rounded-md border border-app-border bg-app-base px-4 text-sm font-medium text-app-primary transition hover:bg-app-elevated/90"
                 >
                   메인으로
                 </Link>
@@ -188,7 +188,7 @@ export default function ProblemsScreen() {
           ) : (
             <div className="space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm text-zinc-400">
+                <p className="text-sm text-app-muted">
                   {isProblemLoading
                     ? "문제 목록을 불러오는 중입니다."
                     : "문제를 선택한 뒤 열기를 눌러 개인 풀이를 시작하세요."}
@@ -198,7 +198,7 @@ export default function ProblemsScreen() {
                     type="button"
                     onClick={() => setProblemPage((current) => Math.max(0, current - 1))}
                     disabled={!canMovePrevProblemPage}
-                    className="inline-flex h-9 items-center justify-center rounded-md border border-zinc-700 bg-[#2b2d30] px-3 text-sm text-zinc-200 transition hover:bg-zinc-700/40 disabled:cursor-not-allowed disabled:text-zinc-500"
+                    className="inline-flex h-9 items-center justify-center rounded-md border border-app-border bg-app-elevated px-3 text-sm text-app-primary transition hover:bg-app-elevated/90 disabled:cursor-not-allowed disabled:text-app-dim"
                   >
                     이전
                   </button>
@@ -206,7 +206,7 @@ export default function ProblemsScreen() {
                     type="button"
                     onClick={() => setProblemPage((current) => current + 1)}
                     disabled={!canMoveNextProblemPage}
-                    className="inline-flex h-9 items-center justify-center rounded-md border border-zinc-700 bg-[#2b2d30] px-3 text-sm text-zinc-200 transition hover:bg-zinc-700/40 disabled:cursor-not-allowed disabled:text-zinc-500"
+                    className="inline-flex h-9 items-center justify-center rounded-md border border-app-border bg-app-elevated px-3 text-sm text-app-primary transition hover:bg-app-elevated/90 disabled:cursor-not-allowed disabled:text-app-dim"
                   >
                     다음
                   </button>
@@ -220,7 +220,7 @@ export default function ProblemsScreen() {
                       token === "ellipsis" ? (
                         <span
                           key={`ellipsis-${index}`}
-                          className="inline-flex h-8 w-8 items-center justify-center text-sm text-zinc-500"
+                          className="inline-flex h-8 w-8 items-center justify-center text-sm text-app-dim"
                         >
                           ...
                         </span>
@@ -232,9 +232,9 @@ export default function ProblemsScreen() {
                           disabled={isProblemLoading}
                           className={`inline-flex h-8 w-9 items-center justify-center rounded-md border text-sm font-semibold transition ${
                             token === problemPage
-                              ? "border-violet-400/60 bg-[#9146ff] text-white shadow-[0_0_0_1px_rgba(167,139,250,0.3)]"
-                              : "border-zinc-700 bg-[#2b2d30] text-zinc-200 hover:bg-zinc-700/40"
-                          } disabled:cursor-not-allowed disabled:text-zinc-500`}
+                              ? "border-app-accent/60 bg-app-accent text-white shadow-[0_0_0_1px_var(--app-accent-glow)]"
+                              : "border-app-border bg-app-elevated text-app-primary hover:bg-app-elevated/90"
+                          } disabled:cursor-not-allowed disabled:text-app-dim`}
                         >
                           {token + 1}
                         </button>
@@ -243,22 +243,22 @@ export default function ProblemsScreen() {
                   </div>
                 </div>
                 {problemPageInfo ? (
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-app-dim">
                     현재 {problemPageInfo.page + 1} / {problemPageInfo.totalPages}
                   </p>
                 ) : null}
               </div>
 
               {problemError ? (
-                <div className="rounded-md border border-rose-400/60 bg-rose-900/25 px-3 py-2 text-sm text-rose-200">
+                <div className="rounded-md border border-app-danger/60 bg-app-danger/20 px-3 py-2 text-sm text-app-danger">
                   {problemError}
                 </div>
               ) : null}
 
-              <div className="overflow-hidden rounded-md border border-zinc-700">
+              <div className="overflow-hidden rounded-md border border-app-border">
                 <div className="overflow-x-auto">
                   <table className="min-w-full border-collapse text-sm">
-                    <thead className="bg-[#2b2d30] text-zinc-300">
+                    <thead className="bg-app-elevated text-app-secondary">
                       <tr>
                         <th className="px-4 py-3 text-left font-semibold">ID</th>
                         <th className="px-4 py-3 text-left font-semibold">제목</th>
@@ -269,29 +269,29 @@ export default function ProblemsScreen() {
                         <th className="px-4 py-3 text-left font-semibold">개인 풀이</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-[#1e1f22]">
+                    <tbody className="bg-app-base">
                       {problemRows.length > 0 ? (
                         problemRows.map((problem) => (
-                          <tr key={problem.problemId} className="border-t border-zinc-700">
-                            <td className="px-4 py-3 font-medium text-zinc-100">
+                          <tr key={problem.problemId} className="border-t border-app-border">
+                            <td className="px-4 py-3 font-medium text-app-primary">
                               {problem.problemId}
                             </td>
-                            <td className="px-4 py-3 text-zinc-200">
+                            <td className="px-4 py-3 text-app-primary">
                               <Link
                                 href={`/problems/${problem.problemId}`}
-                                className="font-medium text-zinc-100 underline-offset-4 hover:text-violet-300 hover:underline"
+                                className="font-medium text-app-primary underline-offset-4 hover:text-app-accent-soft hover:underline"
                               >
                                 {problem.title}
                               </Link>
                             </td>
-                            <td className="px-4 py-3 text-zinc-300">{problem.difficulty}</td>
-                            <td className="px-4 py-3 text-zinc-300">{problem.difficultyRating}</td>
-                            <td className="px-4 py-3 text-zinc-300">{problem.timeLimitMs}ms</td>
-                            <td className="px-4 py-3 text-zinc-300">{problem.memoryLimitMb}MB</td>
+                            <td className="px-4 py-3 text-app-secondary">{problem.difficulty}</td>
+                            <td className="px-4 py-3 text-app-secondary">{problem.difficultyRating}</td>
+                            <td className="px-4 py-3 text-app-secondary">{problem.timeLimitMs}ms</td>
+                            <td className="px-4 py-3 text-app-secondary">{problem.memoryLimitMb}MB</td>
                             <td className="px-4 py-3">
                               <Link
                                 href={`/problems/${problem.problemId}`}
-                                className="inline-flex h-8 items-center justify-center rounded-md border border-zinc-700 bg-[#2b2d30] px-3 text-xs font-medium text-zinc-200 transition hover:bg-zinc-700/40"
+                                className="inline-flex h-8 items-center justify-center rounded-md border border-app-border bg-app-elevated px-3 text-xs font-medium text-app-primary transition hover:bg-app-elevated/90"
                               >
                                 열기
                               </Link>
@@ -299,8 +299,8 @@ export default function ProblemsScreen() {
                           </tr>
                         ))
                       ) : (
-                        <tr className="border-t border-zinc-700">
-                          <td colSpan={7} className="px-4 py-6 text-center text-zinc-500">
+                        <tr className="border-t border-app-border">
+                          <td colSpan={7} className="px-4 py-6 text-center text-app-dim">
                             {isProblemLoading
                               ? "목록을 불러오는 중입니다."
                               : "표시할 문제가 없습니다."}

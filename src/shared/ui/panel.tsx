@@ -15,10 +15,10 @@ export function Panel({
 }) {
   const panelClass =
     variant === "dark"
-      ? "rounded-2xl border border-zinc-700 bg-[#171c26] p-5 shadow-[0_14px_32px_rgba(0,0,0,0.28)]"
-      : "rounded-2xl border border-zinc-300 bg-white p-5 shadow-sm";
-  const titleClass = variant === "dark" ? "text-zinc-100" : "text-zinc-950";
-  const descriptionClass = variant === "dark" ? "text-zinc-400" : "text-zinc-600";
+      ? "rounded-2xl border border-app-border bg-app-surface p-5 shadow-[0_14px_32px_rgba(0,0,0,0.28)]"
+      : "rounded-2xl border border-app-border bg-app-elevated p-5 shadow-[0_10px_24px_rgba(0,0,0,0.18)]";
+  const titleClass = "text-app-primary";
+  const descriptionClass = variant === "dark" ? "text-app-muted" : "text-app-secondary";
 
   return (
     <section

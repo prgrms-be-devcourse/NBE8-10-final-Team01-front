@@ -86,18 +86,18 @@ function getModeDescription(mode: Exclude<QueueModalMode, null>) {
 
 function getLevelColor(level: ConsoleLogLine["level"]) {
   if (level === "INFO") {
-    return "text-emerald-400";
+    return "text-app-success";
   }
 
   if (level === "DEBUG") {
-    return "text-cyan-400";
+    return "text-app-accent-soft";
   }
 
   if (level === "WARN") {
-    return "text-amber-300";
+    return "text-app-warn";
   }
 
-  return "text-rose-300";
+  return "text-app-danger";
 }
 
 function getLoopInfoMessage(mode: Exclude<QueueModalMode, null>) {
@@ -510,10 +510,10 @@ export default function QueueModal({
 
     return "매칭 종료";
   }, [mode]);
-  const actionButtonClass = "rounded-md border border-zinc-600 bg-[#171f2c] px-3 py-1.5 text-xs font-semibold text-zinc-100 transition hover:border-violet-400/55 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-[#141a24] disabled:text-zinc-500";
-  const actionPrimaryButtonClass = "rounded-md border border-violet-400/45 bg-gradient-to-r from-violet-600 to-violet-500 px-3 py-1.5 text-xs font-semibold text-white shadow-[0_0_0_1px_rgba(168,85,247,0.25)] transition hover:from-violet-500 hover:to-violet-400 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-700 disabled:text-zinc-300";
-  const headerStatusChipClass = "inline-flex items-center rounded-full border border-amber-400/45 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-200";
-  const headerMetaChipClass = "inline-flex items-center rounded-full border border-zinc-700 bg-zinc-900/55 px-2.5 py-0.5 text-[11px] font-medium text-zinc-400";
+  const actionButtonClass = "rounded-md border border-app-border-strong bg-app-elevated px-3 py-1.5 text-xs font-semibold text-app-primary transition hover:border-app-accent/55 hover:bg-app-accent/10 disabled:cursor-not-allowed disabled:border-app-border disabled:bg-app-base disabled:text-app-dim";
+  const actionPrimaryButtonClass = "rounded-md border border-app-accent/45 bg-gradient-to-r from-app-accent to-app-accent-hover px-3 py-1.5 text-xs font-semibold text-white shadow-[0_0_0_1px_var(--app-accent-glow)] transition hover:from-app-accent-hover hover:to-app-accent disabled:cursor-not-allowed disabled:border-app-border disabled:bg-app-elevated disabled:text-app-secondary";
+  const headerStatusChipClass = "inline-flex items-center rounded-full border border-app-warn/45 bg-app-warn/10 px-2.5 py-0.5 text-[11px] font-semibold text-app-warn";
+  const headerMetaChipClass = "inline-flex items-center rounded-full border border-app-border bg-app-base/55 px-2.5 py-0.5 text-[11px] font-medium text-app-muted";
   const headerMetaText = useMemo(() => {
     if (!mode) {
       return "";
@@ -693,39 +693,39 @@ export default function QueueModal({
   }
 
   return (
-    <div className="absolute inset-0 z-40 flex items-end bg-zinc-950/30">
-      <div className="queue-sheet w-full overflow-hidden border-t border-zinc-700 bg-[#12161f] text-zinc-200 shadow-[0_-20px_48px_rgba(0,0,0,0.55)]">
+    <div className="absolute inset-0 z-40 flex items-end bg-app-base/30">
+      <div className="queue-sheet w-full overflow-hidden border-t border-app-border bg-app-surface text-app-primary shadow-[0_-20px_48px_rgba(0,0,0,0.55)]">
         <div className="px-4 pb-4 pt-3">
           <div className="flex flex-wrap items-center gap-2 pb-2">
             <span className={headerStatusChipClass}>{modeStatus}</span>
             <span className={headerMetaChipClass}>{categoryLabel}</span>
             <span className={headerMetaChipClass}>{difficultyLabel}</span>
-            <p className="ml-auto text-xs font-medium text-zinc-400">
+            <p className="ml-auto text-xs font-medium text-app-muted">
               {headerMetaText}
             </p>
             <div className="flex flex-wrap items-center gap-2">{actionButtons}</div>
           </div>
-          <section className="mt-3 overflow-hidden rounded-lg border border-zinc-700/70 bg-[#0b1018] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
-            <div className="bg-[#1a202c] px-3 py-1.5 font-mono text-[11px] text-zinc-400">
+          <section className="mt-3 overflow-hidden rounded-lg border border-app-border/70 bg-app-base shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+            <div className="bg-app-elevated px-3 py-1.5 font-mono text-[11px] text-app-muted">
               /Users/chan/Library/Java/JavaVirtualMachines/graalvm-ce-21.0.2/Contents/Home/bin/java ...
             </div>
 
             <div className="grid max-h-[65vh] grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_220px]">
               <div className="min-w-0 px-3 py-3">
-                <pre className="overflow-x-auto font-mono text-[16px] leading-[1.2] text-zinc-300">
+                <pre className="overflow-x-auto font-mono text-[16px] leading-[1.2] text-app-secondary">
                   {SPRING_BOOT_BANNER}
                 </pre>
-                <p className="mt-2 font-mono text-sm text-emerald-400">
+                <p className="mt-2 font-mono text-sm text-app-success">
                   :: Bracket Boot ::                      ({SPRING_BOOT_VERSION})
                 </p>
               </div>
 
               <div className="flex min-w-0 items-center justify-center px-3 py-3">
-                <div className="w-full rounded-lg border border-zinc-700 bg-[#111827]/70 px-3 py-5 text-center">
-                  <p className="font-mono text-4xl font-bold leading-none text-cyan-300">
+                <div className="w-full rounded-lg border border-app-border bg-app-surface/80 px-3 py-5 text-center">
+                  <p className="font-mono text-4xl font-bold leading-none text-app-accent-soft">
                     {summaryCountText}
                   </p>
-                  <p className="mt-2 text-sm font-semibold text-zinc-300">{summaryModeText}</p>
+                  <p className="mt-2 text-sm font-semibold text-app-secondary">{summaryModeText}</p>
                 </div>
               </div>
             </div>
@@ -738,15 +738,15 @@ export default function QueueModal({
                 {consoleLogs.map((line) => (
                   <p
                     key={line.id}
-                    className="mb-0.5 whitespace-pre-wrap break-words leading-6 text-zinc-300"
+                    className="mb-0.5 whitespace-pre-wrap break-words leading-6 text-app-secondary"
                   >
-                    <span className="text-zinc-500">{line.time}</span>{" "}
+                    <span className="text-app-dim">{line.time}</span>{" "}
                     <span className={`font-semibold ${getLevelColor(line.level)}`}>
                       {line.level}
                     </span>{" "}
                     <span>{line.message}</span>
                     {line.count > 1 ? (
-                      <span className="ml-1 text-zinc-500">(x{line.count})</span>
+                      <span className="ml-1 text-app-dim">(x{line.count})</span>
                     ) : null}
                   </p>
                 ))}
@@ -756,8 +756,8 @@ export default function QueueModal({
             <div
               className={`px-3 py-1.5 text-xs ${
                 error || mode === "TERMINAL"
-                  ? "bg-rose-500/10 text-rose-200"
-                  : "bg-[#151d2a] text-zinc-400"
+                  ? "bg-app-danger/10 text-app-danger"
+                  : "bg-app-elevated text-app-muted"
               }`}
             >
               {footerMessage}

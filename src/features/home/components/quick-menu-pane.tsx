@@ -62,8 +62,8 @@ function renderRailIcon(name: string) {
             strokeWidth="1.2"
             strokeLinecap="round"
           />
-          <circle cx="6" cy="5.2" r="1.6" fill="#25272d" stroke="currentColor" strokeWidth="1.2" />
-          <circle cx="10" cy="10.8" r="1.6" fill="#25272d" stroke="currentColor" strokeWidth="1.2" />
+          <circle cx="6" cy="5.2" r="1.6" fill="var(--app-bg-surface)" stroke="currentColor" strokeWidth="1.2" />
+          <circle cx="10" cy="10.8" r="1.6" fill="var(--app-bg-surface)" stroke="currentColor" strokeWidth="1.2" />
         </svg>
       );
     case "branch":
@@ -149,32 +149,32 @@ function renderProjectTreeIcon(icon: QuickMenuTreeIcon) {
   switch (icon) {
     case "class":
       return (
-        <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-[#3b78e7] text-[8px] font-semibold leading-none text-[#62a5ff]">
+        <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-app-accent/60 text-[8px] font-semibold leading-none text-app-accent-soft">
           C
         </span>
       );
     case "package":
       return (
-        <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 text-[#6ea5ff]">
+        <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 text-app-accent-soft">
           <path d="M2.2 5h3.2l.9.9h7.5v6.1a1.3 1.3 0 0 1-1.3 1.3H3.5A1.3 1.3 0 0 1 2.2 12V5Z" stroke="currentColor" strokeWidth="1.2" />
         </svg>
       );
     case "folderAccent":
       return (
-        <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 text-[#cf8f4e]">
+        <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 text-app-warn">
           <path d="M2.2 4.8h3.4l1 1h7.2v6.2a1.3 1.3 0 0 1-1.3 1.3H3.5A1.3 1.3 0 0 1 2.2 12V4.8Z" stroke="currentColor" strokeWidth="1.2" />
         </svg>
       );
     case "root":
     case "folder":
       return (
-        <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 text-zinc-300">
+        <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 text-app-secondary">
           <path d="M2.2 4.8h3.4l1 1h7.2v6.2a1.3 1.3 0 0 1-1.3 1.3H3.5A1.3 1.3 0 0 1 2.2 12V4.8Z" stroke="currentColor" strokeWidth="1.2" />
         </svg>
       );
     case "fileAccent":
       return (
-        <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 text-[#6ea5ff]">
+        <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 text-app-accent-soft">
           <path d="M4 2.5h5l3 3V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.2" />
           <path d="M9 2.5V6h3" stroke="currentColor" strokeWidth="1.2" />
         </svg>
@@ -182,7 +182,7 @@ function renderProjectTreeIcon(icon: QuickMenuTreeIcon) {
     case "file":
     default:
       return (
-        <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 text-zinc-300">
+        <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 text-app-secondary">
           <path d="M4 2.5h5l3 3V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.2" />
           <path d="M9 2.5V6h3" stroke="currentColor" strokeWidth="1.2" />
         </svg>
@@ -204,9 +204,9 @@ export default function QuickMenuPane({
   projectTreeItems,
 }: QuickMenuPaneProps) {
   return (
-    <aside className="min-h-0 border-b border-zinc-800/90 bg-[#2b2d30] md:border-b-0 md:border-r">
+    <aside className="min-h-0 border-b border-app-border-strong/80 bg-app-elevated md:border-b-0 md:border-r">
       <div className={`grid h-full ${isQuickMenuOpen ? "grid-cols-[48px_minmax(0,1fr)]" : "grid-cols-[48px]"}`}>
-        <div className="flex min-h-0 flex-col items-center justify-between border-r border-zinc-800/90 bg-[#25272d] py-2">
+        <div className="flex min-h-0 flex-col items-center justify-between border-r border-app-border-strong/80 bg-app-rail py-2">
           <div className="flex flex-col items-center gap-2">
             {ideRailTopItems.map((item) => (
               <button
@@ -221,8 +221,8 @@ export default function QuickMenuPane({
                 aria-label={item.title}
                 className={`h-8 w-8 rounded-md border text-[10px] font-semibold tracking-wide transition ${
                   item.icon === "project" && isQuickMenuOpen
-                    ? "border-zinc-500 bg-zinc-700/70 text-zinc-100"
-                    : "border-transparent text-zinc-400 hover:bg-zinc-700/30 hover:text-zinc-300"
+                    ? "border-app-border-strong bg-app-elevated/95 text-app-primary"
+                    : "border-transparent text-app-muted hover:bg-app-elevated/90 hover:text-app-secondary"
                 }`}
               >
                 <span className="flex items-center justify-center">{renderRailIcon(item.icon)}</span>
@@ -236,7 +236,7 @@ export default function QuickMenuPane({
                 type="button"
                 title={item.title}
                 aria-label={item.title}
-                className="h-8 w-8 rounded-md border border-transparent text-[10px] font-semibold tracking-wide text-zinc-500 transition hover:bg-zinc-700/30 hover:text-zinc-300"
+                className="h-8 w-8 rounded-md border border-transparent text-[10px] font-semibold tracking-wide text-app-dim transition hover:bg-app-elevated/90 hover:text-app-secondary"
               >
                 <span className="flex items-center justify-center">{renderRailIcon(item.icon)}</span>
               </button>
@@ -245,37 +245,37 @@ export default function QuickMenuPane({
         </div>
 
         <div className={`min-h-0 flex-col ${isQuickMenuOpen ? "flex" : "hidden"}`}>
-          <div className="flex h-12 items-center justify-between border-b border-zinc-800/90 px-4">
-            <p className="text-sm font-semibold text-zinc-200">퀵 메뉴</p>
-            <span className="text-xs text-zinc-500">▼</span>
+          <div className="flex h-12 items-center justify-between border-b border-app-border-strong/80 px-4">
+            <p className="text-sm font-semibold text-app-primary">퀵 메뉴</p>
+            <span className="text-xs text-app-dim">▼</span>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-3 font-mono text-sm text-zinc-300">
+          <div className="min-h-0 flex-1 overflow-y-auto p-3 font-mono text-sm text-app-secondary">
             {projectTreeItems.map((item) => {
               const rowToneClass =
                 item.rowTone === "amber"
-                  ? "bg-[#4a3924]/50"
+                  ? "bg-app-warn/15"
                   : item.rowTone === "green"
-                    ? "bg-[#1f3a2a]/55"
+                    ? "bg-app-success/15"
                     : item.rowTone === "selected"
-                      ? "bg-zinc-600/70"
-                      : "hover:bg-zinc-700/30";
+                      ? "bg-app-elevated/70"
+                      : "hover:bg-app-elevated/90";
 
               const content = (
                 <div
                   className={`flex h-7 items-center gap-1.5 rounded-sm px-1.5 ${rowToneClass}`}
                   style={{ paddingLeft: `${item.depth * 8 + 4}px` }}
                 >
-                  <span className="inline-flex w-3 items-center justify-center text-[10px] text-zinc-500">
+                  <span className="inline-flex w-3 items-center justify-center text-[10px] text-app-dim">
                     {item.hasChildren ? (item.expanded ? "▾" : "▸") : ""}
                   </span>
                   <span className="inline-flex h-3.5 w-3.5 items-center justify-center">
                     {renderProjectTreeIcon(item.icon)}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-zinc-200">
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-app-primary">
                     {item.label}
                   </span>
                   {item.subtitle ? (
-                    <span className="truncate pl-1 text-[12px] text-zinc-500">{item.subtitle}</span>
+                    <span className="truncate pl-1 text-[12px] text-app-dim">{item.subtitle}</span>
                   ) : null}
                 </div>
               );

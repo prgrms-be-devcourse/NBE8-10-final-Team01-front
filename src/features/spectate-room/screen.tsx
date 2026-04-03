@@ -191,13 +191,13 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
           <div className="flex flex-wrap gap-3">
             <Link
               href={`/login?next=${encodeURIComponent(`/spectate/rooms/${roomId}`)}`}
-              className="rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white"
+              className="rounded-2xl bg-app-base px-4 py-3 text-sm font-medium text-white"
             >
               로그인하러 가기
             </Link>
             <Link
               href="/spectate"
-              className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900"
+              className="rounded-2xl border border-app-border bg-app-surface px-4 py-3 text-sm font-medium text-app-primary"
             >
               관전 목록으로 돌아가기
             </Link>
@@ -221,7 +221,7 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
           actions={<StatusPill tone="danger">Load failed</StatusPill>}
         />
         <Panel title="오류" description="응답 메시지">
-          <p className="text-sm leading-7 text-zinc-700">{error ?? message}</p>
+          <p className="text-sm leading-7 text-app-secondary">{error ?? message}</p>
         </Panel>
       </div>
     );
@@ -241,7 +241,7 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
         }
       />
 
-      <div className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-700">
+      <div className="rounded-2xl border border-app-border bg-app-surface px-4 py-3 text-sm text-app-secondary">
         {error ?? message}
       </div>
 
@@ -277,7 +277,7 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
       <div className="flex flex-wrap gap-3">
         <Link
           href="/spectate"
-          className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900"
+          className="rounded-2xl border border-app-border bg-app-surface px-4 py-3 text-sm font-medium text-app-primary"
         >
           관전 목록으로 돌아가기
         </Link>

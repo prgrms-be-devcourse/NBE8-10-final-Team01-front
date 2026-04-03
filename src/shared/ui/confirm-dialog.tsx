@@ -48,24 +48,24 @@ export function ConfirmDialog({
 
   const confirmButtonClass =
     confirmTone === "danger"
-      ? "border-rose-400/30 bg-rose-500/15 text-rose-100 hover:border-rose-300/40 hover:bg-rose-500/20"
-      : "border-violet-400/45 bg-gradient-to-r from-violet-600 to-violet-500 text-white hover:from-violet-500 hover:to-violet-400";
+      ? "border-app-danger/35 bg-app-danger/15 text-app-danger hover:border-app-danger/50 hover:bg-app-danger/20"
+      : "border-app-accent/45 bg-gradient-to-r from-app-accent to-app-accent-hover text-white hover:from-app-accent-hover hover:to-app-accent";
 
   return (
     <div
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-zinc-950/45 px-4 backdrop-blur-[1px]"
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-app-base/55 px-4 backdrop-blur-[1px]"
       onClick={onCancel}
       role="presentation"
     >
       <div
-        className="w-full max-w-sm rounded-xl border border-zinc-700/80 bg-[#12161f] p-4 text-zinc-200 shadow-[0_18px_48px_rgba(0,0,0,0.55)]"
+        className="w-full max-w-sm rounded-xl border border-app-border/80 bg-app-surface p-4 text-app-primary shadow-[0_18px_48px_rgba(0,0,0,0.55)]"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
         <p className="text-sm font-semibold">{title}</p>
         {description ? (
-          <p className="mt-2 text-xs leading-6 text-zinc-300">{description}</p>
+          <p className="mt-2 text-xs leading-6 text-app-secondary">{description}</p>
         ) : null}
 
         <div className="mt-4 flex justify-end gap-2">
@@ -73,7 +73,7 @@ export function ConfirmDialog({
             type="button"
             onClick={onCancel}
             disabled={disabled}
-            className="rounded-md border border-zinc-600 bg-[#171f2c] px-3 py-1.5 text-xs font-semibold text-zinc-200 transition hover:border-zinc-500 hover:bg-zinc-700/60 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-md border border-app-border bg-app-elevated px-3 py-1.5 text-xs font-semibold text-app-secondary transition hover:border-app-border-strong hover:bg-app-elevated/90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {cancelLabel}
           </button>

@@ -17,11 +17,11 @@ export function PageHero({
 }) {
   const rootToneClass =
     tone === "dark"
-      ? "border-zinc-700 bg-zinc-900 text-zinc-100"
-      : "border-zinc-300 bg-white text-zinc-950";
-  const eyebrowToneClass = tone === "dark" ? "text-zinc-400" : "text-zinc-500";
-  const titleToneClass = tone === "dark" ? "text-zinc-50" : "text-zinc-950";
-  const descriptionToneClass = tone === "dark" ? "text-zinc-300" : "text-zinc-600";
+      ? "border-app-border bg-app-surface text-app-primary"
+      : "border-app-border bg-app-elevated text-app-primary";
+  const eyebrowToneClass = "text-app-dim";
+  const titleToneClass = "text-app-primary";
+  const descriptionToneClass = tone === "dark" ? "text-app-secondary" : "text-app-muted";
 
   return (
     <section

@@ -60,10 +60,10 @@ export default function LoginScreen() {
 
   return (
     <form onSubmit={handleSubmit} className="h-full min-h-0">
-      <main className="flex h-full min-h-0 flex-col border-b border-zinc-700/80 bg-[#1e1f22] lg:border-b-0 lg:border-r">
-        <div className="flex h-12 items-center border-b border-zinc-700/80 bg-[#1e1f22] px-3">
-          <div className="relative flex h-10 items-center gap-2 border-r border-zinc-700/70 bg-[#1e1f22] px-3 font-mono text-xs text-zinc-200">
-            <span className="inline-flex h-4 w-4 items-center justify-center text-[#a78bfa]">
+      <main className="flex h-full min-h-0 flex-col border-b border-app-border/80 bg-app-base lg:border-b-0 lg:border-r">
+        <div className="flex h-12 items-center border-b border-app-border/80 bg-app-base px-3">
+          <div className="relative flex h-10 items-center gap-2 border-r border-app-border/70 bg-app-base px-3 font-mono text-xs text-app-primary">
+            <span className="inline-flex h-4 w-4 items-center justify-center text-app-accent-soft">
               <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4">
                 <rect
                   x="3.4"
@@ -84,23 +84,23 @@ export default function LoginScreen() {
               </svg>
             </span>
             <span>login-request.json</span>
-            <span className="text-zinc-500">×</span>
-            <span className="absolute inset-x-0 bottom-0 h-[2px] bg-zinc-300" />
+            <span className="text-app-dim">×</span>
+            <span className="absolute inset-x-0 bottom-0 h-[2px] bg-app-border-strong" />
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto bg-[#1e1f22]">
+        <div className="flex-1 overflow-auto bg-app-base">
           <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
             <div className="mb-6">
-              <h1 className="text-xl font-semibold text-zinc-100">로그인</h1>
-              <p className="mt-1 text-sm text-zinc-400">
+              <h1 className="text-xl font-semibold text-app-primary">로그인</h1>
+              <p className="mt-1 text-sm text-app-muted">
                 이메일과 비밀번호를 입력해 계정에 로그인합니다.
               </p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="space-y-2 sm:col-span-2">
-                <span className="text-sm font-medium text-zinc-200">이메일</span>
+                <span className="text-sm font-medium text-app-primary">이메일</span>
                 <input
                   type="email"
                   value={form.email}
@@ -108,13 +108,13 @@ export default function LoginScreen() {
                     setForm((current) => ({ ...current, email: event.target.value }))
                   }
                   placeholder="duel@example.com"
-                  className="h-10 w-full rounded-md border border-zinc-700 bg-[#2b2d30] px-3 text-sm text-zinc-100 outline-none transition focus:border-[#4e89ff]/70"
+                  className="h-10 w-full rounded-md border border-app-border bg-app-elevated px-3 text-sm text-app-primary outline-none transition focus:border-app-accent/60"
                   required
                 />
               </label>
 
               <label className="space-y-2 sm:col-span-2">
-                <span className="text-sm font-medium text-zinc-200">비밀번호</span>
+                <span className="text-sm font-medium text-app-primary">비밀번호</span>
                 <input
                   type="password"
                   value={form.password}
@@ -122,7 +122,7 @@ export default function LoginScreen() {
                     setForm((current) => ({ ...current, password: event.target.value }))
                   }
                   placeholder="비밀번호를 입력하세요"
-                  className="h-10 w-full rounded-md border border-zinc-700 bg-[#2b2d30] px-3 text-sm text-zinc-100 outline-none transition focus:border-[#4e89ff]/70"
+                  className="h-10 w-full rounded-md border border-app-border bg-app-elevated px-3 text-sm text-app-primary outline-none transition focus:border-app-accent/60"
                   required
                 />
               </label>
@@ -131,8 +131,8 @@ export default function LoginScreen() {
             <div
               className={`mt-5 rounded-md border px-3 py-2 text-sm ${
                 error
-                  ? "border-rose-400/60 bg-rose-900/25 text-rose-200"
-                  : "border-zinc-700 bg-[#2b2d30] text-zinc-300"
+                  ? "border-app-danger/60 bg-app-danger/20 text-app-danger"
+                  : "border-app-border bg-app-elevated text-app-secondary"
               }`}
             >
               {error ?? message}
@@ -141,16 +141,16 @@ export default function LoginScreen() {
             <button
               type="submit"
               disabled={isPending}
-              className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-md bg-[#9146ff] px-4 text-sm font-semibold text-white transition hover:bg-[#7f39fa] disabled:cursor-not-allowed disabled:bg-zinc-600 disabled:text-zinc-300"
+              className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-md bg-app-accent px-4 text-sm font-semibold text-white transition hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:bg-app-elevated disabled:text-app-secondary"
             >
               {isPending ? "로그인 중..." : "로그인"}
             </button>
 
-            <div className="mt-3 text-sm text-zinc-400">
+            <div className="mt-3 text-sm text-app-muted">
               아직 계정이 없다면{" "}
               <Link
                 href="/signup"
-                className="font-medium text-violet-300 transition hover:text-violet-200"
+                className="font-medium text-app-accent-soft transition hover:text-app-primary"
               >
                 회원가입
               </Link>
