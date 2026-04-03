@@ -100,6 +100,17 @@ interface ProfilePaneProps {
   isProfilePanelOpen: boolean;
   onToggleProfilePanel: () => void;
   session: SessionResponse;
+  battleSidebarState?: {
+    status: "WAITING" | "PLAYING" | "FINISHED";
+    remainingTime: string;
+    participants: Array<{
+      userId: number;
+      nickname: string;
+      status: "READY" | "PLAYING" | "EXIT" | "ABANDONED";
+    }>;
+    myStatus: string | null;
+    myUserId: number | null;
+  } | null;
   previewPlayedCount: number;
   previewSolvedCount: number;
   previewWinRate: number;
@@ -114,6 +125,7 @@ export default function ProfilePane({
   isProfilePanelOpen,
   onToggleProfilePanel,
   session,
+  battleSidebarState,
   previewPlayedCount,
   previewSolvedCount,
   previewWinRate,
@@ -123,6 +135,25 @@ export default function ProfilePane({
   isBusy,
   onLogout,
 }: ProfilePaneProps) {
+  const battleStatusTone =
+    battleSidebarState?.status === "PLAYING"
+      ? "success"
+      : battleSidebarState?.status === "WAITING"
+        ? "warn"
+        : "default";
+
+  const participantTone = (status: string) => {
+    if (status === "PLAYING" || status === "READY") {
+      return "success" as const;
+    }
+
+    if (status === "ABANDONED") {
+      return "danger" as const;
+    }
+
+    return "default" as const;
+  };
+
   return (
     <aside className="min-h-0 bg-[#2b2d30] md:col-span-2 lg:col-span-1">
       <div className={`grid h-full ${isProfilePanelOpen ? "grid-cols-[minmax(0,1fr)_38px]" : "grid-cols-[38px]"}`}>
@@ -151,6 +182,58 @@ export default function ProfilePane({
                 </p>
               </div>
             </div>
+
+            {battleSidebarState ? (
+              <div className="mt-3 rounded-md border border-zinc-800/90 bg-[#1f222b] p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                    배틀 상태
+                  </p>
+                  <StatusPill tone={battleStatusTone}>
+                    {battleSidebarState.status}
+                  </StatusPill>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <div className="rounded border border-zinc-700 bg-[#171a22] px-2 py-1.5">
+                    <p className="text-[10px] text-zinc-500">남은 시간</p>
+                    <p className="text-sm font-semibold text-zinc-100">{battleSidebarState.remainingTime}</p>
+                  </div>
+                  <div className="rounded border border-zinc-700 bg-[#171a22] px-2 py-1.5">
+                    <p className="text-[10px] text-zinc-500">내 상태</p>
+                    <p className="text-sm font-semibold text-zinc-100">
+                      {battleSidebarState.myStatus ?? "-"}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-2 space-y-2">
+                  {battleSidebarState.participants.map((participant) => {
+                    const isMe = participant.userId === battleSidebarState.myUserId;
+                    return (
+                      <div
+                        key={`profile-battle-participant-${participant.userId}`}
+                        className={`flex items-center justify-between rounded border px-2 py-1.5 ${
+                          isMe
+                            ? "border-violet-500/40 bg-violet-500/10"
+                            : "border-zinc-700 bg-[#171a22]"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-medium text-zinc-100">{participant.nickname}</p>
+                          {isMe ? (
+                            <span className="rounded bg-violet-600/20 px-1.5 py-0.5 text-[10px] font-semibold text-violet-300">
+                              나
+                            </span>
+                          ) : null}
+                        </div>
+                        <StatusPill tone={participantTone(participant.status)}>
+                          {participant.status}
+                        </StatusPill>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-3 rounded-md border border-zinc-800/90 bg-[#1f222b] p-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
@@ -270,4 +353,3 @@ export default function ProfilePane({
     </aside>
   );
 }
-

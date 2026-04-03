@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 
@@ -18,22 +18,10 @@ import type {
   SubmissionWsMessage,
 } from "@/shared/api/contracts";
 import { useAppSession } from "@/features/layout/session-context";
-import {
-  ApiCallout,
-  DefinitionGrid,
-  EventTimeline,
-  MathText,
-  MetricCard,
-  MetricGrid,
-  PageHero,
-  Panel,
-  StatusPill,
-} from "@/shared/ui";
-import { formatDateTime } from "@/shared/utils/format-date-time";
+import { DefinitionGrid, MathText, Panel, StatusPill } from "@/shared/ui";
 
 import {
   getBattleRoom,
-  getBattleRoomEvents,
   getProblemDetail,
   latestSubmission as fallbackSubmission,
   submitTemplate,
@@ -48,12 +36,131 @@ const BattleCodeEditor = dynamic(() => import("./code-editor"), {
   ),
 });
 
-function participantTone(status: string) {
-  if (status === "PLAYING" || status === "EXIT") {
-    return "success" as const;
+const MIN_LEFT_RATIO = 32;
+const MAX_LEFT_RATIO = 68;
+const MIN_TOP_RATIO = 28;
+const MAX_TOP_RATIO = 72;
+const fallbackLanguages = ["python3", "java", "javascript"];
+const defaultCodeByLanguage: Record<string, string> = {
+  javascript: `function solve(input) {\n  // TODO: implement\n}\n`,
+  java: `import java.io.*;\nimport java.util.*;\n\npublic class Main {\n  public static void main(String[] args) throws Exception {\n    BufferedReader br = new BufferedReader(new InputStreamReader(System.in));\n    // TODO: implement\n  }\n}\n`,
+  python3: `def solve():\n    # TODO: implement\n    pass\n\nif __name__ == "__main__":\n    solve()\n`,
+  python: `def solve():\n    # TODO: implement\n    pass\n\nif __name__ == "__main__":\n    solve()\n`,
+};
+
+type LeftPanelTab = "description" | "submission";
+
+interface CaseBadgeState {
+  label: string;
+  tone: "pending" | "pass" | "fail";
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeVerdict(verdict: string | undefined) {
+  return (verdict ?? "").trim().toUpperCase();
+}
+
+function isPassVerdict(verdict: string | undefined) {
+  const normalized = normalizeVerdict(verdict);
+  return normalized === "AC" || normalized === "PASS";
+}
+
+function isWrongAnswerVerdict(verdict: string | undefined) {
+  const normalized = normalizeVerdict(verdict);
+  return normalized === "WA" || normalized === "WRONG_ANSWER" || normalized === "WRONG ANSWER";
+}
+
+function getCaseBadgeState(
+  result: RunTestCaseResult | undefined,
+  isPending: boolean,
+): CaseBadgeState | null {
+  if (isPending) {
+    return { label: "RUN", tone: "pending" };
   }
 
-  return "default" as const;
+  if (!result) {
+    return null;
+  }
+
+  if (isPassVerdict(result.status)) {
+    return { label: "PASS", tone: "pass" };
+  }
+
+  if (isWrongAnswerVerdict(result.status)) {
+    return { label: "WA", tone: "fail" };
+  }
+
+  return { label: normalizeVerdict(result.status) || "FAIL", tone: "fail" };
+}
+
+function resolveLanguages(problem: ProblemDetailResponse | null, currentLanguage: string) {
+  const base =
+    problem?.supportedLanguages && problem.supportedLanguages.length > 0
+      ? problem.supportedLanguages
+      : fallbackLanguages;
+
+  if (base.includes(currentLanguage)) {
+    return base;
+  }
+
+  return [currentLanguage, ...base];
+}
+
+function resolveStarterCode(problem: ProblemDetailResponse | null, language: string) {
+  const fromApi = problem?.starterCodes?.find((item) => item.language === language)?.code;
+
+  if (fromApi) {
+    return fromApi;
+  }
+
+  return defaultCodeByLanguage[language] ?? defaultCodeByLanguage.javascript;
+}
+
+function resolveDefaultLanguage(problem: ProblemDetailResponse | null, currentLanguage: string) {
+  const languages = resolveLanguages(problem, currentLanguage);
+
+  if (problem?.defaultLanguage && languages.includes(problem.defaultLanguage)) {
+    return problem.defaultLanguage;
+  }
+
+  return languages[0];
+}
+
+function getSubmitHeadline(isSubmitting: boolean, result: string | null | undefined) {
+  const code = normalizeVerdict(result ?? undefined);
+
+  if (isSubmitting) {
+    return "Submitting";
+  }
+
+  if (code === "JUDGING") {
+    return "Judging";
+  }
+
+  if (code === "AC" || code === "ACCEPTED") {
+    return "Accepted";
+  }
+
+  if (code === "WA" || code === "WRONG_ANSWER" || code === "WRONG ANSWER") {
+    return "Wrong Answer";
+  }
+
+  if (code === "CE" || code === "COMPILE_ERROR" || code === "COMPILE ERROR") {
+    return "Compile Error";
+  }
+
+  if (code === "RE" || code === "RUNTIME_ERROR" || code === "RUNTIME ERROR") {
+    return "Runtime Error";
+  }
+
+  if (code === "TLE" || code === "TIME_LIMIT_EXCEEDED" || code === "TIME LIMIT EXCEEDED") {
+    return "Time Limit Exceeded";
+  }
+
+  return code || "Submission";
 }
 
 export default function BattleRoomScreen({ roomId }: { roomId: string }) {
@@ -65,13 +172,65 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   const [code, setCode] = useState(submitTemplate.code);
   const [language, setLanguage] = useState(submitTemplate.language);
   const [runResults, setRunResults] = useState<RunTestCaseResult[] | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
+  const [selectedRunCaseIndex, setSelectedRunCaseIndex] = useState<number | null>(null);
+  const [runningCaseIndex, setRunningCaseIndex] = useState<number | null>(null);
+  const [leftPanelTab, setLeftPanelTab] = useState<LeftPanelTab>("description");
+  const [leftPaneRatio, setLeftPaneRatio] = useState(54);
+  const [rightTopPaneRatio, setRightTopPaneRatio] = useState(52);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState("배틀룸 정보를 불러오는 중입니다.");
   const [error, setError] = useState<string | null>(null);
-  const [source, setSource] = useState<"api" | "fallback">("api");
   const hasAttemptedJoinRef = useRef(false);
   const stompClientRef = useRef<Client | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const splitContainerRef = useRef<HTMLDivElement | null>(null);
+  const rightColumnRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 1280px)");
+    const body = document.body;
+    const html = document.documentElement;
+    const previousBodyOverflow = body.style.overflow;
+    const previousHtmlOverflow = html.style.overflow;
+
+    const syncOverflowLock = () => {
+      if (mediaQuery.matches) {
+        body.style.overflow = "hidden";
+        html.style.overflow = "hidden";
+        return;
+      }
+
+      body.style.overflow = previousBodyOverflow;
+      html.style.overflow = previousHtmlOverflow;
+    };
+
+    syncOverflowLock();
+    mediaQuery.addEventListener("change", syncOverflowLock);
+
+    return () => {
+      mediaQuery.removeEventListener("change", syncOverflowLock);
+      body.style.overflow = previousBodyOverflow;
+      html.style.overflow = previousHtmlOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
+    const sampleCaseCount = problem?.sampleCases?.length ?? 0;
+    const runCaseCount = runResults?.length ?? 0;
+    const totalCaseCount = Math.max(sampleCaseCount, runCaseCount);
+
+    if (totalCaseCount === 0) {
+      setSelectedRunCaseIndex(null);
+      return;
+    }
+
+    setSelectedRunCaseIndex((current) => {
+      if (current !== null && current >= 0 && current < totalCaseCount) {
+        return current;
+      }
+
+      return 0;
+    });
+  }, [problem, runResults]);
 
   useEffect(() => {
     if (!sessionLoaded) {
@@ -85,10 +244,15 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
         if (!active) {
           return;
         }
+
         setRoom(null);
+        setProblem(null);
+        setError(null);
         setMessage("배틀룸은 로그인 후 접근할 수 있습니다.");
         return;
       }
+
+      setError(null);
 
       const roomResponse = await fetch(`/api/battle/rooms/${roomId}`, {
         cache: "no-store",
@@ -105,27 +269,36 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
           if (!active) {
             return;
           }
-          setSource("fallback");
+          const fallbackProblem = getProblemDetail(fallbackRoom.problemId);
+          const nextLanguage = resolveDefaultLanguage(fallbackProblem, submitTemplate.language);
+          const nextStarterCode = resolveStarterCode(fallbackProblem, nextLanguage);
           setRoom(fallbackRoom);
-          setProblem(getProblemDetail(fallbackRoom.problemId));
+          setProblem(fallbackProblem);
+          setLanguage(nextLanguage);
+          setCode(nextStarterCode);
           setMessage("백엔드 연결 실패로 샘플 배틀룸을 표시합니다.");
           return;
         }
 
         const payload = (await roomResponse.json().catch(() => null)) as ApiErrorResponse | null;
+
         if (!active) {
           return;
         }
+
+        setRoom(null);
+        setProblem(null);
         setError(payload?.message ?? "배틀룸을 불러오지 못했습니다.");
         return;
       }
 
       const nextRoom = (await roomResponse.json()) as RoomResponse;
+
       if (!active) {
         return;
       }
+
       setRoom(nextRoom);
-      setSource("api");
 
       const problemResponse = await fetch(`/api/problems/${nextRoom.problemId}`, {
         cache: "no-store",
@@ -135,13 +308,45 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
         if (!active) {
           return;
         }
-        setProblem((await problemResponse.json()) as ProblemDetailResponse);
-        setMessage("실제 API 기반 배틀룸을 표시합니다.");
+
+        const nextProblem = (await problemResponse.json()) as ProblemDetailResponse;
+        const fallbackProblem = getProblemDetail(nextRoom.problemId);
+        const mergedProblem =
+          fallbackProblem
+            ? {
+                ...fallbackProblem,
+                ...nextProblem,
+                sampleCases:
+                  nextProblem.sampleCases && nextProblem.sampleCases.length > 0
+                    ? nextProblem.sampleCases
+                    : fallbackProblem.sampleCases,
+                starterCodes:
+                  nextProblem.starterCodes && nextProblem.starterCodes.length > 0
+                    ? nextProblem.starterCodes
+                    : fallbackProblem.starterCodes,
+                supportedLanguages:
+                  nextProblem.supportedLanguages && nextProblem.supportedLanguages.length > 0
+                    ? nextProblem.supportedLanguages
+                    : fallbackProblem.supportedLanguages,
+                defaultLanguage: nextProblem.defaultLanguage ?? fallbackProblem.defaultLanguage,
+              }
+            : nextProblem;
+        const nextLanguage = resolveDefaultLanguage(mergedProblem, submitTemplate.language);
+        const nextStarterCode = resolveStarterCode(mergedProblem, nextLanguage);
+        setProblem(mergedProblem);
+        setLanguage(nextLanguage);
+        setCode(nextStarterCode);
+        setMessage("");
       } else {
         if (!active) {
           return;
         }
-        setProblem(getProblemDetail(nextRoom.problemId));
+        const fallbackProblem = getProblemDetail(nextRoom.problemId);
+        const nextLanguage = resolveDefaultLanguage(fallbackProblem, submitTemplate.language);
+        const nextStarterCode = resolveStarterCode(fallbackProblem, nextLanguage);
+        setProblem(fallbackProblem);
+        setLanguage(nextLanguage);
+        setCode(nextStarterCode);
         setMessage("문제 상세 조회에 실패해 샘플 설명을 함께 표시합니다.");
       }
     })();
@@ -156,12 +361,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   }, [roomId]);
 
   useEffect(() => {
-    if (
-      hasAttemptedJoinRef.current ||
-      !room ||
-      !session.authenticated ||
-      !session.member
-    ) {
+    if (hasAttemptedJoinRef.current || !room || !session.authenticated || !session.member) {
       return;
     }
 
@@ -179,59 +379,57 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
 
     hasAttemptedJoinRef.current = true;
 
-    startTransition(() => {
-      void (async () => {
-        const response = await fetch(`/api/battle/rooms/${roomId}/join`, {
-          method: "POST",
-        });
+    void (async () => {
+      const response = await fetch(`/api/battle/rooms/${roomId}/join`, {
+        method: "POST",
+      });
 
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-          setError(payload?.message ?? "배틀룸 입장에 실패했습니다.");
-          hasAttemptedJoinRef.current = false;
-          return;
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
+        setError(payload?.message ?? "배틀룸 입장에 실패했습니다.");
+        hasAttemptedJoinRef.current = false;
+        return;
+      }
+
+      const payload = (await response.json()) as JoinRoomResponse;
+      setMessage(`배틀룸 입장 처리 완료: ${payload.status}`);
+
+      const refreshed = await fetch(`/api/battle/rooms/${roomId}`, {
+        cache: "no-store",
+      });
+
+      if (refreshed.ok) {
+        setRoom((await refreshed.json()) as RoomResponse);
+      }
+
+      const stateResponse = await fetch(`/api/battle/rooms/${roomId}/state`, {
+        cache: "no-store",
+      });
+
+      if (stateResponse.ok) {
+        const stateData = (await stateResponse.json()) as BattleRoomStateResponse;
+
+        if (typeof stateData.myCode === "string" && stateData.myCode.length > 0) {
+          setCode(stateData.myCode);
         }
-
-        const payload = (await response.json()) as JoinRoomResponse;
-        setMessage(`배틀룸 입장 처리 완료: ${payload.status}`);
-
-        const refreshed = await fetch(`/api/battle/rooms/${roomId}`, {
-          cache: "no-store",
-        });
-
-        if (refreshed.ok) {
-          setRoom((await refreshed.json()) as RoomResponse);
-        }
-
-        const stateResponse = await fetch(`/api/battle/rooms/${roomId}/state`, {
-          cache: "no-store",
-        });
-
-        if (stateResponse.ok) {
-          const stateData = (await stateResponse.json()) as BattleRoomStateResponse;
-          if (typeof stateData.myCode === "string" && stateData.myCode.length > 0) {
-            setCode(stateData.myCode);
-          }
-        }
-      })();
-    });
+      }
+    })();
   }, [room, roomId, session.authenticated, session.member?.memberId]);
 
-  // WebSocket: BATTLE_STARTED 이벤트 수신 시 방 상태 자동 갱신
   useEffect(() => {
-    if (!session.authenticated) return;
+    if (!session.authenticated) {
+      return;
+    }
 
     const client = new Client({
       webSocketFactory: () => new SockJS("/ws"),
       reconnectDelay: 3000,
-      // 연결(및 재연결) 시마다 1회용 토큰을 새로 발급해 STOMP CONNECT 헤더에 주입.
-      // 토큰은 30초 TTL이고 1회 사용 후 폐기되므로 재연결 시에도 반드시 새 토큰이 필요.
-      // 토큰 발급 실패 시 쿠키 기반 인증(로컬 환경)으로 자동 폴백됨.
       beforeConnect: async () => {
-        // 재연결 시 이전 연결에서 소비된 토큰이 재사용되지 않도록 먼저 초기화
         client.connectHeaders = {};
+
         try {
           const res = await fetch("/api/v1/ws/token", { method: "POST" });
+
           if (res.ok) {
             const data = (await res.json()) as { token: string };
             client.connectHeaders = { "X-WS-Token": data.token };
@@ -243,10 +441,10 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
       onConnect: () => {
         client.subscribe(`/topic/room/${roomId}`, (message) => {
           let payload: unknown;
+
           try {
             payload = JSON.parse(message.body) as unknown;
           } catch {
-            console.warn("[WS] 메시지 파싱 실패:", message.body);
             return;
           }
 
@@ -256,13 +454,12 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
 
           const type = (payload as { type: unknown }).type;
 
-          if (type === "BATTLE_STARTED") {
+          if (type === "BATTLE_STARTED" || type === "PARTICIPANT_DONE") {
             void fetch(`/api/battle/rooms/${roomId}`, { cache: "no-store" })
               .then((res) => (res.ok ? res.json() : null))
               .then((data: RoomResponse | null) => {
                 if (data) {
                   setRoom(data);
-                  setMessage("배틀이 시작됐습니다!");
                 }
               });
             return;
@@ -270,33 +467,36 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
 
           if (type === "SUBMISSION") {
             const msg = payload as SubmissionWsMessage;
+
             if (msg.userId === session.member?.memberId) {
+              setLeftPanelTab("submission");
               setLatestSubmission((prev) =>
                 prev
-                  ? { ...prev, result: msg.result, passedCount: msg.passedCount, totalCount: msg.totalCount }
-                  : { submissionId: 0, result: msg.result, passedCount: msg.passedCount, totalCount: msg.totalCount },
+                  ? {
+                      ...prev,
+                      result: msg.result,
+                      passedCount: msg.passedCount,
+                      totalCount: msg.totalCount,
+                    }
+                  : {
+                      submissionId: 0,
+                      result: msg.result,
+                      passedCount: msg.passedCount,
+                      totalCount: msg.totalCount,
+                    },
               );
+              setIsSubmitting(false);
               setMessage(`채점 완료: ${msg.result} (${msg.passedCount}/${msg.totalCount})`);
             }
-            return;
-          }
-
-          if (type === "PARTICIPANT_DONE") {
-            void fetch(`/api/battle/rooms/${roomId}`, { cache: "no-store" })
-              .then((res) => (res.ok ? res.json() : null))
-              .then((data: RoomResponse | null) => {
-                if (data) setRoom(data);
-              });
-            return;
           }
         });
 
         client.subscribe(`/topic/room/${roomId}/run`, (message) => {
           let payload: unknown;
+
           try {
             payload = JSON.parse(message.body) as unknown;
           } catch {
-            console.warn("[WS] run 메시지 파싱 실패:", message.body);
             return;
           }
 
@@ -305,9 +505,10 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
           }
 
           const msg = payload as RunWsMessage;
+
           if (msg.type === "RUN_RESULT" && msg.userId === session.member?.memberId) {
             setRunResults(msg.results);
-            setIsRunning(false);
+            setRunningCaseIndex(null);
           }
         });
       },
@@ -315,54 +516,40 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
 
     client.activate();
     stompClientRef.current = client;
+
     return () => {
       stompClientRef.current = null;
       void client.deactivate();
     };
   }, [roomId, session.authenticated, session.member?.memberId]);
 
-  function handleSubmit() {
+  function handleLanguageChange(nextLanguage: string) {
+    setLanguage(nextLanguage);
+    setCode(resolveStarterCode(problem, nextLanguage));
+  }
+
+  function handleCodeChange(nextCode: string) {
+    setCode(nextCode);
+
+    if (stompClientRef.current?.connected && room?.status === "PLAYING") {
+      stompClientRef.current.publish({
+        destination: `/app/room/${roomId}/code`,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: nextCode }),
+      });
+    }
+  }
+
+  async function handleRunCase(caseIndex: number) {
     if (!room) {
       return;
     }
 
     setError(null);
+    setSelectedRunCaseIndex(caseIndex);
+    setRunningCaseIndex(caseIndex);
 
-    startTransition(() => {
-      void (async () => {
-        const response = await fetch("/api/submissions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            roomId: room.roomId,
-            code,
-            language,
-          }),
-        });
-
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-          setError(payload?.message ?? "제출에 실패했습니다.");
-          return;
-        }
-
-        const payload = (await response.json()) as SubmissionResponse;
-        setLatestSubmission(payload);
-        setMessage(`제출 완료: ${payload.result ?? "채점 대기"}`);
-      })();
-    });
-  }
-
-  function handleRun() {
-    if (!room) return;
-
-    setError(null);
-    setIsRunning(true);
-    setRunResults(null);
-
-    void (async () => {
+    try {
       const response = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -372,36 +559,134 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
         setError(payload?.message ?? "실행 요청에 실패했습니다.");
-        setIsRunning(false);
+        setRunningCaseIndex((current) => (current === caseIndex ? null : current));
       }
-      // 성공 시 결과는 WebSocket(RUN_RESULT)으로 수신
-    })();
+    } catch {
+      setError("실행 요청 중 네트워크 오류가 발생했습니다.");
+      setRunningCaseIndex((current) => (current === caseIndex ? null : current));
+    }
+  }
+
+  async function handleSubmit() {
+    if (!room) {
+      return;
+    }
+
+    setError(null);
+    setIsSubmitting(true);
+    setLeftPanelTab("submission");
+
+    try {
+      const response = await fetch("/api/submissions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          roomId: room.roomId,
+          code,
+          language,
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
+        setError(payload?.message ?? "제출에 실패했습니다.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      const payload = (await response.json()) as SubmissionResponse;
+      setLatestSubmission(payload);
+      setMessage(`제출 완료: ${payload.result ?? "채점 대기"}`);
+      setIsSubmitting(false);
+    } catch {
+      setError("제출 요청 중 네트워크 오류가 발생했습니다.");
+      setIsSubmitting(false);
+    }
+  }
+
+  function startVerticalResize(event: React.MouseEvent<HTMLDivElement>) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const container = splitContainerRef.current;
+
+    if (!container) {
+      return;
+    }
+
+    const onMove = (moveEvent: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      const nextRatio = ((moveEvent.clientX - rect.left) / rect.width) * 100;
+      setLeftPaneRatio(clamp(nextRatio, MIN_LEFT_RATIO, MAX_LEFT_RATIO));
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  function startHorizontalResize(event: React.MouseEvent<HTMLDivElement>) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const onMove = (moveEvent: MouseEvent) => {
+      const rect = rightColumnRef.current?.getBoundingClientRect();
+
+      if (!rect) {
+        return;
+      }
+
+      const nextRatio = ((moveEvent.clientY - rect.top) / rect.height) * 100;
+      setRightTopPaneRatio(clamp(nextRatio, MIN_TOP_RATIO, MAX_TOP_RATIO));
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "row-resize";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
   }
 
   if (!sessionLoaded && !room) {
     return (
-      <div className="space-y-8">
-        <PageHero
-          eyebrow="Battle Room"
-          title="세션을 확인하는 중입니다."
-          description="잠시만 기다려주세요."
-          actions={<StatusPill>Session</StatusPill>}
-        />
-      </div>
+      <Panel title="세션 확인" description="인증 상태를 확인하는 중입니다.">
+        <p className="text-sm text-zinc-600">잠시만 기다려주세요.</p>
+      </Panel>
     );
   }
 
   if (!session.authenticated && !room) {
     return (
       <div className="space-y-8">
-        <PageHero
-          eyebrow="Battle Room"
-          title="로그인 후 배틀룸에 입장할 수 있습니다."
-          description="배틀룸, 제출, 결과 조회는 모두 보호된 API 흐름입니다. 메인에서 로그인 후 큐를 잡고 배틀룸으로 이동하세요."
-          actions={<StatusPill tone="warn">로그인 필요</StatusPill>}
-        />
-
-        <Panel title="이동" description="보호 화면 진입 전 처리">
+        <div className="flex items-center justify-between rounded-2xl border border-zinc-300 bg-white px-4 py-3">
+          <p className="text-sm font-medium text-zinc-700">
+            배틀룸은 로그인 후 이용할 수 있습니다.
+          </p>
+          <StatusPill tone="warn">로그인 필요</StatusPill>
+        </div>
+        <Panel title="이동" description="로그인 후 다시 배틀룸으로 돌아올 수 있습니다.">
           <div className="flex flex-wrap gap-3">
             <Link
               href={`/login?next=${encodeURIComponent(`/battle/rooms/${roomId}`)}`}
@@ -424,382 +709,726 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   if (!room) {
     return (
       <div className="space-y-8">
-        <PageHero
-          eyebrow="Battle Room"
-          title="배틀룸을 열지 못했습니다."
-          description="현재 roomId에 해당하는 방을 찾을 수 없습니다."
-          actions={<StatusPill tone="danger">Load failed</StatusPill>}
-        />
+        <div className="flex items-center justify-between rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3">
+          <p className="text-sm font-medium text-rose-900">
+            배틀룸 정보를 가져오지 못했습니다.
+          </p>
+          <StatusPill tone="danger">Load failed</StatusPill>
+        </div>
         <Panel title="오류" description="응답 메시지">
-          <p className="text-sm leading-7 text-zinc-700">{error ?? message}</p>
+          <p className="text-sm leading-7 text-zinc-700">
+            {error ?? message}
+          </p>
         </Panel>
       </div>
     );
   }
 
-  const events = getBattleRoomEvents(roomId);
+  const languages = resolveLanguages(problem, language);
+  const sampleCases = problem?.sampleCases ?? [];
+  const caseCount = Math.max(sampleCases.length, runResults?.length ?? 0);
+  const activeSampleCase =
+    selectedRunCaseIndex !== null ? sampleCases[selectedRunCaseIndex] ?? null : null;
+  const activeRunCase =
+    selectedRunCaseIndex !== null && runResults
+      ? runResults[selectedRunCaseIndex] ?? null
+      : null;
+  const activeCaseInput = activeSampleCase?.input ?? activeRunCase?.input ?? "(empty)";
+  const activeCaseExpected =
+    activeSampleCase?.output ?? activeRunCase?.expectedOutput ?? "(empty)";
+  const activeRunCasePass = isPassVerdict(activeRunCase?.status);
+  const activeRunCaseWrongAnswer = isWrongAnswerVerdict(activeRunCase?.status);
+  const isPlayable = room.status === "PLAYING";
+  const latestResultCode = normalizeVerdict(latestSubmission?.result ?? undefined);
+  const submitHeadline = getSubmitHeadline(isSubmitting, latestSubmission?.result);
+  const submitIsAccepted = latestResultCode === "AC" || latestResultCode === "ACCEPTED";
+  const submitIsWaiting = isSubmitting || latestResultCode === "JUDGING";
+  const submitHasResult = Boolean(isSubmitting || latestSubmission?.result);
+  const submitCardClass = submitIsAccepted
+    ? "border-emerald-300 bg-emerald-50"
+    : submitIsWaiting
+      ? "border-amber-300 bg-amber-50"
+      : submitHasResult
+        ? "border-rose-300 bg-rose-50"
+        : "border-zinc-300 bg-zinc-50";
+  const submitHeadlineClass = submitIsAccepted
+    ? "text-emerald-700"
+    : submitIsWaiting
+      ? "text-amber-700"
+      : submitHasResult
+        ? "text-rose-700"
+        : "text-zinc-700";
+  const submitBadgeClass = submitIsAccepted
+    ? "bg-emerald-700/15 text-emerald-700"
+    : submitIsWaiting
+      ? "bg-amber-700/15 text-amber-700"
+      : "bg-rose-700/15 text-rose-700";
+  const submitProgressText =
+    latestSubmission &&
+    latestSubmission.passedCount !== null &&
+    latestSubmission.totalCount !== null
+      ? `${latestSubmission.passedCount}/${latestSubmission.totalCount} testcases passed`
+      : null;
 
   return (
-    <div className="space-y-8">
-      <PageHero
-        eyebrow="Battle Room"
-        title={`Room ${room.roomId} / ${room.status}`}
-        description="READY 상태 참여자는 화면 진입 시 자동으로 join 요청을 보냅니다. 문제 조회와 제출은 실제 API를 우선하고, 연결 실패 시에만 샘플 데이터를 보조로 사용합니다."
-        actions={
-          <>
-            <StatusPill tone={room.status === "PLAYING" ? "success" : "warn"}>
-              {room.status}
-            </StatusPill>
-            <StatusPill>problemId {room.problemId}</StatusPill>
-            <StatusPill>{source === "api" ? "API" : "Fallback"}</StatusPill>
-          </>
-        }
-      />
-
-      <MetricGrid>
-        <MetricCard label="Room ID" value={room.roomId} />
-        <MetricCard label="Max Players" value={room.maxPlayers} />
-        <MetricCard label="Participants" value={room.participants.length} />
-        <MetricCard label="Timer End" value={formatDateTime(room.timerEnd)} />
-      </MetricGrid>
-
-      <div
-        className={`rounded-2xl border px-4 py-3 text-sm ${
-          error
-            ? "border-rose-300 bg-rose-50 text-rose-900"
-            : "border-zinc-300 bg-white text-zinc-700"
-        }`}
-      >
-        {error ?? message}
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
-        <Panel
-          title="참가자 상태"
-          description="`RoomResponse.participants`를 그대로 참가자 보드에 투영합니다."
+    <div className="space-y-6">
+      {error && (
+        <div
+          className="rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900"
         >
-          <div className="space-y-3">
-            {room.participants.map((participant) => (
-              <div
-                key={participant.userId}
-                className="flex items-center justify-between rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3"
-              >
-                <div>
-                  <p className="font-medium text-zinc-950">{participant.nickname}</p>
-                  <p className="text-sm text-zinc-500">userId {participant.userId}</p>
+          {error}
+        </div>
+      )}
+
+      <div className="hidden h-[calc(100dvh-10.5rem)] min-h-0 lg:flex lg:flex-col lg:gap-4">
+        <div ref={splitContainerRef} className="flex min-h-0 flex-1">
+          <div className="h-full min-w-0" style={{ width: `${leftPaneRatio}%` }}>
+            <Panel title="문제 상세" className="flex h-full min-h-0 flex-col">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setLeftPanelTab("description")}
+                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                        leftPanelTab === "description"
+                          ? "border-zinc-900 bg-zinc-900 text-white"
+                          : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                      }`}
+                    >
+                      Description
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLeftPanelTab("submission")}
+                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                        leftPanelTab === "submission"
+                          ? "border-zinc-900 bg-zinc-900 text-white"
+                          : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                      }`}
+                    >
+                      Submission
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleSubmit()}
+                    disabled={!isPlayable || isSubmitting}
+                    className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                  >
+                    {isSubmitting ? "Submitting..." : "Submit"}
+                  </button>
                 </div>
-                <StatusPill tone={participantTone(participant.status)}>
-                  {participant.status}
-                </StatusPill>
+
+                {leftPanelTab === "description" ? (
+                  <>
+                    <div className="rounded-2xl border border-zinc-300 bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                        Battle
+                      </p>
+                      <h1 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">
+                        {problem ? `${problem.problemId}. ${problem.title}` : `Problem ${room.problemId}`}
+                      </h1>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <StatusPill>{problem?.difficulty ?? "UNKNOWN"}</StatusPill>
+                        <StatusPill>멀티 배틀</StatusPill>
+                      </div>
+                    </div>
+
+                    <DefinitionGrid
+                      items={[
+                        { label: "timeLimitMs", value: problem?.timeLimitMs ?? "-" },
+                        { label: "memoryLimitMb", value: problem?.memoryLimitMb ?? "-" },
+                      ]}
+                    />
+
+                    {problem ? (
+                      <div className="space-y-4 rounded-2xl border border-zinc-300 bg-zinc-50 p-4">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                            Content
+                          </p>
+                          <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
+                            {problem.content}
+                          </MathText>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                            Input
+                          </p>
+                          <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
+                            {problem.inputFormat}
+                          </MathText>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                            Output
+                          </p>
+                          <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
+                            {problem.outputFormat}
+                          </MathText>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                        문제 상세를 불러오는 중입니다.
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
+                    <div className="flex flex-wrap items-start gap-3">
+                      <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
+                        {submitHeadline}
+                      </p>
+                      {submitProgressText ? (
+                        <p className="pt-1 text-sm text-zinc-600">{submitProgressText}</p>
+                      ) : null}
+                      <div className="ml-auto flex flex-col items-end gap-1 text-right">
+                        {submitHasResult && latestResultCode ? (
+                          <span
+                            className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${submitBadgeClass}`}
+                          >
+                            {latestResultCode}
+                          </span>
+                        ) : null}
+                        <p className="text-xs text-zinc-600">language: {language}</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-zinc-200 bg-white/60 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                        Current Submission
+                      </p>
+                      <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-800">
+                        {code}
+                      </pre>
+                    </div>
+                  </div>
+                )}
               </div>
-            ))}
+            </Panel>
           </div>
-        </Panel>
 
-        <Panel
-          title="입장과 상태 변화"
-          description="현재 백엔드는 READY 참여자가 모두 PLAYING이 되면 배틀을 시작합니다."
-        >
-          <ul className="space-y-3 text-sm leading-7 text-zinc-700">
-            <li>메인에서 매칭 성사 메시지에 포함된 `roomId`를 읽어 이 화면으로 이동합니다.</li>
-            <li>이 화면은 내 참여자 상태가 `READY`이면 자동으로 `join` 요청을 한 번 보냅니다.</li>
-            <li>모든 참여자가 `PLAYING`으로 바뀌면 방 상태가 `PLAYING`이 되고 타이머가 시작됩니다.</li>
-          </ul>
-        </Panel>
-      </div>
-
-      {room.status === "WAITING" ? (
-        <div className="grid gap-6 xl:grid-cols-2">
-          <Panel
-            title="WAITING 상태"
-            description="아직 전원이 입장하지 않았을 때는 참여자 상태 위주로 보여줍니다."
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={startVerticalResize}
+            className="group mx-1 flex w-3 cursor-col-resize items-center justify-center"
           >
-            <ul className="space-y-3 text-sm leading-7 text-zinc-700">
-              <li>문제는 이미 할당됐지만 실제 풀이 타이머는 아직 시작되지 않았을 수 있습니다.</li>
-              <li>현재 사용자에게 `READY`가 보이면 자동 입장 요청이 한 번 전송됩니다.</li>
-              <li>다른 참여자가 모두 들어오면 방 상태가 `PLAYING`으로 전환됩니다.</li>
-            </ul>
-          </Panel>
+            <div className="h-full w-px rounded bg-zinc-300 transition group-hover:bg-zinc-500" />
+          </div>
 
-          <Panel title="대기 상태 API" description="현재 화면에서 실제로 붙는 엔드포인트">
-            <div className="space-y-4">
-              <ApiCallout
-                method="GET"
-                path={`/api/battle/rooms/${room.roomId}`}
-                note="방 상태와 참여자 목록을 조회합니다."
-              />
-              <ApiCallout
-                method="POST"
-                path={`/api/battle/rooms/${room.roomId}/join`}
-                note="현재 참여자를 READY에서 PLAYING으로 전환합니다."
-              />
-              <ApiCallout
-                method="GET"
-                path={`/api/problems/${room.problemId}`}
-                note="문제 상세는 플레이 전에도 선조회할 수 있게 준비합니다."
+          <div
+            ref={rightColumnRef}
+            className="flex h-full min-w-0 flex-col"
+            style={{ width: `${100 - leftPaneRatio}%` }}
+          >
+            <div className="min-h-0" style={{ height: `${rightTopPaneRatio}%` }}>
+              <BattleCodeEditor
+                languages={languages}
+                language={language}
+                onLanguageChange={handleLanguageChange}
+                value={code}
+                onChange={handleCodeChange}
+                height="100%"
+                className="h-full"
               />
             </div>
-          </Panel>
-        </div>
-      ) : (
-        <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <div className="space-y-6">
-            <Panel
-              title="문제 상세"
-              description="백엔드 `ProblemDetailResponse`를 문제 본문 섹션으로 사용합니다."
+
+            <div
+              role="separator"
+              aria-orientation="horizontal"
+              onMouseDown={startHorizontalResize}
+              className="group my-1 flex h-3 cursor-row-resize items-center justify-center"
             >
-              {problem ? (
-                <div className="space-y-4">
-                  <DefinitionGrid
-                    items={[
-                      { label: "title", value: problem.title },
-                      { label: "difficulty", value: problem.difficulty },
-                      { label: "timeLimitMs", value: problem.timeLimitMs },
-                      { label: "memoryLimitMb", value: problem.memoryLimitMb },
-                    ]}
-                  />
+              <div className="h-px w-full rounded bg-zinc-300 transition group-hover:bg-zinc-500" />
+            </div>
+
+            <div className="min-h-0" style={{ height: `${100 - rightTopPaneRatio}%` }}>
+              <Panel title="TestCase" className="flex h-full min-h-0 flex-col">
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+                  {caseCount > 0 ? (
+                    <>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-wrap gap-2">
+                          {Array.from({ length: caseCount }, (_, index) => {
+                            const caseResult = runResults?.[index];
+                            const badgeState = getCaseBadgeState(
+                              caseResult,
+                              runningCaseIndex === index,
+                            );
+                            const isSelected = selectedRunCaseIndex === index;
+                            const idleClass = "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200";
+                            const passClass = "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100";
+                            const failClass = "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100";
+                            const pendingClass = "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100";
+
+                            const colorClass = isSelected
+                              ? "border-zinc-900 bg-zinc-900 text-white"
+                              : badgeState?.tone === "pass"
+                                ? passClass
+                                : badgeState?.tone === "fail"
+                                  ? failClass
+                                  : badgeState?.tone === "pending"
+                                    ? pendingClass
+                                    : idleClass;
+
+                            return (
+                              <button
+                                key={`battle-case-${index}`}
+                                type="button"
+                                onClick={() => setSelectedRunCaseIndex(index)}
+                                className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${colorClass}`}
+                              >
+                                <span>Case {index + 1}</span>
+                                {badgeState ? (
+                                  <span
+                                    className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${
+                                      badgeState.tone === "pass"
+                                        ? "bg-emerald-700/15 text-emerald-700"
+                                        : badgeState.tone === "fail"
+                                          ? "bg-rose-700/15 text-rose-700"
+                                          : "bg-amber-700/15 text-amber-700"
+                                    }`}
+                                  >
+                                    {badgeState.label}
+                                  </span>
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            selectedRunCaseIndex !== null
+                              ? void handleRunCase(selectedRunCaseIndex)
+                              : null
+                          }
+                          disabled={!isPlayable || selectedRunCaseIndex === null || runningCaseIndex !== null}
+                          className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-900 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:text-zinc-400"
+                        >
+                          {runningCaseIndex !== null ? "실행 중..." : isPlayable ? "▶ Run" : "대기 중"}
+                        </button>
+                      </div>
+
+                      {selectedRunCaseIndex !== null ? (
+                        <div className="grid gap-3 lg:grid-cols-[1fr_0.95fr]">
+                          <div className="space-y-3 rounded-2xl border border-zinc-300 bg-zinc-50 p-4">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                                Input
+                              </p>
+                              <MathText className="mt-2 block text-sm leading-7 text-zinc-800">
+                                {activeCaseInput}
+                              </MathText>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                                Output
+                              </p>
+                              <MathText className="mt-2 block text-sm leading-7 text-zinc-800">
+                                {activeCaseExpected}
+                              </MathText>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3 rounded-2xl border border-zinc-300 bg-white p-4">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                              Run Result
+                            </p>
+                            <div
+                              className={`rounded-xl border p-3 text-sm ${
+                                !activeRunCase
+                                  ? "border-zinc-200 bg-zinc-50 text-zinc-800"
+                                  : activeRunCasePass
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                                    : "border-rose-200 bg-rose-50 text-rose-900"
+                              }`}
+                            >
+                              {runningCaseIndex === selectedRunCaseIndex ? (
+                                <p className="text-amber-700">실행 요청 중입니다...</p>
+                              ) : activeRunCase ? (
+                                <div className="space-y-2">
+                                  <p
+                                    className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${
+                                      activeRunCasePass
+                                        ? "bg-emerald-700/15 text-emerald-700"
+                                        : "bg-rose-700/15 text-rose-700"
+                                    }`}
+                                  >
+                                    {activeRunCasePass
+                                      ? "PASS"
+                                      : activeRunCaseWrongAnswer
+                                        ? "WRONG ANSWER"
+                                        : normalizeVerdict(activeRunCase.status)}
+                                  </p>
+                                  {activeRunCase.stderr ? (
+                                    <div className="rounded-lg border border-rose-200 bg-white/60 p-2">
+                                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-600">
+                                        Error
+                                      </p>
+                                      <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-rose-800">
+                                        {activeRunCase.stderr}
+                                      </pre>
+                                    </div>
+                                  ) : (
+                                    <div className="grid gap-2">
+                                      <div className="rounded-lg border border-zinc-200 bg-white/60 p-2">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                                          Output
+                                        </p>
+                                        <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-800">
+                                          {activeRunCase.actualOutput ?? "(empty)"}
+                                        </pre>
+                                      </div>
+                                      <div className="rounded-lg border border-zinc-200 bg-white/60 p-2">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                                          Expected
+                                        </p>
+                                        <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-800">
+                                          {activeRunCase.expectedOutput ?? "(empty)"}
+                                        </pre>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="text-zinc-600">
+                                  아직 실행 결과가 없습니다. Run 버튼으로 해당 케이스를 실행하세요.
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                      실행 가능한 샘플 케이스가 없습니다.
+                    </div>
+                  )}
+                </div>
+              </Panel>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-6 lg:hidden">
+        <Panel title="문제 상세">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setLeftPanelTab("description")}
+                  className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                    leftPanelTab === "description"
+                      ? "border-zinc-900 bg-zinc-900 text-white"
+                      : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                  }`}
+                >
+                  Description
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeftPanelTab("submission")}
+                  className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                    leftPanelTab === "submission"
+                      ? "border-zinc-900 bg-zinc-900 text-white"
+                      : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                  }`}
+                >
+                  Submission
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleSubmit()}
+                disabled={!isPlayable || isSubmitting}
+                className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400"
+              >
+                {isSubmitting ? "Submitting..." : "Submit"}
+              </button>
+            </div>
+
+            {leftPanelTab === "description" ? (
+              <>
+                <div className="rounded-2xl border border-zinc-300 bg-white p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                    Battle
+                  </p>
+                  <h1 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">
+                    {problem ? `${problem.problemId}. ${problem.title}` : `Problem ${room.problemId}`}
+                  </h1>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <StatusPill>{problem?.difficulty ?? "UNKNOWN"}</StatusPill>
+                    <StatusPill>멀티 배틀</StatusPill>
+                  </div>
+                </div>
+                <DefinitionGrid
+                  items={[
+                    { label: "timeLimitMs", value: problem?.timeLimitMs ?? "-" },
+                    { label: "memoryLimitMb", value: problem?.memoryLimitMb ?? "-" },
+                  ]}
+                />
+                {problem ? (
                   <div className="space-y-4 rounded-2xl border border-zinc-300 bg-zinc-50 p-4">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
                         Content
                       </p>
-                      <p className="mt-2 text-sm leading-7 text-zinc-700">
-                        <MathText>{problem.content}</MathText>
-                      </p>
+                      <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
+                        {problem.content}
+                      </MathText>
                     </div>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
                         Input
                       </p>
-                      <p className="mt-2 text-sm leading-7 text-zinc-700">
-                        <MathText>{problem.inputFormat}</MathText>
-                      </p>
+                      <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
+                        {problem.inputFormat}
+                      </MathText>
                     </div>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
                         Output
                       </p>
-                      <p className="mt-2 text-sm leading-7 text-zinc-700">
-                        <MathText>{problem.outputFormat}</MathText>
-                      </p>
+                      <MathText className="mt-2 block text-sm leading-7 text-zinc-700">
+                        {problem.outputFormat}
+                      </MathText>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <p className="text-sm text-zinc-600">문제 상세를 불러오지 못했습니다.</p>
-              )}
-            </Panel>
-
-            <Panel
-              title="실시간 이벤트 채널"
-              description="현재 소켓 연결은 아직 붙이지 않았고, 채널 경로와 이벤트 의미를 먼저 고정합니다."
-            >
-              <EventTimeline events={events} />
-            </Panel>
-          </div>
-
-          <div className="space-y-6">
-            <Panel
-              title="코드 에디터"
-              description="LeetCode처럼 Run과 Submit을 분리하되, 현재 실제 실행은 Submit만 연결되어 있습니다."
-            >
-              <div className="space-y-4">
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium text-zinc-700">언어</span>
-                  <select
-                    value={language}
-                    onChange={(event) => setLanguage(event.target.value)}
-                    className="w-full rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500"
-                  >
-                    <option value="javascript">javascript</option>
-                    <option value="java">java</option>
-                    <option value="python">python</option>
-                  </select>
-                </label>
-
-                <div className="space-y-2">
-                  <span className="text-sm font-medium text-zinc-700">코드</span>
-                  <BattleCodeEditor
-                    language={language}
-                    value={code}
-                    onChange={(newCode) => {
-                      setCode(newCode);
-                      if (stompClientRef.current?.connected && room?.status === "PLAYING") {
-                        stompClientRef.current.publish({
-                          destination: `/app/room/${roomId}/code`,
-                          headers: { "content-type": "application/json" },
-                          body: JSON.stringify({ code: newCode }),
-                        });
-                      }
-                    }}
-                  />
+                ) : (
+                  <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                    문제 상세를 불러오는 중입니다.
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
+                <div className="flex flex-wrap items-start gap-3">
+                  <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
+                    {submitHeadline}
+                  </p>
+                  {submitProgressText ? (
+                    <p className="pt-1 text-sm text-zinc-600">{submitProgressText}</p>
+                  ) : null}
+                  <div className="ml-auto flex flex-col items-end gap-1 text-right">
+                    {submitHasResult && latestResultCode ? (
+                      <span className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${submitBadgeClass}`}>
+                        {latestResultCode}
+                      </span>
+                    ) : null}
+                    <p className="text-xs text-zinc-600">language: {language}</p>
+                  </div>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={handleRun}
-                    disabled={isRunning}
-                    className="w-full rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
-                  >
-                    {isRunning ? "실행 중..." : "Run"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={isPending}
-                    className="w-full rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-500"
-                  >
-                    {isPending ? "제출 중..." : "Submit"}
-                  </button>
+                <div className="rounded-xl border border-zinc-200 bg-white/60 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                    Current Submission
+                  </p>
+                  <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-800">
+                    {code}
+                  </pre>
                 </div>
               </div>
-            </Panel>
+            )}
+          </div>
+        </Panel>
 
-            <Panel
-              title="테스트 실행 결과"
-              description="Run을 누르면 문제의 샘플 테스트케이스를 실행하고 결과를 표시합니다."
-            >
-              {isRunning && (
-                <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-500">
-                  채점 서버에서 실행 중입니다...
+        <BattleCodeEditor
+          languages={languages}
+          language={language}
+          onLanguageChange={handleLanguageChange}
+          value={code}
+          onChange={handleCodeChange}
+        />
+
+        <Panel title="TestCase">
+          <div className="space-y-4">
+            {caseCount > 0 ? (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap gap-2">
+                    {Array.from({ length: caseCount }, (_, index) => {
+                      const caseResult = runResults?.[index];
+                      const badgeState = getCaseBadgeState(
+                        caseResult,
+                        runningCaseIndex === index,
+                      );
+                      const isSelected = selectedRunCaseIndex === index;
+                      const idleClass = "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200";
+                      const passClass = "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100";
+                      const failClass = "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100";
+                      const pendingClass = "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100";
+
+                      const colorClass = isSelected
+                        ? "border-zinc-900 bg-zinc-900 text-white"
+                        : badgeState?.tone === "pass"
+                          ? passClass
+                          : badgeState?.tone === "fail"
+                            ? failClass
+                            : badgeState?.tone === "pending"
+                              ? pendingClass
+                              : idleClass;
+
+                      return (
+                        <button
+                          key={`battle-case-mobile-${index}`}
+                          type="button"
+                          onClick={() => setSelectedRunCaseIndex(index)}
+                          className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${colorClass}`}
+                        >
+                          <span>Case {index + 1}</span>
+                          {badgeState ? (
+                            <span
+                              className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${
+                                badgeState.tone === "pass"
+                                  ? "bg-emerald-700/15 text-emerald-700"
+                                  : badgeState.tone === "fail"
+                                    ? "bg-rose-700/15 text-rose-700"
+                                    : "bg-amber-700/15 text-amber-700"
+                              }`}
+                            >
+                              {badgeState.label}
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      selectedRunCaseIndex !== null
+                        ? void handleRunCase(selectedRunCaseIndex)
+                        : null
+                    }
+                    disabled={!isPlayable || selectedRunCaseIndex === null || runningCaseIndex !== null}
+                    className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-900 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:text-zinc-400"
+                  >
+                    {runningCaseIndex !== null ? "실행 중..." : isPlayable ? "▶ Run" : "대기 중"}
+                  </button>
                 </div>
-              )}
 
-              {!isRunning && runResults === null && (
-                <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-500">
-                  Run 버튼을 누르면 샘플 테스트케이스 결과가 여기에 표시됩니다.
-                </div>
-              )}
+                {selectedRunCaseIndex !== null ? (
+                  <div className="grid gap-3">
+                    <div className="space-y-3 rounded-2xl border border-zinc-300 bg-zinc-50 p-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                          Input
+                        </p>
+                        <MathText className="mt-2 block text-sm leading-7 text-zinc-800">
+                          {activeCaseInput}
+                        </MathText>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                          Output
+                        </p>
+                        <MathText className="mt-2 block text-sm leading-7 text-zinc-800">
+                          {activeCaseExpected}
+                        </MathText>
+                      </div>
+                    </div>
 
-              {!isRunning && runResults !== null && runResults.length === 0 && (
-                <div className="rounded-2xl border border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-500">
-                  이 문제에 샘플 테스트케이스가 없습니다.
-                </div>
-              )}
-
-              {!isRunning && runResults !== null && runResults.length > 0 && (
-                <div className="space-y-4">
-                  {runResults.map((result, index) => {
-                    const isPassed = result.status === "AC";
-                    return (
+                    <div className="space-y-3 rounded-2xl border border-zinc-300 bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                        Run Result
+                      </p>
                       <div
-                        key={index}
-                        className={`rounded-2xl border p-4 ${
-                          isPassed
-                            ? "border-emerald-300 bg-emerald-50"
-                            : "border-rose-300 bg-rose-50"
+                        className={`rounded-xl border p-3 text-sm ${
+                          !activeRunCase
+                            ? "border-zinc-200 bg-zinc-50 text-zinc-800"
+                            : activeRunCasePass
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                              : "border-rose-200 bg-rose-50 text-rose-900"
                         }`}
                       >
-                        <div className="mb-3 flex items-center justify-between">
-                          <span className="text-sm font-medium text-zinc-700">
-                            테스트케이스 {index + 1}
-                          </span>
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                              isPassed
-                                ? "bg-emerald-100 text-emerald-800"
-                                : result.status === "CE"
-                                  ? "bg-amber-100 text-amber-800"
-                                  : "bg-rose-100 text-rose-800"
-                            }`}
-                          >
-                            {result.status}
-                          </span>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                              Input
+                        {runningCaseIndex === selectedRunCaseIndex ? (
+                          <p className="text-amber-700">실행 요청 중입니다...</p>
+                        ) : activeRunCase ? (
+                          <div className="space-y-2">
+                            <p
+                              className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${
+                                activeRunCasePass
+                                  ? "bg-emerald-700/15 text-emerald-700"
+                                  : "bg-rose-700/15 text-rose-700"
+                              }`}
+                            >
+                              {activeRunCasePass
+                                ? "PASS"
+                                : activeRunCaseWrongAnswer
+                                  ? "WRONG ANSWER"
+                                  : normalizeVerdict(activeRunCase.status)}
                             </p>
-                            <pre className="mt-1 whitespace-pre-wrap font-mono text-sm leading-6 text-zinc-700">
-                              {result.input || "-"}
-                            </pre>
+                            {activeRunCase.stderr ? (
+                              <div className="rounded-lg border border-rose-200 bg-white/60 p-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-600">
+                                  Error
+                                </p>
+                                <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-rose-800">
+                                  {activeRunCase.stderr}
+                                </pre>
+                              </div>
+                            ) : (
+                              <div className="grid gap-2">
+                                <div className="rounded-lg border border-zinc-200 bg-white/60 p-2">
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                                    Output
+                                  </p>
+                                  <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-800">
+                                    {activeRunCase.actualOutput ?? "(empty)"}
+                                  </pre>
+                                </div>
+                                <div className="rounded-lg border border-zinc-200 bg-white/60 p-2">
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                                    Expected
+                                  </p>
+                                  <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-800">
+                                    {activeRunCase.expectedOutput ?? "(empty)"}
+                                  </pre>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                              Expected
-                            </p>
-                            <pre className="mt-1 whitespace-pre-wrap font-mono text-sm leading-6 text-zinc-700">
-                              {result.expectedOutput || "-"}
-                            </pre>
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                              Output
-                            </p>
-                            <pre className="mt-1 whitespace-pre-wrap font-mono text-sm leading-6 text-zinc-700">
-                              {result.actualOutput ?? "-"}
-                            </pre>
-                          </div>
-                        </div>
-
-                        {result.stderr && (
-                          <div className="mt-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-rose-500">
-                              stderr
-                            </p>
-                            <pre className="mt-1 whitespace-pre-wrap font-mono text-sm leading-6 text-rose-700">
-                              {result.stderr}
-                            </pre>
-                          </div>
+                        ) : (
+                          <p className="text-zinc-600">
+                            아직 실행 결과가 없습니다. Run 버튼으로 해당 케이스를 실행하세요.
+                          </p>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Panel>
-
-            <Panel title="최근 제출 응답" description="실제 제출 결과를 이 영역에 바로 표시합니다.">
-              <DefinitionGrid
-                items={[
-                  { label: "submissionId", value: latestSubmission?.submissionId ?? "-" },
-                  { label: "result", value: latestSubmission?.result ?? "-" },
-                  { label: "passedCount", value: latestSubmission?.passedCount ?? "-" },
-                  { label: "totalCount", value: latestSubmission?.totalCount ?? "-" },
-                ]}
-              />
-            </Panel>
-
-            <Panel title="연결 엔드포인트" description="플레이 중 방에서 붙는 API와 소켓 경로">
-              <div className="space-y-4">
-                <ApiCallout
-                  method="GET"
-                  path={`/api/problems/${room.problemId}`}
-                  note="문제 상세를 단건으로 조회합니다."
-                />
-                <ApiCallout
-                  method="POST"
-                  path="/api/submissions"
-                  note="프론트가 JWT subject를 memberId로 읽어 제출 본문을 완성합니다."
-                />
-                <ApiCallout
-                  method="WS"
-                  path={`/topic/room/${room.roomId}`}
-                  note="배틀 시작, 제출, 참가자 종료, 정산 완료 이벤트를 수신할 경로입니다."
-                />
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                실행 가능한 샘플 케이스가 없습니다.
               </div>
-            </Panel>
-
-            <div className="flex flex-wrap gap-3">
-              <Link
-                href={`/battle/results/${room.roomId}`}
-                className="rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white"
-              >
-                결과 화면 보기
-              </Link>
-              <Link
-                href="/"
-                className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900"
-              >
-                메인으로 돌아가기
-              </Link>
-            </div>
+            )}
           </div>
+        </Panel>
+
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href={`/battle/results/${room.roomId}`}
+            className="rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-medium text-white"
+          >
+            결과 화면 보기
+          </Link>
+          <Link
+            href="/"
+            className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900"
+          >
+            메인으로 돌아가기
+          </Link>
         </div>
-      )}
+      </div>
     </div>
   );
 }
