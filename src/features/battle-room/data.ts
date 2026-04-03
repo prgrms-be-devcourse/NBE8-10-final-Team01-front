@@ -1,7 +1,6 @@
 import type {
   ProblemDetailResponse,
   RoomResponse,
-  SubmissionResponse,
   SubmitPayload,
 } from "@/shared/api/contracts";
 
@@ -16,13 +15,6 @@ export const submitTemplate: SubmitPayload = {
   roomId: 302,
   code: `function solve(input) {\n  const values = input.trim().split(/\\s+/).map(Number);\n  const n = values[0];\n  const nums = values.slice(1, n + 1);\n  return String(nums.reduce((sum, value) => sum + value, 0));\n}`,
   language: "javascript",
-};
-
-export const latestSubmission: SubmissionResponse = {
-  submissionId: 9001,
-  result: "AC",
-  passedCount: 12,
-  totalCount: 12,
 };
 
 const room302Events: LiveEvent[] = [

@@ -56,6 +56,7 @@ const SPLIT_SNAP_GAP = 4;
 const DEFAULT_LEFT_PANE_RATIO = 50;
 const DEFAULT_RIGHT_TOP_PANE_RATIO = 100;
 const SOLO_LAYOUT_STORAGE_KEY = "bracket:solo-editor-layout:v1";
+const TESTCASE_SHORTCUT_HINT = "⌘/Ctrl+Enter: Run · Shift+Enter: Submit";
 
 interface SoloCaseRunResult {
   status: "pending" | "done" | "error";
@@ -214,7 +215,7 @@ function getCaseBadgeState(result: SoloCaseRunResult | undefined): CaseBadgeStat
   }
 
   if (result.status === "pending") {
-    return { label: "RUN", tone: "pending" };
+    return { label: "RUNNING", tone: "pending" };
   }
 
   if (isPassVerdict(result.verdict)) {
@@ -226,6 +227,23 @@ function getCaseBadgeState(result: SoloCaseRunResult | undefined): CaseBadgeStat
   }
 
   return { label: normalizeVerdict(result.verdict) || "FAIL", tone: "fail" };
+}
+
+function createPendingCaseResults(
+  caseCount: number,
+  message: string,
+): Record<number, SoloCaseRunResult> {
+  const nextResults: Record<number, SoloCaseRunResult> = {};
+
+  Array.from({ length: caseCount }, (_, index) => index).forEach((index) => {
+    nextResults[index] = {
+      status: "pending",
+      verdict: "RUNNING",
+      message,
+    };
+  });
+
+  return nextResults;
 }
 
 function resolveLanguages(problem: ProblemDetailResponse | null) {
@@ -516,7 +534,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
               }
 
               nextResults[index] = {
-                status: runResult.status === "AC" ? "done" : "error",
+                status: isPassVerdict(runResult.status) ? "done" : "error",
                 verdict: runResult.status,
                 message: runResult.stderr ? "실행 중 오류가 발생했습니다." : "",
                 output: runResult.actualOutput?.trim() || "(empty)",
@@ -556,16 +574,12 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
       return;
     }
 
+    const caseCount = problem.sampleCases?.length ?? 0;
+    const runningMessage = "실행 요청을 전송했습니다. 결과를 기다리는 중입니다.";
+
     setSelectedCaseIndex(caseIndex);
     setRunningCaseIndex(caseIndex);
-    setCaseRunResults((prev) => ({
-      ...prev,
-      [caseIndex]: {
-        status: "pending",
-        verdict: "RUNNING",
-        message: "실행 요청을 전송했습니다. 결과를 기다리는 중입니다.",
-      },
-    }));
+    setCaseRunResults(createPendingCaseResults(caseCount, runningMessage));
 
     if (runTimeoutRef.current !== null) {
       window.clearTimeout(runTimeoutRef.current);
@@ -588,57 +602,71 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
 
       if (!response.ok) {
         const errorPayload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-        setCaseRunResults((prev) => ({
-          ...prev,
-          [caseIndex]: {
-            status: "error",
-            verdict: "REQUEST_FAILED",
-            message: errorPayload?.message ?? "실행 요청에 실패했습니다.",
-          },
-        }));
+        const failMessage = errorPayload?.message ?? "실행 요청에 실패했습니다.";
+        setCaseRunResults(() => {
+          const nextResults: Record<number, SoloCaseRunResult> = {};
+
+          Array.from({ length: caseCount }, (_, index) => index).forEach((index) => {
+            nextResults[index] = {
+              status: "error",
+              verdict: "REQUEST_FAILED",
+              message: failMessage,
+            };
+          });
+
+          return nextResults;
+        });
         setRunningCaseIndex((current) => (current === caseIndex ? null : current));
         return;
       }
 
       const runPayload = (await response.json().catch(() => null)) as SoloRunResponse | null;
-      setCaseRunResults((prev) => ({
-        ...prev,
-        [caseIndex]: {
-          status: "pending",
-          verdict: runPayload?.message ?? "RUNNING",
-          message: "실행이 접수되었습니다. WebSocket 결과를 기다립니다.",
-        },
-      }));
+      const acceptedMessage = runPayload?.message ?? "실행이 접수되었습니다. WebSocket 결과를 기다립니다.";
+      setCaseRunResults(createPendingCaseResults(caseCount, acceptedMessage));
 
       runTimeoutRef.current = window.setTimeout(() => {
         setCaseRunResults((prev) => {
-          const current = prev[caseIndex];
+          let hasPendingCase = false;
+          const nextResults = { ...prev };
 
-          if (!current || current.status !== "pending") {
-            return prev;
-          }
+          Array.from({ length: caseCount }, (_, index) => index).forEach((index) => {
+            const current = prev[index];
 
-          return {
-            ...prev,
-            [caseIndex]: {
+            if (!current || current.status !== "pending") {
+              return;
+            }
+
+            hasPendingCase = true;
+            nextResults[index] = {
               status: "error",
               verdict: "TIMEOUT",
               message: "결과 수신이 지연되고 있습니다. 다시 Run 해주세요.",
-            },
-          };
+            };
+          });
+
+          if (!hasPendingCase) {
+            return prev;
+          }
+
+          return nextResults;
         });
         setRunningCaseIndex((current) => (current === caseIndex ? null : current));
         runTimeoutRef.current = null;
       }, 15000);
     } catch {
-      setCaseRunResults((prev) => ({
-        ...prev,
-        [caseIndex]: {
-          status: "error",
-          verdict: "REQUEST_FAILED",
-          message: "실행 요청 중 네트워크 오류가 발생했습니다.",
-        },
-      }));
+      setCaseRunResults(() => {
+        const nextResults: Record<number, SoloCaseRunResult> = {};
+
+        Array.from({ length: caseCount }, (_, index) => index).forEach((index) => {
+          nextResults[index] = {
+            status: "error",
+            verdict: "REQUEST_FAILED",
+            message: "실행 요청 중 네트워크 오류가 발생했습니다.",
+          };
+        });
+
+        return nextResults;
+      });
       setRunningCaseIndex((current) => (current === caseIndex ? null : current));
     }
   }
@@ -1045,8 +1073,6 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                     <DefinitionGrid
                       compact
                       items={[
-                        { label: "problemId", value: problem.problemId },
-                        { label: "difficulty", value: problem.difficulty },
                         { label: "timeLimitMs", value: problem.timeLimitMs },
                         { label: "memoryLimitMb", value: problem.memoryLimitMb },
                       ]}
@@ -1079,42 +1105,48 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                     </div>
                   </>
                 ) : (
-                  <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                      Submit Result
-                    </p>
-                    <div className="flex flex-wrap items-start gap-3">
-                      <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
-                        {submitHeadline}
-                      </p>
-                      {submitProgressText ? (
-                        <p className="pt-1 text-sm text-zinc-600">{submitProgressText}</p>
-                      ) : null}
-                      <div className="ml-auto flex flex-col items-end gap-1 text-right">
-                        {submitHasResult && submitCode ? (
-                          <span className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${submitBadgeClass}`}>
-                            {submitCode}
-                          </span>
-                        ) : null}
-                        <p className="text-xs text-zinc-600">language: {language}</p>
-                      </div>
-                    </div>
-
-                    {submitState.message ? (
-                      <div className="rounded-lg border border-zinc-200 bg-white/60 px-3 py-2 text-sm text-zinc-700">
-                        {submitState.message}
-                      </div>
-                    ) : null}
-
-                    <div className="rounded-xl border border-zinc-200 bg-white/60 p-3">
+                  submitHasResult ? (
+                    <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                        Current Submission
+                        Submit Result
                       </p>
-                      <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-800">
-                        {code}
-                      </pre>
+                      <div className="flex flex-wrap items-start gap-3">
+                        <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
+                          {submitHeadline}
+                        </p>
+                        {submitProgressText ? (
+                          <p className="pt-1 text-sm text-zinc-600">{submitProgressText}</p>
+                        ) : null}
+                        <div className="ml-auto flex flex-col items-end gap-1 text-right">
+                          {submitCode ? (
+                            <span className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${submitBadgeClass}`}>
+                              {submitCode}
+                            </span>
+                          ) : null}
+                          <p className="text-xs text-zinc-600">language: {language}</p>
+                        </div>
+                      </div>
+
+                      {submitState.message ? (
+                        <div className="rounded-lg border border-zinc-200 bg-white/60 px-3 py-2 text-sm text-zinc-700">
+                          {submitState.message}
+                        </div>
+                      ) : null}
+
+                      <div className="rounded-xl border border-zinc-200 bg-white/60 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                          Current Submission
+                        </p>
+                        <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-800">
+                          {code}
+                        </pre>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                      아직 제출 결과가 없습니다.
+                    </div>
+                  )
                 )}
                 </div>
               </Panel>
@@ -1198,10 +1230,13 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                   <p className="text-base font-semibold text-zinc-900">TestCase</p>
                 </div>
               ) : (
-                <Panel
-                  title="TestCase"
-                  className="flex h-full min-h-0 flex-col"
-                >
+                <section className="flex h-full min-h-0 flex-col rounded-2xl border border-zinc-300 bg-white p-5 shadow-sm">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <h2 className="text-lg font-semibold text-zinc-950">TestCase</h2>
+                    <p className="shrink-0 text-xs font-medium text-zinc-500">
+                      {TESTCASE_SHORTCUT_HINT}
+                    </p>
+                  </div>
                   <div className="space-y-4 min-h-0 flex-1 overflow-y-auto">
                     {sampleCases.length > 0 ? (
                       <>
@@ -1253,9 +1288,6 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                           })}
                           </div>
                         </div>
-                        <p className="shrink-0 text-xs font-medium text-zinc-500">
-                          ⌘/Ctrl+Enter: Run · Shift+Enter: Submit
-                        </p>
                       </div>
 
                       {activeCase ? (
@@ -1360,7 +1392,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                       </div>
                     )}
                   </div>
-                </Panel>
+                </section>
               )}
             </div>
           </div>
@@ -1412,8 +1444,6 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                 <DefinitionGrid
                   compact
                   items={[
-                    { label: "problemId", value: problem.problemId },
-                    { label: "difficulty", value: problem.difficulty },
                     { label: "timeLimitMs", value: problem.timeLimitMs },
                     { label: "memoryLimitMb", value: problem.memoryLimitMb },
                   ]}
@@ -1446,42 +1476,48 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                 </div>
               </>
             ) : (
-              <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                  Submit Result
-                </p>
-                <div className="flex flex-wrap items-start gap-3">
-                  <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
-                    {submitHeadline}
-                  </p>
-                  {submitProgressText ? (
-                    <p className="pt-1 text-sm text-zinc-600">{submitProgressText}</p>
-                  ) : null}
-                  <div className="ml-auto flex flex-col items-end gap-1 text-right">
-                    {submitHasResult && submitCode ? (
-                      <span className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${submitBadgeClass}`}>
-                        {submitCode}
-                      </span>
-                    ) : null}
-                    <p className="text-xs text-zinc-600">language: {language}</p>
-                  </div>
-                </div>
-
-                {submitState.message ? (
-                  <div className="rounded-lg border border-zinc-200 bg-white/60 px-3 py-2 text-sm text-zinc-700">
-                    {submitState.message}
-                  </div>
-                ) : null}
-
-                <div className="rounded-xl border border-zinc-200 bg-white/60 p-3">
+              submitHasResult ? (
+                <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                    Current Submission
+                    Submit Result
                   </p>
-                  <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-800">
-                    {code}
-                  </pre>
+                  <div className="flex flex-wrap items-start gap-3">
+                    <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
+                      {submitHeadline}
+                    </p>
+                    {submitProgressText ? (
+                      <p className="pt-1 text-sm text-zinc-600">{submitProgressText}</p>
+                    ) : null}
+                    <div className="ml-auto flex flex-col items-end gap-1 text-right">
+                      {submitCode ? (
+                        <span className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${submitBadgeClass}`}>
+                          {submitCode}
+                        </span>
+                      ) : null}
+                      <p className="text-xs text-zinc-600">language: {language}</p>
+                    </div>
+                  </div>
+
+                  {submitState.message ? (
+                    <div className="rounded-lg border border-zinc-200 bg-white/60 px-3 py-2 text-sm text-zinc-700">
+                      {submitState.message}
+                    </div>
+                  ) : null}
+
+                  <div className="rounded-xl border border-zinc-200 bg-white/60 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                      Current Submission
+                    </p>
+                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-800">
+                      {code}
+                    </pre>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                  아직 제출 결과가 없습니다.
+                </div>
+              )
             )}
           </div>
         </Panel>
@@ -1504,7 +1540,13 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
           submitLabel={submitActionLabel}
         />
 
-        <Panel title="TestCase">
+        <section className="rounded-2xl border border-zinc-300 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-zinc-950">TestCase</h2>
+            <p className="shrink-0 text-xs font-medium text-zinc-500">
+              {TESTCASE_SHORTCUT_HINT}
+            </p>
+          </div>
           <div className="space-y-4">
             {sampleCases.length > 0 ? (
               <>
@@ -1556,9 +1598,6 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                     })}
                     </div>
                   </div>
-                  <p className="shrink-0 text-xs font-medium text-zinc-500">
-                    ⌘/Ctrl+Enter: Run · Shift+Enter: Submit
-                  </p>
                 </div>
                 {activeCase ? (
                   <div className="grid gap-3">
@@ -1661,7 +1700,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
               </div>
             )}
           </div>
-        </Panel>
+        </section>
       </div>
     </div>
   );

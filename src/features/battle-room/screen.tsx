@@ -27,7 +27,6 @@ import {
 import {
   getBattleRoom,
   getProblemDetail,
-  latestSubmission as fallbackSubmission,
   submitTemplate,
 } from "./data";
 
@@ -50,6 +49,7 @@ const SPLIT_SNAP_GAP = 4;
 const DEFAULT_LEFT_PANE_RATIO = 50;
 const DEFAULT_RIGHT_TOP_PANE_RATIO = 100;
 const BATTLE_LAYOUT_STORAGE_KEY = "bracket:battle-editor-layout:v1";
+const TESTCASE_SHORTCUT_HINT = "⌘/Ctrl+Enter: Run · Shift+Enter: Submit";
 const fallbackLanguages = ["python3", "java", "javascript"];
 const defaultCodeByLanguage: Record<string, string> = {
   javascript: `function solve(input) {\n  // TODO: implement\n}\n`,
@@ -124,14 +124,13 @@ function isWrongAnswerVerdict(verdict: string | undefined) {
 
 function getCaseBadgeState(
   result: RunTestCaseResult | undefined,
-  isPending: boolean,
 ): CaseBadgeState | null {
-  if (isPending) {
-    return { label: "RUN", tone: "pending" };
-  }
-
   if (!result) {
     return null;
+  }
+
+  if (normalizeVerdict(result.status) === "RUNNING") {
+    return { label: "RUNNING", tone: "pending" };
   }
 
   if (isPassVerdict(result.status)) {
@@ -143,6 +142,45 @@ function getCaseBadgeState(
   }
 
   return { label: normalizeVerdict(result.status) || "FAIL", tone: "fail" };
+}
+
+function createFallbackCaseResult(
+  status: string,
+  input: string,
+  expectedOutput: string,
+  stderr: string | null = null,
+): RunTestCaseResult {
+  return {
+    input,
+    expectedOutput,
+    actualOutput: null,
+    status,
+    stderr,
+  };
+}
+
+function mapRunResultsByCaseIndex(
+  incomingResults: RunTestCaseResult[],
+  sampleCases: ProblemDetailResponse["sampleCases"],
+): RunTestCaseResult[] {
+  const sampleCaseList = sampleCases ?? [];
+  const totalCaseCount = Math.max(sampleCaseList.length, incomingResults.length);
+
+  return Array.from({ length: totalCaseCount }, (_, index) => {
+    const result = incomingResults[index];
+
+    if (result) {
+      return result;
+    }
+
+    const sampleCase = sampleCaseList[index];
+    return createFallbackCaseResult(
+      "NO_RESULT",
+      sampleCase?.input ?? "(empty)",
+      sampleCase?.output ?? "(empty)",
+      "해당 케이스 실행 결과를 받지 못했습니다.",
+    );
+  });
 }
 
 function resolveLanguages(problem: ProblemDetailResponse | null, currentLanguage: string) {
@@ -217,7 +255,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   const [room, setRoom] = useState<RoomResponse | null>(null);
   const [problem, setProblem] = useState<ProblemDetailResponse | null>(null);
   const [latestSubmission, setLatestSubmission] =
-    useState<SubmissionResponse | null>(fallbackSubmission);
+    useState<SubmissionResponse | null>(null);
   const [language, setLanguage] = useState(
     () => readPreferredEditorLanguage() ?? submitTemplate.language,
   );
@@ -241,11 +279,14 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   const [message, setMessage] = useState("배틀룸 정보를 불러오는 중입니다.");
   const [error, setError] = useState<string | null>(null);
   const hasAttemptedJoinRef = useRef(false);
+  const joinRequestInFlightRef = useRef(false);
+  const lastRejoinAttemptAtRef = useRef(0);
   const stompClientRef = useRef<Client | null>(null);
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
   const rightColumnRef = useRef<HTMLDivElement | null>(null);
   const leftPaneRatioRef = useRef(leftPaneRatio);
   const rightTopPaneRatioRef = useRef(rightTopPaneRatio);
+  const sampleCasesRef = useRef(problem?.sampleCases ?? []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 1024px)");
@@ -301,6 +342,10 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   useEffect(() => {
     rightTopPaneRatioRef.current = rightTopPaneRatio;
   }, [rightTopPaneRatio]);
+
+  useEffect(() => {
+    sampleCasesRef.current = problem?.sampleCases ?? [];
+  }, [problem]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -442,10 +487,15 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
 
   useEffect(() => {
     hasAttemptedJoinRef.current = false;
+    joinRequestInFlightRef.current = false;
+    lastRejoinAttemptAtRef.current = 0;
+    setLatestSubmission(null);
+    setIsSubmitting(false);
+    setLeftPanelTab("description");
   }, [roomId]);
 
   useEffect(() => {
-    if (hasAttemptedJoinRef.current || !room || !session.authenticated || !session.member) {
+    if (!room || !session.authenticated || !session.member || joinRequestInFlightRef.current) {
       return;
     }
 
@@ -453,49 +503,81 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
       (item) => item.userId === session.member?.memberId,
     );
 
-    const shouldJoin =
-      (room.status === "WAITING" && participant?.status === "READY") ||
-      (room.status === "PLAYING" && participant?.status === "ABANDONED");
+    const shouldJoinFromWaiting =
+      room.status === "WAITING" &&
+      participant?.status === "READY" &&
+      !hasAttemptedJoinRef.current;
+    const shouldRejoinFromPlaying =
+      room.status === "PLAYING" &&
+      (participant?.status === "ABANDONED" || participant?.status === "EXIT");
 
-    if (!shouldJoin) {
+    if (!shouldJoinFromWaiting && !shouldRejoinFromPlaying) {
       return;
     }
 
-    hasAttemptedJoinRef.current = true;
-
-    void (async () => {
-      const response = await fetch(`/api/battle/rooms/${roomId}/join`, {
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-        setError(payload?.message ?? "배틀룸 입장에 실패했습니다.");
-        hasAttemptedJoinRef.current = false;
+    if (shouldRejoinFromPlaying) {
+      const now = Date.now();
+      // 재연결 상태에서는 짧은 텀으로 재시도하되 과도한 join 요청 폭주를 막는다.
+      if (now - lastRejoinAttemptAtRef.current < 2000) {
         return;
       }
+      lastRejoinAttemptAtRef.current = now;
+    }
 
-      const payload = (await response.json()) as JoinRoomResponse;
-      setMessage(`배틀룸 입장 처리 완료: ${payload.status}`);
+    if (shouldJoinFromWaiting) {
+      hasAttemptedJoinRef.current = true;
+    }
 
-      const refreshed = await fetch(`/api/battle/rooms/${roomId}`, {
-        cache: "no-store",
-      });
+    joinRequestInFlightRef.current = true;
 
-      if (refreshed.ok) {
-        setRoom((await refreshed.json()) as RoomResponse);
-      }
+    const finalizeJoinAttempt = () => {
+      joinRequestInFlightRef.current = false;
+    };
 
-      const stateResponse = await fetch(`/api/battle/rooms/${roomId}/state`, {
-        cache: "no-store",
-      });
+    if (!participant) {
+      finalizeJoinAttempt();
+      return;
+    }
 
-      if (stateResponse.ok) {
-        const stateData = (await stateResponse.json()) as BattleRoomStateResponse;
+    void (async () => {
+      try {
+        const response = await fetch(`/api/battle/rooms/${roomId}/join`, {
+          method: "POST",
+        });
 
-        if (typeof stateData.myCode === "string" && stateData.myCode.length > 0) {
-          setCode(stateData.myCode);
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
+          if (shouldJoinFromWaiting) {
+            setError(payload?.message ?? "배틀룸 입장에 실패했습니다.");
+            hasAttemptedJoinRef.current = false;
+          }
+          return;
         }
+
+        const payload = (await response.json()) as JoinRoomResponse;
+        setMessage(`배틀룸 입장 처리 완료: ${payload.status}`);
+
+        const refreshed = await fetch(`/api/battle/rooms/${roomId}`, {
+          cache: "no-store",
+        });
+
+        if (refreshed.ok) {
+          setRoom((await refreshed.json()) as RoomResponse);
+        }
+
+        const stateResponse = await fetch(`/api/battle/rooms/${roomId}/state`, {
+          cache: "no-store",
+        });
+
+        if (stateResponse.ok) {
+          const stateData = (await stateResponse.json()) as BattleRoomStateResponse;
+
+          if (typeof stateData.myCode === "string" && stateData.myCode.length > 0) {
+            setCode(stateData.myCode);
+          }
+        }
+      } finally {
+        finalizeJoinAttempt();
       }
     })();
   }, [room, roomId, session.authenticated, session.member?.memberId]);
@@ -591,7 +673,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
           const msg = payload as RunWsMessage;
 
           if (msg.type === "RUN_RESULT" && msg.userId === session.member?.memberId) {
-            setRunResults(msg.results);
+            setRunResults(mapRunResultsByCaseIndex(msg.results, sampleCasesRef.current));
             setRunningCaseIndex(null);
           }
         });
@@ -630,9 +712,20 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
       return;
     }
 
+    const sampleCaseList = problem?.sampleCases ?? [];
+    const totalCaseCount = Math.max(sampleCaseList.length, runResults?.length ?? 0);
+    const runningResults = Array.from({ length: totalCaseCount }, (_, index) =>
+      createFallbackCaseResult(
+        "RUNNING",
+        sampleCaseList[index]?.input ?? "(empty)",
+        sampleCaseList[index]?.output ?? "(empty)",
+      ),
+    );
+
     setError(null);
     setSelectedRunCaseIndex(caseIndex);
     setRunningCaseIndex(caseIndex);
+    setRunResults(runningResults);
 
     try {
       const response = await fetch("/api/run", {
@@ -643,11 +736,33 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
 
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-        setError(payload?.message ?? "실행 요청에 실패했습니다.");
+        const failMessage = payload?.message ?? "실행 요청에 실패했습니다.";
+        setError(failMessage);
+        setRunResults(
+          Array.from({ length: totalCaseCount }, (_, index) =>
+            createFallbackCaseResult(
+              "REQUEST_FAILED",
+              sampleCaseList[index]?.input ?? "(empty)",
+              sampleCaseList[index]?.output ?? "(empty)",
+              failMessage,
+            ),
+          ),
+        );
         setRunningCaseIndex((current) => (current === caseIndex ? null : current));
       }
     } catch {
-      setError("실행 요청 중 네트워크 오류가 발생했습니다.");
+      const failMessage = "실행 요청 중 네트워크 오류가 발생했습니다.";
+      setError(failMessage);
+      setRunResults(
+        Array.from({ length: totalCaseCount }, (_, index) =>
+          createFallbackCaseResult(
+            "REQUEST_FAILED",
+            sampleCaseList[index]?.input ?? "(empty)",
+            sampleCaseList[index]?.output ?? "(empty)",
+            failMessage,
+          ),
+        ),
+      );
       setRunningCaseIndex((current) => (current === caseIndex ? null : current));
     }
   }
@@ -1083,38 +1198,44 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                     )}
                   </>
                 ) : (
-                  <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                      Submit Result
-                    </p>
-                    <div className="flex flex-wrap items-start gap-3">
-                      <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
-                        {submitHeadline}
+                  submitHasResult ? (
+                    <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                        Submit Result
                       </p>
-                      {submitProgressText ? (
-                        <p className="pt-1 text-sm text-zinc-600">{submitProgressText}</p>
-                      ) : null}
-                      <div className="ml-auto flex flex-col items-end gap-1 text-right">
-                        {submitHasResult && latestResultCode ? (
-                          <span
-                            className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${submitBadgeClass}`}
-                          >
-                            {latestResultCode}
-                          </span>
+                      <div className="flex flex-wrap items-start gap-3">
+                        <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
+                          {submitHeadline}
+                        </p>
+                        {submitProgressText ? (
+                          <p className="pt-1 text-sm text-zinc-600">{submitProgressText}</p>
                         ) : null}
-                        <p className="text-xs text-zinc-600">language: {language}</p>
+                        <div className="ml-auto flex flex-col items-end gap-1 text-right">
+                          {latestResultCode ? (
+                            <span
+                              className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${submitBadgeClass}`}
+                            >
+                              {latestResultCode}
+                            </span>
+                          ) : null}
+                          <p className="text-xs text-zinc-600">language: {language}</p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-zinc-200 bg-white/60 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                          Current Submission
+                        </p>
+                        <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-800">
+                          {code}
+                        </pre>
                       </div>
                     </div>
-
-                    <div className="rounded-xl border border-zinc-200 bg-white/60 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                        Current Submission
-                      </p>
-                      <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-800">
-                        {code}
-                      </pre>
+                  ) : (
+                    <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                      아직 제출 결과가 없습니다.
                     </div>
-                  </div>
+                  )
                 )}
                 </div>
               </Panel>
@@ -1198,7 +1319,13 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                   <p className="text-base font-semibold text-zinc-900">TestCase</p>
                 </div>
               ) : (
-                <Panel title="TestCase" className="flex h-full min-h-0 flex-col">
+                <section className="flex h-full min-h-0 flex-col rounded-2xl border border-zinc-300 bg-white p-5 shadow-sm">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <h2 className="text-lg font-semibold text-zinc-950">TestCase</h2>
+                    <p className="shrink-0 text-xs font-medium text-zinc-500">
+                      {TESTCASE_SHORTCUT_HINT}
+                    </p>
+                  </div>
                   <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
                     {caseCount > 0 ? (
                       <>
@@ -1207,10 +1334,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                           <div className="flex w-max gap-2 pr-1">
                           {Array.from({ length: caseCount }, (_, index) => {
                             const caseResult = runResults?.[index];
-                            const badgeState = getCaseBadgeState(
-                              caseResult,
-                              runningCaseIndex === index,
-                            );
+                            const badgeState = getCaseBadgeState(caseResult);
                             const isSelected = selectedRunCaseIndex === index;
                             const idleClass = "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200";
                             const passClass = "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100";
@@ -1253,9 +1377,6 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                           })}
                           </div>
                         </div>
-                        <p className="shrink-0 text-xs font-medium text-zinc-500">
-                          ⌘/Ctrl+Enter: Run · Shift+Enter: Submit
-                        </p>
                       </div>
 
                       {selectedRunCaseIndex !== null ? (
@@ -1355,7 +1476,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                       </div>
                     )}
                   </div>
-                </Panel>
+                </section>
               )}
             </div>
           </div>
@@ -1445,36 +1566,42 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                 )}
               </>
             ) : (
-              <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                  Submit Result
-                </p>
-                <div className="flex flex-wrap items-start gap-3">
-                  <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
-                    {submitHeadline}
+              submitHasResult ? (
+                <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                    Submit Result
                   </p>
-                  {submitProgressText ? (
-                    <p className="pt-1 text-sm text-zinc-600">{submitProgressText}</p>
-                  ) : null}
-                  <div className="ml-auto flex flex-col items-end gap-1 text-right">
-                    {submitHasResult && latestResultCode ? (
-                      <span className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${submitBadgeClass}`}>
-                        {latestResultCode}
-                      </span>
+                  <div className="flex flex-wrap items-start gap-3">
+                    <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
+                      {submitHeadline}
+                    </p>
+                    {submitProgressText ? (
+                      <p className="pt-1 text-sm text-zinc-600">{submitProgressText}</p>
                     ) : null}
-                    <p className="text-xs text-zinc-600">language: {language}</p>
+                    <div className="ml-auto flex flex-col items-end gap-1 text-right">
+                      {latestResultCode ? (
+                        <span className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${submitBadgeClass}`}>
+                          {latestResultCode}
+                        </span>
+                      ) : null}
+                      <p className="text-xs text-zinc-600">language: {language}</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-zinc-200 bg-white/60 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                      Current Submission
+                    </p>
+                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-800">
+                      {code}
+                    </pre>
                   </div>
                 </div>
-
-                <div className="rounded-xl border border-zinc-200 bg-white/60 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                    Current Submission
-                  </p>
-                  <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-zinc-800">
-                    {code}
-                  </pre>
+              ) : (
+                <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                  아직 제출 결과가 없습니다.
                 </div>
-              </div>
+              )
             )}
           </div>
         </Panel>
@@ -1497,7 +1624,13 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
           submitLabel={submitActionLabel}
         />
 
-        <Panel title="TestCase">
+        <section className="rounded-2xl border border-zinc-300 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-zinc-950">TestCase</h2>
+            <p className="shrink-0 text-xs font-medium text-zinc-500">
+              {TESTCASE_SHORTCUT_HINT}
+            </p>
+          </div>
           <div className="space-y-4">
             {caseCount > 0 ? (
               <>
@@ -1506,10 +1639,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                     <div className="flex w-max gap-2 pr-1">
                     {Array.from({ length: caseCount }, (_, index) => {
                       const caseResult = runResults?.[index];
-                      const badgeState = getCaseBadgeState(
-                        caseResult,
-                        runningCaseIndex === index,
-                      );
+                      const badgeState = getCaseBadgeState(caseResult);
                       const isSelected = selectedRunCaseIndex === index;
                       const idleClass = "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200";
                       const passClass = "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100";
@@ -1552,9 +1682,6 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                     })}
                     </div>
                   </div>
-                  <p className="shrink-0 text-xs font-medium text-zinc-500">
-                    ⌘/Ctrl+Enter: Run · Shift+Enter: Submit
-                  </p>
                 </div>
 
                 {selectedRunCaseIndex !== null ? (
@@ -1654,7 +1781,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
               </div>
             )}
           </div>
-        </Panel>
+        </section>
 
         <div className="flex flex-wrap gap-3">
           <Link
