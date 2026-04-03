@@ -42,13 +42,13 @@ const defaultCodeByLanguage: Record<string, string> = {
 };
 
 const fallbackLanguages = ["python3", "java", "javascript"];
-const MIN_LEFT_RATIO = 22;
+const MIN_LEFT_RATIO = 0;
 const MAX_LEFT_RATIO = 78;
 const MIN_TOP_RATIO = 24;
-const MAX_TOP_RATIO = 76;
-const LEFT_RATIO_SNAP_POINTS = [22, 32, 50, 68, 78];
-const TOP_RATIO_SNAP_POINTS = [24, 34, 50, 66, 76];
-const SPLIT_SNAP_GAP = 2;
+const MAX_TOP_RATIO = 100;
+const LEFT_RATIO_SNAP_POINTS = [0, 22, 32, 50, 68, 78];
+const TOP_RATIO_SNAP_POINTS = [24, 34, 50, 66, 76, 92, 100];
+const SPLIT_SNAP_GAP = 4;
 
 interface SoloCaseRunResult {
   status: "pending" | "done" | "error";
@@ -865,41 +865,96 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
   const runActionDisabled = runTargetCaseIndex === null || runningCaseIndex !== null;
   const runActionLabel = runningCaseIndex !== null ? "Running..." : "Run";
   const submitActionLabel = isSubmitting ? "Submitting..." : "Submit";
+  const isLeftPaneCollapsed = leftPaneRatio <= 8;
+  const isTestcaseCollapsed = rightTopPaneRatio >= 96;
 
   return (
-    <div className="space-y-6">
-      <div className="hidden h-[calc(100dvh-10.5rem)] min-h-0 overflow-hidden lg:block">
+    <div className="h-full space-y-6 lg:space-y-0">
+      <div className="hidden h-full min-h-0 overflow-hidden lg:block">
         <div ref={splitContainerRef} className="flex h-full min-h-0">
-          <div className="h-full min-w-0" style={{ width: `${leftPaneRatio}%` }}>
-            <Panel
-              title="문제 상세"
-              className="flex h-full min-h-0 flex-col"
-            >
-              <div className="space-y-4 min-h-0 flex-1 overflow-y-auto pr-1">
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setLeftPanelTab("description")}
-                    className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                      leftPanelTab === "description"
-                        ? "border-zinc-900 bg-zinc-900 text-white"
-                        : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                    }`}
-                  >
-                    Description
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLeftPanelTab("submission")}
-                    className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                      leftPanelTab === "submission"
-                        ? "border-zinc-900 bg-zinc-900 text-white"
-                        : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                    }`}
-                  >
-                    Submission
-                  </button>
+          <div
+            className={`h-full ${isLeftPaneCollapsed ? "" : "min-w-0"}`}
+            style={isLeftPaneCollapsed ? { width: "44px" } : { width: `${leftPaneRatio}%` }}
+          >
+            {isLeftPaneCollapsed ? (
+              <div
+                className="group relative flex h-full flex-col items-center gap-2 rounded-xl border border-zinc-300 bg-white px-1 py-3"
+                onClick={(event) => {
+                  if (event.target === event.currentTarget) {
+                    setLeftPaneRatio(32);
+                  }
+                }}
+              >
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  onMouseDown={startVerticalResize}
+                  onDoubleClick={() => setLeftPaneRatio(50)}
+                  className="absolute inset-y-0 right-0 z-10 flex w-2 cursor-col-resize items-center justify-center"
+                >
+                  <div className="h-14 w-0.5 rounded-full bg-zinc-400 transition group-hover:bg-zinc-600" />
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLeftPanelTab("description");
+                    setLeftPaneRatio(32);
+                  }}
+                  className={`w-full rounded-md border px-1 py-2 text-xs font-semibold transition ${
+                    leftPanelTab === "description"
+                      ? "border-zinc-900 bg-zinc-900 text-white"
+                      : "border-zinc-200 bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+                  }`}
+                  style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
+                >
+                  Description
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLeftPanelTab("submission");
+                    setLeftPaneRatio(32);
+                  }}
+                  className={`w-full rounded-md border px-1 py-2 text-xs font-semibold transition ${
+                    leftPanelTab === "submission"
+                      ? "border-zinc-900 bg-zinc-900 text-white"
+                      : "border-zinc-200 bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+                  }`}
+                  style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
+                >
+                  Submission
+                </button>
+              </div>
+            ) : (
+              <Panel
+                title="문제 상세"
+                className="flex h-full min-h-0 flex-col"
+              >
+                <div className="space-y-4 min-h-0 flex-1 overflow-y-auto pr-1">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setLeftPanelTab("description")}
+                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                        leftPanelTab === "description"
+                          ? "border-zinc-900 bg-zinc-900 text-white"
+                          : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                      }`}
+                    >
+                      Description
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLeftPanelTab("submission")}
+                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                        leftPanelTab === "submission"
+                          ? "border-zinc-900 bg-zinc-900 text-white"
+                          : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                      }`}
+                    >
+                      Submission
+                    </button>
+                  </div>
 
                 {leftPanelTab === "description" ? (
                   <>
@@ -988,8 +1043,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                     </div>
                   </div>
                 )}
-              </div>
-            </Panel>
+                </div>
+              </Panel>
+            )}
           </div>
 
           <div
@@ -1004,10 +1060,13 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
 
           <div
             ref={rightColumnRef}
-            className="flex h-full min-w-0 flex-col"
-            style={{ width: `${100 - leftPaneRatio}%` }}
+            className={`relative flex h-full min-w-0 flex-col overflow-hidden ${isLeftPaneCollapsed ? "flex-1" : ""}`}
+            style={isLeftPaneCollapsed ? undefined : { width: `${100 - leftPaneRatio}%` }}
           >
-            <div className="min-h-0" style={{ height: `${rightTopPaneRatio}%` }}>
+            <div
+              className={`min-h-0 ${isTestcaseCollapsed ? "pb-[3.25rem]" : ""}`}
+              style={isTestcaseCollapsed ? { height: "100%" } : { height: `${rightTopPaneRatio}%` }}
+            >
               <SoloCodeEditor
                 languages={languages}
                 language={language}
@@ -1034,19 +1093,45 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
               aria-orientation="horizontal"
               onMouseDown={startHorizontalResize}
               onDoubleClick={() => setRightTopPaneRatio(50)}
-              className="group my-1 flex h-3 cursor-row-resize items-center justify-center"
+              className={`group flex cursor-row-resize items-center justify-center transition-all ${
+                isTestcaseCollapsed
+                  ? "pointer-events-none my-0 h-0 opacity-0"
+                  : "my-1 h-3 opacity-100"
+              }`}
             >
               <div className="h-px w-full rounded bg-zinc-300 transition group-hover:bg-zinc-500" />
             </div>
 
-            <div className="min-h-0" style={{ height: `${100 - rightTopPaneRatio}%` }}>
-              <Panel
-                title="TestCase"
-                className="flex h-full min-h-0 flex-col"
-              >
-                <div className="space-y-4 min-h-0 flex-1 overflow-y-auto">
-                  {sampleCases.length > 0 ? (
-                    <>
+            <div
+              className={isTestcaseCollapsed ? "absolute inset-x-0 bottom-0 z-10 h-10" : "min-h-0"}
+              style={isTestcaseCollapsed ? undefined : { height: `${100 - rightTopPaneRatio}%` }}
+            >
+              {isTestcaseCollapsed ? (
+                <div
+                  role="separator"
+                  aria-orientation="horizontal"
+                  onMouseDown={startHorizontalResize}
+                  onDoubleClick={() => setRightTopPaneRatio(50)}
+                  onClick={() => {
+                    if (isTestcaseCollapsed) {
+                      setRightTopPaneRatio(76);
+                    }
+                  }}
+                  className="group relative flex h-full cursor-row-resize items-center rounded-xl border border-zinc-300 bg-white px-4"
+                >
+                  <div className="pointer-events-none absolute inset-x-0 top-0 flex h-2 items-start justify-center">
+                    <div className="mt-1 h-0.5 w-14 rounded-full bg-zinc-400 transition group-hover:bg-zinc-600" />
+                  </div>
+                  <p className="text-base font-semibold text-zinc-900">TestCase</p>
+                </div>
+              ) : (
+                <Panel
+                  title="TestCase"
+                  className="flex h-full min-h-0 flex-col"
+                >
+                  <div className="space-y-4 min-h-0 flex-1 overflow-y-auto">
+                    {sampleCases.length > 0 ? (
+                      <>
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex flex-wrap gap-2">
                           {sampleCases.map((_, index) => {
@@ -1193,14 +1278,15 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                           </div>
                         </div>
                       ) : null}
-                    </>
-                  ) : (
-                    <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
-                      실행 가능한 샘플 케이스가 없습니다.
-                    </div>
-                  )}
-                </div>
-              </Panel>
+                      </>
+                    ) : (
+                      <div className="rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                        실행 가능한 샘플 케이스가 없습니다.
+                      </div>
+                    )}
+                  </div>
+                </Panel>
+              )}
             </div>
           </div>
         </div>

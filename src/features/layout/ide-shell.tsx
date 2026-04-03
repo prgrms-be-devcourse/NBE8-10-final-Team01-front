@@ -352,12 +352,13 @@ export default function IdeShell({
     pathname === "/signup" ||
     pathname === "/login" ||
     pathname === "/problems" ||
+    pathname.startsWith("/problems/") ||
     pathname === "/mypage" ||
     pathname.startsWith("/battle/rooms/");
 
   return (
     <SessionContext.Provider value={{ session, sessionLoaded, refreshSession, applySession }}>
-      <div className="flex min-h-0 flex-1 overflow-hidden bg-[#1e1f22]">
+      <div className="flex h-full min-h-0 flex-1 overflow-hidden bg-[#1e1f22]">
         <div className={`grid h-full w-full ${layoutColumnsClass}`}>
           <QuickMenuPane
             isQuickMenuOpen={isQuickMenuOpen}
@@ -366,7 +367,7 @@ export default function IdeShell({
             projectTreeItems={projectTreeItems}
           />
 
-          <section className="min-h-0 overflow-hidden bg-[#1e1f22]">
+          <section className="h-full min-h-0 overflow-hidden bg-[#1e1f22]">
             {isFullBleedCenter ? (
               <div className="h-full min-h-0">{children}</div>
             ) : (
