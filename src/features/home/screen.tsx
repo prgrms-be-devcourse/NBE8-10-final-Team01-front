@@ -217,7 +217,11 @@ function parseMatchingWsMessage(body: string): MatchingWsMessage | null {
 
     if (
       typed.type === "QUEUE_STATE_CHANGED" ||
-      typed.type === "READY_CHECK_STARTED"
+      typed.type === "READY_CHECK_STARTED" ||
+      typed.type === "READY_DECISION_CHANGED" ||
+      typed.type === "MATCH_CANCELLED" ||
+      typed.type === "MATCH_EXPIRED" ||
+      typed.type === "ROOM_READY"
     ) {
       return payload as MatchingWsMessage;
     }
@@ -264,6 +268,7 @@ export default function HomeScreen() {
   const personalSubscriptionRef = useRef<SubscriptionHandle | null>(null);
   const queueTopicSubscriptionRef = useRef<SubscriptionHandle | null>(null);
   const queueTopicDestinationRef = useRef<string | null>(null);
+  const hasConnectedOnceRef = useRef(false);
   const editorPaneRef = useRef<HTMLDivElement | null>(null);
   const [editorLineCount, setEditorLineCount] = useState(28);
   const [editorLineHeight, setEditorLineHeight] = useState(32);
@@ -376,7 +381,7 @@ export default function HomeScreen() {
   }, []);
 
   const handleReadyCheckStartedEvent = useCallback(
-    (nextMatchState: MatchStateResponse | null) => {
+    async (nextMatchState: MatchStateResponse | null) => {
       logMatchingDebug("ws READY_CHECK_STARTED", nextMatchState);
       clearQueueTopicSubscription();
 
@@ -389,9 +394,39 @@ export default function HomeScreen() {
         return;
       }
 
+      const restoredMatchState = await readMatchState();
+
+      if (restoredMatchState && restoredMatchState.status !== "IDLE") {
+        logMatchingDebug("ws READY_CHECK_STARTED fallback matches/me", restoredMatchState);
+        applyMatchSnapshot(restoredMatchState);
+        return;
+      }
+
+      setMatchState(defaultMatchState);
       setModalMode("READY_CHECK");
       setPollStage("MATCH");
       setFeedback("ready-check 세션을 확인하는 중입니다.");
+    },
+    [applyMatchSnapshot, clearQueueTopicSubscription],
+  );
+
+  const handleMatchStateEvent = useCallback(
+    (
+      eventType:
+        | "READY_DECISION_CHANGED"
+        | "MATCH_CANCELLED"
+        | "MATCH_EXPIRED"
+        | "ROOM_READY",
+      nextMatchState: MatchStateResponse | null,
+    ) => {
+      logMatchingDebug(`ws ${eventType}`, nextMatchState);
+
+      if (!nextMatchState) {
+        return;
+      }
+
+      clearQueueTopicSubscription();
+      applyMatchSnapshot(nextMatchState);
     },
     [applyMatchSnapshot, clearQueueTopicSubscription],
   );
@@ -451,6 +486,7 @@ export default function HomeScreen() {
       personalSubscriptionRef.current = null;
       clearQueueTopicSubscription();
       stompClientRef.current = null;
+      hasConnectedOnceRef.current = false;
       return;
     }
 
@@ -465,11 +501,23 @@ export default function HomeScreen() {
           (message) => {
             const payload = parseMatchingWsMessage(message.body);
 
-            if (!payload || payload.type !== "READY_CHECK_STARTED") {
+            if (!payload) {
               return;
             }
 
-            handleReadyCheckStartedEvent(payload.match);
+            if (payload.type === "READY_CHECK_STARTED") {
+              void handleReadyCheckStartedEvent(payload.match);
+              return;
+            }
+
+            if (
+              payload.type === "READY_DECISION_CHANGED" ||
+              payload.type === "MATCH_CANCELLED" ||
+              payload.type === "MATCH_EXPIRED" ||
+              payload.type === "ROOM_READY"
+            ) {
+              handleMatchStateEvent(payload.type, payload.match);
+            }
           },
         );
 
@@ -492,6 +540,51 @@ export default function HomeScreen() {
             },
           );
         }
+
+        const shouldResync = hasConnectedOnceRef.current;
+        hasConnectedOnceRef.current = true;
+
+        if (!shouldResync) {
+          return;
+        }
+
+        void (async () => {
+          const [restoredQueueState, restoredMatchState] = await Promise.all([
+            readQueueState(),
+            readMatchState(),
+          ]);
+
+          if (stompClientRef.current !== client) {
+            return;
+          }
+
+          if (restoredQueueState?.inQueue) {
+            logMatchingDebug("ws reconnect resync queue/me", restoredQueueState);
+            setQueueState({
+              ...restoredQueueState,
+              requiredCount: restoredQueueState.requiredCount ?? DEFAULT_REQUIRED_COUNT,
+            });
+            setMatchState(defaultMatchState);
+            setQueueStartedAt((current) => current ?? new Date().toISOString());
+            setTerminalMessage(null);
+            setModalMode("SEARCHING");
+            setPollStage("QUEUE");
+            setError(null);
+            setFeedback("?湲곗뿴?먯꽌 ?곷?瑜?李얘퀬 ?덉뒿?덈떎.");
+            return;
+          }
+
+          if (restoredMatchState && restoredMatchState.status !== "IDLE") {
+            logMatchingDebug("ws reconnect resync matches/me", restoredMatchState);
+            clearQueueTopicSubscription();
+            applyMatchSnapshot(restoredMatchState);
+            return;
+          }
+
+          clearQueueTopicSubscription();
+          logMatchingDebug("ws reconnect resync idle");
+          resetFlow();
+        })();
       },
     });
 
@@ -503,12 +596,16 @@ export default function HomeScreen() {
       personalSubscriptionRef.current = null;
       clearQueueTopicSubscription();
       stompClientRef.current = null;
+      hasConnectedOnceRef.current = false;
       void client.deactivate();
     };
   }, [
+    applyMatchSnapshot,
     clearQueueTopicSubscription,
+    handleMatchStateEvent,
     handleQueueStateChangedEvent,
     handleReadyCheckStartedEvent,
+    resetFlow,
     session.authenticated,
     sessionLoaded,
   ]);
@@ -615,8 +712,7 @@ export default function HomeScreen() {
           ...nextQueueState,
           requiredCount: nextQueueState.requiredCount ?? DEFAULT_REQUIRED_COUNT,
         });
-        logMatchingDebug("poll matches/me status=IDLE", nextMatchState);
-        logMatchingDebug("poll matches/me status=IDLE", nextMatchState);
+        logMatchingDebug("initial restore queue/me inQueue=true", nextQueueState);
         setMatchState(defaultMatchState);
         setQueueStartedAt((current) => current ?? new Date().toISOString());
         setTerminalMessage(null);
@@ -628,6 +724,7 @@ export default function HomeScreen() {
       }
 
       if (nextMatchState && nextMatchState.status !== "IDLE") {
+        logMatchingDebug("initial restore matches/me", nextMatchState);
         applyMatchSnapshot(nextMatchState);
         return;
       }
@@ -667,6 +764,9 @@ export default function HomeScreen() {
     if (!session.authenticated || pollStage !== "QUEUE") {
       return;
     }
+
+    // SEARCHING 단계에서는 queue/me interval polling 대신 queue topic WebSocket만 사용한다.
+    return;
 
     let active = true;
 
@@ -737,6 +837,9 @@ export default function HomeScreen() {
     if (!session.authenticated || pollStage !== "MATCH") {
       return;
     }
+
+    // READY_CHECK 상태는 개인 matching WebSocket snapshot으로만 갱신한다.
+    return;
 
     let active = true;
 
@@ -889,7 +992,10 @@ export default function HomeScreen() {
         return;
       }
 
-      applyMatchSnapshot(payload);
+      setFeedback(
+        payload.message ??
+          "매칭 수락 요청을 전송했습니다. 다른 참가자의 응답을 기다리고 있습니다.",
+      );
     } finally {
       setBusyAction(null);
     }
@@ -913,7 +1019,7 @@ export default function HomeScreen() {
         return;
       }
 
-      applyMatchSnapshot(payload);
+      setFeedback(payload.message ?? "매칭 거절 요청을 전송했습니다.");
     } finally {
       setBusyAction(null);
     }
