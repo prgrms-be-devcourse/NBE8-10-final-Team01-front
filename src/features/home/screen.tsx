@@ -455,7 +455,7 @@ export default function HomeScreen() {
     }
 
     const client = new Client({
-      webSocketFactory: () => new SockJS("/ws"),
+      webSocketFactory: () => new SockJS(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/ws`),
       reconnectDelay: 3000,
       onConnect: () => {
         logMatchingDebug("ws connected");

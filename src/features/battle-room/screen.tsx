@@ -588,7 +588,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
     }
 
     const client = new Client({
-      webSocketFactory: () => new SockJS("/ws"),
+      webSocketFactory: () => new SockJS(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/ws`),
       reconnectDelay: 3000,
       beforeConnect: async () => {
         client.connectHeaders = {};
