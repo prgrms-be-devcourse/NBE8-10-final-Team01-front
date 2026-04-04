@@ -994,7 +994,7 @@ export default function HomeScreen() {
 
       setFeedback(
         payload.message ??
-          "留ㅼ묶 ?섎씫??瑜?전송했습니다. ?ㅻⅨ 참가자의 응답을 기다리고 있습니다.",
+          "매칭 수락 요청을 전송했습니다. 다른 참가자의 응답을 기다리고 있습니다.",
       );
     } finally {
       setBusyAction(null);
@@ -1019,7 +1019,7 @@ export default function HomeScreen() {
         return;
       }
 
-      setFeedback(payload.message ?? "留ㅼ묶 嫄곗젅??瑜?전송했습니다.");
+      setFeedback(payload.message ?? "매칭 거절 요청을 전송했습니다.");
     } finally {
       setBusyAction(null);
     }
