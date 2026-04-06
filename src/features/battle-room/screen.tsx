@@ -287,6 +287,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   const leftPaneRatioRef = useRef(leftPaneRatio);
   const rightTopPaneRatioRef = useRef(rightTopPaneRatio);
   const sampleCasesRef = useRef(problem?.sampleCases ?? []);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 1024px)");
@@ -698,13 +699,17 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   function handleCodeChange(nextCode: string) {
     setCode(nextCode);
 
-    if (stompClientRef.current?.connected && room?.status === "PLAYING") {
-      stompClientRef.current.publish({
+    if (!stompClientRef.current?.connected || room?.status !== "PLAYING") return;
+
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+
+    debounceTimerRef.current = setTimeout(() => {
+      stompClientRef.current?.publish({
         destination: `/app/room/${roomId}/code`,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ code: nextCode }),
       });
-    }
+    }, 1000);
   }
 
   async function handleRunCase(caseIndex: number) {
