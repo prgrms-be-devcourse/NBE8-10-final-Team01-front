@@ -687,6 +687,10 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
     return () => {
       stompClientRef.current = null;
       void client.deactivate();
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
     };
   }, [roomId, session.authenticated, session.member?.memberId]);
 
@@ -704,7 +708,8 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
 
     debounceTimerRef.current = setTimeout(() => {
-      stompClientRef.current?.publish({
+      if (!stompClientRef.current?.connected || room?.status !== "PLAYING") return;
+      stompClientRef.current.publish({
         destination: `/app/room/${roomId}/code`,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ code: nextCode }),
