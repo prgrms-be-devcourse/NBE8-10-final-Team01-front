@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 
 import type {
   ApiErrorResponse,
+  BattleFinishedWsMessage,
   CodeSyncWsMessage,
   CodeUpdateWsMessage,
   ProblemDetailResponse,
@@ -15,6 +17,7 @@ import type {
 import { useAppSession } from "@/features/layout/session-context";
 import {
   CodeWindow,
+  ConfirmDialog,
   MetricCard,
   MetricGrid,
   PageHero,
@@ -25,12 +28,14 @@ import {
 import { getSpectateRoom } from "./data";
 
 export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
+  const router = useRouter();
   const { session, sessionLoaded, refreshSession } = useAppSession();
   const [room, setRoom] = useState<RoomResponse | null>(null);
   const [problem, setProblem] = useState<ProblemDetailResponse | null>(null);
   const [message, setMessage] = useState("관전 정보를 불러오는 중입니다.");
   const [error, setError] = useState<string | null>(null);
   const [requiresLogin, setRequiresLogin] = useState(false);
+  const [battleFinished, setBattleFinished] = useState(false);
   const [codeByUserId, setCodeByUserId] = useState<Record<number, string>>({});
   const [lastUpdatedByUserId, setLastUpdatedByUserId] = useState<Record<number, string>>({});
   const stompClientRef = useRef<Client | null>(null);
@@ -148,6 +153,23 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
         }
       },
       onConnect: () => {
+        client.subscribe(`/topic/room/${roomId}`, (frame) => {
+          let payload: unknown;
+          try {
+            payload = JSON.parse(frame.body) as unknown;
+          } catch {
+            return;
+          }
+          if (
+            typeof payload === "object" &&
+            payload !== null &&
+            "type" in payload &&
+            (payload as { type: unknown }).type === "BATTLE_FINISHED"
+          ) {
+            setBattleFinished(true);
+          }
+        });
+
         client.subscribe(`/topic/room/${roomId}/spectate`, (frame) => {
           let payload: unknown;
           try {
@@ -247,6 +269,15 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
 
   return (
     <div className="space-y-8">
+      <ConfirmDialog
+        open={battleFinished}
+        title="배틀이 종료되었습니다"
+        description="참여자들의 최종 코드를 확인하거나 관전 목록으로 돌아갈 수 있습니다."
+        confirmLabel="관전 목록으로"
+        cancelLabel="계속 보기"
+        onConfirm={() => router.push("/spectate")}
+        onCancel={() => setBattleFinished(false)}
+      />
       <PageHero
         eyebrow="Spectate Room"
         title={`관전 Room ${roomId} — ${problemTitle}`}
