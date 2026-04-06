@@ -6,7 +6,12 @@ import { useEffect, useState } from "react";
 import type {
   MyBattleResultItem,
   MyBattleResultsResponse,
+  MyInfoApiResponse,
+  MyInfoResponse,
   PageInfo,
+  RatingProgressApiResponse,
+  RatingProgressResponse,
+  RatingRequirementProgress,
 } from "@/shared/api/contracts";
 import { useAppSession } from "@/features/layout/session-context";
 import { formatDateTime } from "@/shared/utils/format-date-time";
@@ -37,6 +42,36 @@ async function readMyBattleResults(page: number, size: number) {
   };
 }
 
+async function readMyInfo() {
+  const response = await fetch("/api/members/me", {
+    cache: "no-store",
+    credentials: "include",
+  });
+
+  const payload = (await response.json().catch(() => null)) as MyInfoApiResponse | null;
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    payload,
+  };
+}
+
+async function readMyRatingProgress() {
+  const response = await fetch("/api/members/me/rating-progress", {
+    cache: "no-store",
+    credentials: "include",
+  });
+
+  const payload = (await response.json().catch(() => null)) as RatingProgressApiResponse | null;
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    payload,
+  };
+}
+
 function formatRank(rank: number) {
   return `${rank}등`;
 }
@@ -56,6 +91,34 @@ function toneForScore(scoreDelta: number) {
   }
 
   return "text-app-secondary";
+}
+
+function formatRequirementValue(requirement: RatingRequirementProgress, value: number) {
+  if (requirement.key === "recentTop2Ratio") {
+    return `${Math.round(value * 100)}%`;
+  }
+
+  if (requirement.key === "godSeatRank") {
+    return `${Math.max(1, Math.round(value))}위`;
+  }
+
+  return `${Math.round(value)}`;
+}
+
+function formatRequirementRemaining(requirement: RatingRequirementProgress) {
+  if (requirement.remaining <= 0) {
+    return "0";
+  }
+
+  if (requirement.key === "recentTop2Ratio") {
+    return `${Math.round(requirement.remaining * 100)}%`;
+  }
+
+  if (requirement.key === "godSeatRank") {
+    return `${Math.round(requirement.remaining)}위`;
+  }
+
+  return `${Math.round(requirement.remaining)}`;
 }
 
 function ResultCard({ item }: { item: MyBattleResultItem }) {
@@ -134,6 +197,10 @@ function LoadingRows() {
 
 export default function MyPageScreen() {
   const { session, sessionLoaded, refreshSession } = useAppSession();
+  const [myInfo, setMyInfo] = useState<MyInfoResponse | null>(null);
+  const [myInfoError, setMyInfoError] = useState<string | null>(null);
+  const [ratingProgress, setRatingProgress] = useState<RatingProgressResponse | null>(null);
+  const [ratingProgressError, setRatingProgressError] = useState<string | null>(null);
   const [battleResults, setBattleResults] = useState<MyBattleResultItem[]>([]);
   const [pageInfo, setPageInfo] = useState(defaultPageInfo);
   const [message, setMessage] = useState("내 전적을 불러오는 중입니다.");
@@ -150,26 +217,84 @@ export default function MyPageScreen() {
 
     void (async () => {
       if (!session.authenticated) {
+        setMyInfo(null);
+        setMyInfoError(null);
+        setRatingProgress(null);
+        setRatingProgressError(null);
+        setBattleResults([]);
+        setPageInfo(defaultPageInfo);
+        setError(null);
         setIsLoading(false);
         setMessage("로그인 후 내 전적을 확인할 수 있습니다.");
         return;
       }
 
-      const { ok, status, payload } = await readMyBattleResults(0, PAGE_SIZE);
+      const [myInfoResponse, battleResultsResponse, ratingProgressResponse] = await Promise.all([
+        readMyInfo(),
+        readMyBattleResults(0, PAGE_SIZE),
+        readMyRatingProgress(),
+      ]);
 
       if (!active) {
         return;
       }
 
-      if (status === 401 || payload?.resultCode === "MEMBER_401") {
+      const isUnauthorized =
+        myInfoResponse.status === 401 ||
+        myInfoResponse.payload?.resultCode === "MEMBER_401" ||
+        ratingProgressResponse.status === 401 ||
+        ratingProgressResponse.payload?.resultCode === "MEMBER_401" ||
+        battleResultsResponse.status === 401 ||
+        battleResultsResponse.payload?.resultCode === "MEMBER_401";
+
+      if (isUnauthorized) {
         void refreshSession();
+        setMyInfo(null);
+        setMyInfoError(null);
+        setRatingProgress(null);
+        setRatingProgressError(null);
         setBattleResults([]);
         setPageInfo(defaultPageInfo);
         setError(null);
-        setMessage(payload?.msg ?? "로그인이 필요합니다.");
+        setMessage(
+          myInfoResponse.payload?.msg ??
+            ratingProgressResponse.payload?.msg ??
+            battleResultsResponse.payload?.msg ??
+            "로그인이 필요합니다.",
+        );
         setIsLoading(false);
         return;
       }
+
+      if (
+        myInfoResponse.ok &&
+        myInfoResponse.payload &&
+        myInfoResponse.payload.resultCode === "200" &&
+        myInfoResponse.payload.data
+      ) {
+        setMyInfo(myInfoResponse.payload.data);
+        setMyInfoError(null);
+      } else {
+        setMyInfo(null);
+        setMyInfoError(myInfoResponse.payload?.msg ?? "내 레이팅 정보를 불러오지 못했습니다.");
+      }
+
+      if (
+        ratingProgressResponse.ok &&
+        ratingProgressResponse.payload &&
+        ratingProgressResponse.payload.resultCode === "200" &&
+        ratingProgressResponse.payload.data
+      ) {
+        setRatingProgress(ratingProgressResponse.payload.data);
+        setRatingProgressError(null);
+      } else {
+        setRatingProgress(null);
+        setRatingProgressError(
+          ratingProgressResponse.payload?.msg ?? "다음 티어 조건을 불러오지 못했습니다.",
+        );
+      }
+
+      const { ok, payload } = battleResultsResponse;
 
       if (!ok || !payload || payload.resultCode !== "200" || !payload.data) {
         setBattleResults([]);
@@ -228,6 +353,26 @@ export default function MyPageScreen() {
   const solvedCount = battleResults.filter((item) => item.solved).length;
   const loadedCount = battleResults.length;
   const currentPage = pageInfo.totalPages > 0 ? pageInfo.page + 1 : 0;
+
+  const battleMatchCount = ratingProgress?.current.battleMatchCount ?? myInfo?.battleMatchCount ?? null;
+  const firstSolvedProblemCount =
+    ratingProgress?.current.firstSolvedProblemCount ?? myInfo?.firstSolvedProblemCount ?? null;
+  const shouldDisplayUnranked =
+    battleMatchCount !== null &&
+    firstSolvedProblemCount !== null &&
+    battleMatchCount === 0 &&
+    firstSolvedProblemCount === 0;
+  const displayTier = ratingProgress?.current.displayTier ?? (shouldDisplayUnranked ? "UNRANKED" : (myInfo?.tier ?? "-"));
+  const battleRating =
+    ratingProgress?.current.battleRating ??
+    myInfo?.battleRating ??
+    (typeof myInfo?.score === "number" ? myInfo.score : null);
+  const hardBattleRating = ratingProgress?.current.hardBattleRating ?? myInfo?.hardBattleRating ?? null;
+  const firstSolveScore = ratingProgress?.current.activityPoint ?? myInfo?.firstSolveScore ?? null;
+  const tierScore = myInfo?.tierScore ?? battleRating;
+  const nextTier = ratingProgress?.next ?? null;
+  const nextRequirements = nextTier?.requirements ?? [];
+  const satisfiedRequirementCount = nextRequirements.filter((requirement) => requirement.satisfied).length;
 
   return (
     <main className="flex h-full min-h-0 flex-col border-b border-app-border/80 bg-app-base lg:border-b-0 lg:border-r">
@@ -290,30 +435,173 @@ export default function MyPageScreen() {
             <div className="space-y-5">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-md border border-app-border bg-app-elevated px-3 py-2">
-                  <p className="text-xs text-app-dim">닉네임</p>
+                  <p className="text-xs text-app-dim">표시 티어</p>
                   <p className="mt-1 text-base font-semibold text-app-primary">
-                    {session.member?.nickname ?? "-"}
+                    {displayTier}
                   </p>
                 </div>
                 <div className="rounded-md border border-app-border bg-app-elevated px-3 py-2">
-                  <p className="text-xs text-app-dim">이메일</p>
-                  <p className="mt-1 truncate text-base font-semibold text-app-primary">
-                    {session.member?.email ?? "-"}
+                  <p className="text-xs text-app-dim">SR (battleRating)</p>
+                  <p className="mt-1 text-base font-semibold text-app-primary">
+                    {battleRating ?? "-"}
                   </p>
                 </div>
                 <div className="rounded-md border border-app-border bg-app-elevated px-3 py-2">
-                  <p className="text-xs text-app-dim">역할</p>
+                  <p className="text-xs text-app-dim">Hard SR</p>
                   <p className="mt-1 text-base font-semibold text-app-primary">
-                    {formatRoleLabel(session.member?.role)}
+                    {hardBattleRating ?? "-"}
                   </p>
                 </div>
                 <div className="rounded-md border border-app-border bg-app-elevated px-3 py-2">
-                  <p className="text-xs text-app-dim">해결 / 전체</p>
+                  <p className="text-xs text-app-dim">AP (firstSolveScore)</p>
                   <p className="mt-1 text-base font-semibold text-app-primary">
-                    {solvedCount} / {loadedCount}
+                    {firstSolveScore ?? "-"}
                   </p>
                 </div>
               </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-md border border-app-border bg-app-elevated px-3 py-2">
+                  <p className="text-xs text-app-dim">랭킹 표시 점수 (tierScore)</p>
+                  <p className="mt-1 text-base font-semibold text-app-primary">{tierScore ?? "-"}</p>
+                </div>
+                <div className="rounded-md border border-app-border bg-app-elevated px-3 py-2">
+                  <p className="text-xs text-app-dim">배틀 판수</p>
+                  <p className="mt-1 text-base font-semibold text-app-primary">
+                    {battleMatchCount ?? "-"}
+                  </p>
+                </div>
+                <div className="rounded-md border border-app-border bg-app-elevated px-3 py-2">
+                  <p className="text-xs text-app-dim">first solve 문제 수</p>
+                  <p className="mt-1 text-base font-semibold text-app-primary">
+                    {firstSolvedProblemCount ?? "-"}
+                  </p>
+                </div>
+                <div className="rounded-md border border-app-border bg-app-elevated px-3 py-2">
+                  <p className="text-xs text-app-dim">닉네임 / 역할</p>
+                  <p className="mt-1 text-base font-semibold text-app-primary">
+                    {myInfo?.nickname ?? session.member?.nickname ?? "-"}
+                  </p>
+                  <p className="mt-0.5 text-xs text-app-muted">
+                    {formatRoleLabel(myInfo?.role ?? session.member?.role)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-md border border-app-border bg-app-elevated px-3 py-2">
+                  <p className="text-xs text-app-dim">1400+ 해결</p>
+                  <p className="mt-1 text-base font-semibold text-app-primary">
+                    {ratingProgress?.current.solved1400Plus ?? myInfo?.solved1400Plus ?? "-"}
+                  </p>
+                </div>
+                <div className="rounded-md border border-app-border bg-app-elevated px-3 py-2">
+                  <p className="text-xs text-app-dim">1700+ 해결</p>
+                  <p className="mt-1 text-base font-semibold text-app-primary">
+                    {ratingProgress?.current.solved1700Plus ?? myInfo?.solved1700Plus ?? "-"}
+                  </p>
+                </div>
+                <div className="rounded-md border border-app-border bg-app-elevated px-3 py-2">
+                  <p className="text-xs text-app-dim">2000+ 해결</p>
+                  <p className="mt-1 text-base font-semibold text-app-primary">
+                    {ratingProgress?.current.solved2000Plus ?? myInfo?.solved2000Plus ?? "-"}
+                  </p>
+                </div>
+                <div className="rounded-md border border-app-border bg-app-elevated px-3 py-2">
+                  <p className="text-xs text-app-dim">2300+ 해결 / 최근 Top2 비율</p>
+                  <p className="mt-1 text-base font-semibold text-app-primary">
+                    {ratingProgress?.current.solved2300Plus ?? myInfo?.solved2300Plus ?? "-"} /{" "}
+                    {typeof ratingProgress?.current.recentTop2Ratio === "number"
+                      ? `${Math.round(ratingProgress.current.recentTop2Ratio * 100)}%`
+                      : typeof myInfo?.recentTop2Rate === "number"
+                        ? `${Math.round(myInfo.recentTop2Rate * 100)}%`
+                      : "-"}
+                  </p>
+                </div>
+              </div>
+
+              <section className="rounded-md border border-app-border bg-app-elevated p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-sm font-semibold text-app-primary">다음 티어 진행도</h2>
+                    <p className="mt-1 text-xs text-app-muted">
+                      현재 티어에서 다음 티어로 올라가기 위해 필요한 조건입니다.
+                    </p>
+                  </div>
+                  {nextTier ? (
+                    <span className="inline-flex h-7 items-center rounded-full border border-app-border-strong bg-app-base px-3 text-xs font-semibold text-app-primary">
+                      {displayTier} → {nextTier.tier}
+                    </span>
+                  ) : (
+                    <span className="inline-flex h-7 items-center rounded-full border border-app-border-strong bg-app-base px-3 text-xs font-semibold text-app-primary">
+                      최상위 티어
+                    </span>
+                  )}
+                </div>
+
+                {ratingProgressError ? (
+                  <p className="text-sm text-app-warn">{ratingProgressError}</p>
+                ) : !ratingProgress ? (
+                  <p className="text-sm text-app-muted">티어 진행도를 불러오는 중입니다.</p>
+                ) : !nextTier ? (
+                  <p className="text-sm text-app-success">현재 GOD 티어입니다. 더 높은 티어는 없습니다.</p>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <p className="text-app-secondary">{nextTier.message}</p>
+                      <p className="text-app-dim">
+                        충족 {satisfiedRequirementCount}/{nextRequirements.length}
+                      </p>
+                    </div>
+
+                    {nextRequirements.map((requirement) => {
+                      const progressPercent =
+                        requirement.comparison === "AT_LEAST"
+                          ? Math.min(100, Math.round((requirement.current / Math.max(requirement.required, 1)) * 100))
+                          : requirement.satisfied
+                            ? 100
+                            : 0;
+
+                      return (
+                        <div
+                          key={requirement.key}
+                          className="rounded-md border border-app-border bg-app-base px-3 py-2"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-medium text-app-primary">{requirement.label}</p>
+                            <p
+                              className={`text-xs font-semibold ${
+                                requirement.satisfied ? "text-app-success" : "text-app-warn"
+                              }`}
+                            >
+                              {requirement.satisfied ? "충족" : "미충족"}
+                            </p>
+                          </div>
+                          <p className="mt-1 text-xs text-app-muted">
+                            현재 {formatRequirementValue(requirement, requirement.current)} / 목표{" "}
+                            {formatRequirementValue(requirement, requirement.required)}
+                            {requirement.satisfied ? "" : ` · 남은 값 ${formatRequirementRemaining(requirement)}`}
+                          </p>
+                          <div className="mt-2 h-1.5 rounded-full bg-app-border">
+                            <div
+                              className={`h-1.5 rounded-full ${
+                                requirement.satisfied ? "bg-app-success" : "bg-app-accent"
+                              }`}
+                              style={{ width: `${progressPercent}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+
+              {myInfoError ? (
+                <div className="rounded-md border border-app-warn/60 bg-app-warn/15 px-3 py-2 text-sm text-app-warn">
+                  {myInfoError}
+                </div>
+              ) : null}
 
               {error ? (
                 <div className="rounded-md border border-app-danger/60 bg-app-danger/20 px-3 py-2 text-sm text-app-danger">
