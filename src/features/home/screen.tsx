@@ -491,8 +491,30 @@ export default function HomeScreen() {
     }
 
     const client = new Client({
-      webSocketFactory: () => new SockJS("/ws"),
+      webSocketFactory: () =>
+        new SockJS(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/ws`),
       reconnectDelay: 3000,
+      beforeConnect: async () => {
+        client.connectHeaders = {};
+
+        const res = await fetch("/api/v1/ws/token", {
+          method: "POST",
+          cache: "no-store",
+          credentials: "include",
+        });
+
+        if (!res.ok) {
+          throw new Error(`WS token request failed (${res.status})`);
+        }
+
+        const data = (await res.json()) as { token?: string };
+
+        if (!data.token) {
+          throw new Error("WS token response missing token");
+        }
+
+        client.connectHeaders = { "X-WS-Token": data.token };
+      },
       onConnect: () => {
         logMatchingDebug("ws connected");
         personalSubscriptionRef.current?.unsubscribe();
