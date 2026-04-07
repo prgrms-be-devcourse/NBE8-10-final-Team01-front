@@ -106,7 +106,7 @@ interface ProfilePaneProps {
     participants: Array<{
       userId: number;
       nickname: string;
-      status: "READY" | "PLAYING" | "EXIT" | "ABANDONED";
+      status: "READY" | "PLAYING" | "SOLVED" | "ABANDONED" | "TIMEOUT" | "QUIT";
     }>;
     myStatus: string | null;
     myUserId: number | null;
