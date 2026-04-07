@@ -12,7 +12,6 @@ import type {
   SoloRunRequest,
   SoloRunResponse,
   SoloSubmitRequest,
-  SoloRunTestCaseResult,
   SoloRunWsMessage,
   SubmissionResponse,
   SubmissionWsMessage,
@@ -22,21 +21,19 @@ import {
   readPreferredEditorLanguage,
   writePreferredEditorLanguage,
 } from "@/shared/utils/editor-language";
-import {
-  DefinitionGrid,
-  MathText,
-  Panel,
-  StatusPill,
-} from "@/shared/ui";
+import { DefinitionGrid, MathText, Panel, StatusPill } from "@/shared/ui";
 
-const SoloCodeEditor = dynamic(() => import("@/features/problem-solo/code-editor"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-[26rem] items-center justify-center rounded-2xl border border-app-border bg-app-surface text-sm text-app-secondary">
-      에디터를 준비하는 중입니다.
-    </div>
-  ),
-});
+const SoloCodeEditor = dynamic(
+  () => import("@/features/problem-solo/code-editor"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-[26rem] items-center justify-center rounded-2xl border border-app-border bg-app-surface text-sm text-app-secondary">
+        에디터를 준비하는 중입니다.
+      </div>
+    ),
+  },
+);
 
 const defaultCodeByLanguage: Record<string, string> = {
   javascript: `function solve(input) {\n  // TODO: implement\n}\n`,
@@ -73,6 +70,7 @@ interface CaseBadgeState {
 }
 
 type LeftPanelTab = "description" | "submission";
+type ContentLanguage = "ko" | "en";
 
 interface SoloSubmitState {
   status: "idle" | "submitting" | "judging" | "done" | "error";
@@ -134,7 +132,9 @@ function isRunResultEvent(payload: unknown): payload is SoloRunWsMessage {
   return record.type === "RUN_RESULT" && Array.isArray(record.results);
 }
 
-function isSoloSubmissionEvent(payload: unknown): payload is SubmissionWsMessage {
+function isSoloSubmissionEvent(
+  payload: unknown,
+): payload is SubmissionWsMessage {
   if (!payload || typeof payload !== "object") {
     return false;
   }
@@ -158,7 +158,11 @@ function isPassVerdict(verdict: string | undefined) {
 
 function isWrongAnswerVerdict(verdict: string | undefined) {
   const normalized = normalizeVerdict(verdict);
-  return normalized === "WA" || normalized === "WRONG_ANSWER" || normalized === "WRONG ANSWER";
+  return (
+    normalized === "WA" ||
+    normalized === "WRONG_ANSWER" ||
+    normalized === "WRONG ANSWER"
+  );
 }
 
 function createInitialSubmitState(): SoloSubmitState {
@@ -198,7 +202,11 @@ function getSubmitHeadline(state: SoloSubmitState) {
     return "Runtime Error";
   }
 
-  if (code === "TLE" || code === "TIME_LIMIT_EXCEEDED" || code === "TIME LIMIT EXCEEDED") {
+  if (
+    code === "TLE" ||
+    code === "TIME_LIMIT_EXCEEDED" ||
+    code === "TIME LIMIT EXCEEDED"
+  ) {
     return "Time Limit Exceeded";
   }
 
@@ -209,7 +217,9 @@ function getSubmitHeadline(state: SoloSubmitState) {
   return code || "Submission";
 }
 
-function getCaseBadgeState(result: SoloCaseRunResult | undefined): CaseBadgeState | null {
+function getCaseBadgeState(
+  result: SoloCaseRunResult | undefined,
+): CaseBadgeState | null {
   if (!result) {
     return null;
   }
@@ -254,8 +264,13 @@ function resolveLanguages(problem: ProblemDetailResponse | null) {
   return problem.supportedLanguages;
 }
 
-function resolveStarterCode(problem: ProblemDetailResponse | null, language: string) {
-  const fromApi = problem?.starterCodes?.find((item) => item.language === language)?.code;
+function resolveStarterCode(
+  problem: ProblemDetailResponse | null,
+  language: string,
+) {
+  const fromApi = problem?.starterCodes?.find(
+    (item) => item.language === language,
+  )?.code;
 
   if (fromApi) {
     return fromApi;
@@ -264,7 +279,7 @@ function resolveStarterCode(problem: ProblemDetailResponse | null, language: str
   return defaultCodeByLanguage[language] ?? defaultCodeByLanguage.javascript;
 }
 
-function resolveDefaultLanguage(problem: ProblemDetailResponse | null) {
+function resolveDefaultEditorLanguage(problem: ProblemDetailResponse | null) {
   const languages = resolveLanguages(problem);
   const preferredLanguage = readPreferredEditorLanguage();
 
@@ -279,11 +294,19 @@ function resolveDefaultLanguage(problem: ProblemDetailResponse | null) {
   return languages[0];
 }
 
-async function readProblem(problemId: string) {
-  const response = await fetch(`/api/problems/${problemId}`, { cache: "no-store" });
+async function readProblem(
+  problemId: string,
+  contentLanguage: ContentLanguage,
+) {
+  const query = contentLanguage === "ko" ? "?lang=ko" : "";
+  const response = await fetch(`/api/problems/${problemId}${query}`, {
+    cache: "no-store",
+  });
 
   if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
+    const payload = (await response
+      .json()
+      .catch(() => null)) as ApiErrorResponse | null;
     return {
       data: null,
       error: payload?.message ?? "문제 상세를 불러오지 못했습니다.",
@@ -296,24 +319,73 @@ async function readProblem(problemId: string) {
   };
 }
 
-export default function ProblemSoloScreen({ problemId }: { problemId: string }) {
+function ContentLanguageToggle({
+  contentLanguage,
+  onChange,
+}: {
+  contentLanguage: ContentLanguage;
+  onChange: (next: ContentLanguage) => void;
+}) {
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      <button
+        type="button"
+        onClick={() => onChange("ko")}
+        className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+          contentLanguage === "ko"
+            ? "border-app-border-strong bg-app-elevated text-app-primary"
+            : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
+        }`}
+      >
+        한국어
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("en")}
+        className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+          contentLanguage === "en"
+            ? "border-app-border-strong bg-app-elevated text-app-primary"
+            : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
+        }`}
+      >
+        English
+      </button>
+    </div>
+  );
+}
+
+export default function ProblemSoloScreen({
+  problemId,
+}: {
+  problemId: string;
+}) {
   const { session, sessionLoaded } = useAppSession();
   const [problem, setProblem] = useState<ProblemDetailResponse | null>(null);
   const [problemError, setProblemError] = useState<string | null>(null);
   const [isProblemLoading, setIsProblemLoading] = useState(true);
+  const [contentLanguage, setContentLanguage] = useState<ContentLanguage>("ko");
   const [language, setLanguage] = useState(
     () => readPreferredEditorLanguage() ?? "javascript",
   );
   const [code, setCode] = useState(() => {
     const preferredLanguage = readPreferredEditorLanguage() ?? "javascript";
-    return defaultCodeByLanguage[preferredLanguage] ?? defaultCodeByLanguage.javascript;
+    return (
+      defaultCodeByLanguage[preferredLanguage] ??
+      defaultCodeByLanguage.javascript
+    );
   });
-  const [selectedCaseIndex, setSelectedCaseIndex] = useState<number | null>(null);
+  const [selectedCaseIndex, setSelectedCaseIndex] = useState<number | null>(
+    null,
+  );
   const [runningCaseIndex, setRunningCaseIndex] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [caseRunResults, setCaseRunResults] = useState<Record<number, SoloCaseRunResult>>({});
+  const [caseRunResults, setCaseRunResults] = useState<
+    Record<number, SoloCaseRunResult>
+  >({});
   const [leftPanelTab, setLeftPanelTab] = useState<LeftPanelTab>("description");
-  const [submitState, setSubmitState] = useState<SoloSubmitState>(createInitialSubmitState);
+  const [submitState, setSubmitState] = useState<SoloSubmitState>(
+    createInitialSubmitState,
+  );
   const [leftPaneRatio, setLeftPaneRatio] = useState(() => {
     const stored = readStoredLayout();
     return stored?.leftPaneRatio ?? DEFAULT_LEFT_PANE_RATIO;
@@ -322,6 +394,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
     const stored = readStoredLayout();
     return stored?.rightTopPaneRatio ?? DEFAULT_RIGHT_TOP_PANE_RATIO;
   });
+
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
   const rightColumnRef = useRef<HTMLDivElement | null>(null);
   const runTimeoutRef = useRef<number | null>(null);
@@ -371,7 +444,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
       }
 
       setIsProblemLoading(true);
-      const result = await readProblem(problemId);
+      const result = await readProblem(problemId, contentLanguage);
 
       if (!active) {
         return;
@@ -391,7 +464,8 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
         setIsProblemLoading(false);
         return;
       }
-      const nextLanguage = resolveDefaultLanguage(nextProblem);
+
+      const nextLanguage = resolveDefaultEditorLanguage(nextProblem);
       const nextStarterCode = resolveStarterCode(nextProblem, nextLanguage);
       const hasSampleCase = (nextProblem.sampleCases?.length ?? 0) > 0;
 
@@ -416,7 +490,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
     return () => {
       active = false;
     };
-  }, [problemId, session.authenticated, sessionLoaded]);
+  }, [problemId, contentLanguage, session.authenticated, sessionLoaded]);
 
   useEffect(() => {
     return () => {
@@ -457,13 +531,12 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
     }
 
     const client = new Client({
-      webSocketFactory: () => new SockJS(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/ws`),
+      webSocketFactory: () =>
+        new SockJS(
+          `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/ws`,
+        ),
       reconnectDelay: 3000,
-      // 연결(및 재연결) 시마다 1회용 토큰을 새로 발급해 STOMP CONNECT 헤더에 주입.
-      // 토큰은 30초 TTL이고 1회 사용 후 폐기되므로 재연결 시에도 반드시 새 토큰이 필요.
-      // 토큰 발급 실패 시 쿠키 기반 인증(로컬 환경)으로 자동 폴백됨.
       beforeConnect: async () => {
-        // 재연결 시 이전 연결에서 소비된 토큰이 재사용되지 않도록 먼저 초기화
         client.connectHeaders = {};
         try {
           const res = await fetch("/api/v1/ws/token", { method: "POST" });
@@ -563,10 +636,14 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
     };
   }, [problem, session.authenticated, session.member?.memberId]);
 
-  function handleLanguageChange(nextLanguage: string) {
+  function handleEditorLanguageChange(nextLanguage: string) {
     setLanguage(nextLanguage);
     setCode(resolveStarterCode(problem, nextLanguage));
     writePreferredEditorLanguage(nextLanguage);
+  }
+
+  function handleContentLanguageChange(nextLanguage: ContentLanguage) {
+    setContentLanguage(nextLanguage);
   }
 
   async function handleRunCase(caseIndex: number) {
@@ -575,7 +652,8 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
     }
 
     const caseCount = problem.sampleCases?.length ?? 0;
-    const runningMessage = "실행 요청을 전송했습니다. 결과를 기다리는 중입니다.";
+    const runningMessage =
+      "실행 요청을 전송했습니다. 결과를 기다리는 중입니다.";
 
     setSelectedCaseIndex(caseIndex);
     setRunningCaseIndex(caseIndex);
@@ -601,27 +679,39 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
       });
 
       if (!response.ok) {
-        const errorPayload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-        const failMessage = errorPayload?.message ?? "실행 요청에 실패했습니다.";
+        const errorPayload = (await response
+          .json()
+          .catch(() => null)) as ApiErrorResponse | null;
+        const failMessage =
+          errorPayload?.message ?? "실행 요청에 실패했습니다.";
+
         setCaseRunResults(() => {
           const nextResults: Record<number, SoloCaseRunResult> = {};
 
-          Array.from({ length: caseCount }, (_, index) => index).forEach((index) => {
-            nextResults[index] = {
-              status: "error",
-              verdict: "REQUEST_FAILED",
-              message: failMessage,
-            };
-          });
+          Array.from({ length: caseCount }, (_, index) => index).forEach(
+            (index) => {
+              nextResults[index] = {
+                status: "error",
+                verdict: "REQUEST_FAILED",
+                message: failMessage,
+              };
+            },
+          );
 
           return nextResults;
         });
-        setRunningCaseIndex((current) => (current === caseIndex ? null : current));
+        setRunningCaseIndex((current) =>
+          current === caseIndex ? null : current,
+        );
         return;
       }
 
-      const runPayload = (await response.json().catch(() => null)) as SoloRunResponse | null;
-      const acceptedMessage = runPayload?.message ?? "실행이 접수되었습니다. WebSocket 결과를 기다립니다.";
+      const runPayload = (await response
+        .json()
+        .catch(() => null)) as SoloRunResponse | null;
+      const acceptedMessage =
+        runPayload?.message ??
+        "실행이 접수되었습니다. WebSocket 결과를 기다립니다.";
       setCaseRunResults(createPendingCaseResults(caseCount, acceptedMessage));
 
       runTimeoutRef.current = window.setTimeout(() => {
@@ -629,20 +719,22 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
           let hasPendingCase = false;
           const nextResults = { ...prev };
 
-          Array.from({ length: caseCount }, (_, index) => index).forEach((index) => {
-            const current = prev[index];
+          Array.from({ length: caseCount }, (_, index) => index).forEach(
+            (index) => {
+              const current = prev[index];
 
-            if (!current || current.status !== "pending") {
-              return;
-            }
+              if (!current || current.status !== "pending") {
+                return;
+              }
 
-            hasPendingCase = true;
-            nextResults[index] = {
-              status: "error",
-              verdict: "TIMEOUT",
-              message: "결과 수신이 지연되고 있습니다. 다시 Run 해주세요.",
-            };
-          });
+              hasPendingCase = true;
+              nextResults[index] = {
+                status: "error",
+                verdict: "TIMEOUT",
+                message: "결과 수신이 지연되고 있습니다. 다시 Run 해주세요.",
+              };
+            },
+          );
 
           if (!hasPendingCase) {
             return prev;
@@ -650,24 +742,31 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
 
           return nextResults;
         });
-        setRunningCaseIndex((current) => (current === caseIndex ? null : current));
+
+        setRunningCaseIndex((current) =>
+          current === caseIndex ? null : current,
+        );
         runTimeoutRef.current = null;
       }, 15000);
     } catch {
       setCaseRunResults(() => {
         const nextResults: Record<number, SoloCaseRunResult> = {};
 
-        Array.from({ length: caseCount }, (_, index) => index).forEach((index) => {
-          nextResults[index] = {
-            status: "error",
-            verdict: "REQUEST_FAILED",
-            message: "실행 요청 중 네트워크 오류가 발생했습니다.",
-          };
-        });
+        Array.from({ length: caseCount }, (_, index) => index).forEach(
+          (index) => {
+            nextResults[index] = {
+              status: "error",
+              verdict: "REQUEST_FAILED",
+              message: "실행 요청 중 네트워크 오류가 발생했습니다.",
+            };
+          },
+        );
 
         return nextResults;
       });
-      setRunningCaseIndex((current) => (current === caseIndex ? null : current));
+      setRunningCaseIndex((current) =>
+        current === caseIndex ? null : current,
+      );
     }
   }
 
@@ -692,16 +791,21 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
         language,
       };
 
-      const response = await fetch(`/api/problems/${problem.problemId}/submit`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetch(
+        `/api/problems/${problem.problemId}/submit`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
         },
-        body: JSON.stringify(requestBody),
-      });
+      );
 
       if (!response.ok) {
-        const errorPayload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
+        const errorPayload = (await response
+          .json()
+          .catch(() => null)) as ApiErrorResponse | null;
         setSubmitState({
           status: "error",
           result: null,
@@ -713,7 +817,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
         return;
       }
 
-      const payload = (await response.json().catch(() => null)) as SubmissionResponse | null;
+      const payload = (await response
+        .json()
+        .catch(() => null)) as SubmissionResponse | null;
       const result = payload?.result ?? "JUDGING";
       const normalizedResult = normalizeVerdict(result);
 
@@ -765,7 +871,11 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
       window.removeEventListener("mouseup", onUp);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
-      const snapped = snapRatio(leftPaneRatioRef.current, LEFT_RATIO_SNAP_POINTS, SPLIT_SNAP_GAP);
+      const snapped = snapRatio(
+        leftPaneRatioRef.current,
+        LEFT_RATIO_SNAP_POINTS,
+        SPLIT_SNAP_GAP,
+      );
       leftPaneRatioRef.current = snapped;
       setLeftPaneRatio(snapped);
     };
@@ -800,7 +910,11 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
       window.removeEventListener("mouseup", onUp);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
-      const snapped = snapRatio(rightTopPaneRatioRef.current, TOP_RATIO_SNAP_POINTS, SPLIT_SNAP_GAP);
+      const snapped = snapRatio(
+        rightTopPaneRatioRef.current,
+        TOP_RATIO_SNAP_POINTS,
+        SPLIT_SNAP_GAP,
+      );
       rightTopPaneRatioRef.current = snapped;
       setRightTopPaneRatio(snapped);
     };
@@ -818,7 +932,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
       }
 
       const isRunShortcut =
-        event.key === "Enter" && (event.metaKey || event.ctrlKey) && !event.shiftKey;
+        event.key === "Enter" &&
+        (event.metaKey || event.ctrlKey) &&
+        !event.shiftKey;
       const isSubmitShortcut = event.key === "Enter" && event.shiftKey;
 
       if (!isRunShortcut && !isSubmitShortcut) {
@@ -826,7 +942,10 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
       }
 
       const target = event.target;
-      if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement) {
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLSelectElement
+      ) {
         return;
       }
 
@@ -845,7 +964,8 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
       }
 
       const sampleCaseCount = problem?.sampleCases?.length ?? 0;
-      const runCaseIndex = selectedCaseIndex ?? (sampleCaseCount > 0 ? 0 : null);
+      const runCaseIndex =
+        selectedCaseIndex ?? (sampleCaseCount > 0 ? 0 : null);
 
       if (runCaseIndex === null) {
         return;
@@ -859,11 +979,15 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
     return () => {
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [handleRunCase, handleSubmit, isSubmitting, problem, runningCaseIndex, selectedCaseIndex]);
+  }, [isSubmitting, problem, runningCaseIndex, selectedCaseIndex]);
 
   if (!sessionLoaded) {
     return (
-      <Panel variant="dark" title="세션 확인" description="인증 상태를 확인하는 중입니다.">
+      <Panel
+        variant="dark"
+        title="세션 확인"
+        description="인증 상태를 확인하는 중입니다."
+      >
         <p className="text-sm text-app-muted">잠시만 기다려주세요.</p>
       </Panel>
     );
@@ -876,9 +1000,15 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
           <p className="text-sm font-medium text-app-secondary">
             개인 풀이는 로그인 후 이용할 수 있습니다.
           </p>
-          <StatusPill tone="warn" variant="dark">로그인 필요</StatusPill>
+          <StatusPill tone="warn" variant="dark">
+            로그인 필요
+          </StatusPill>
         </div>
-        <Panel variant="dark" title="이동" description="로그인 후 다시 개인 풀이로 돌아올 수 있습니다.">
+        <Panel
+          variant="dark"
+          title="이동"
+          description="로그인 후 다시 개인 풀이로 돌아올 수 있습니다."
+        >
           <div className="flex flex-wrap gap-3">
             <Link
               href={`/login?next=${encodeURIComponent(`/problems/${problemId}`)}`}
@@ -901,7 +1031,11 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
   if (!problem) {
     if (isProblemLoading) {
       return (
-        <Panel variant="dark" title="문제 로딩" description="문제 상세를 불러오는 중입니다.">
+        <Panel
+          variant="dark"
+          title="문제 로딩"
+          description="문제 상세를 불러오는 중입니다."
+        >
           <p className="text-sm text-app-muted">잠시만 기다려주세요.</p>
         </Panel>
       );
@@ -913,7 +1047,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
           <p className="text-sm font-medium text-app-danger">
             문제 정보를 가져오지 못했습니다.
           </p>
-          <StatusPill tone="danger" variant="dark">Load failed</StatusPill>
+          <StatusPill tone="danger" variant="dark">
+            Load failed
+          </StatusPill>
         </div>
         <Panel variant="dark" title="오류" description="응답 메시지">
           <p className="text-sm leading-7 text-app-secondary">
@@ -926,8 +1062,10 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
 
   const languages = resolveLanguages(problem);
   const sampleCases = problem.sampleCases ?? [];
-  const activeCase = selectedCaseIndex !== null ? sampleCases[selectedCaseIndex] : null;
-  const activeCaseResult = selectedCaseIndex !== null ? caseRunResults[selectedCaseIndex] : null;
+  const activeCase =
+    selectedCaseIndex !== null ? sampleCases[selectedCaseIndex] : null;
+  const activeCaseResult =
+    selectedCaseIndex !== null ? caseRunResults[selectedCaseIndex] : null;
   const activeCasePass = isPassVerdict(activeCaseResult?.verdict);
   const activeCaseWrongAnswer = isWrongAnswerVerdict(activeCaseResult?.verdict);
   const submitHeadline = getSubmitHeadline(submitState);
@@ -961,8 +1099,10 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
     submitState.passedCount !== null && submitState.totalCount !== null
       ? `${submitState.passedCount}/${submitState.totalCount} testcases passed`
       : null;
-  const runTargetCaseIndex = selectedCaseIndex ?? (sampleCases.length > 0 ? 0 : null);
-  const runActionDisabled = runTargetCaseIndex === null || runningCaseIndex !== null;
+  const runTargetCaseIndex =
+    selectedCaseIndex ?? (sampleCases.length > 0 ? 0 : null);
+  const runActionDisabled =
+    runTargetCaseIndex === null || runningCaseIndex !== null;
   const runActionLabel = runningCaseIndex !== null ? "Running..." : "Run";
   const submitActionLabel = isSubmitting ? "Submitting..." : "Submit";
   const isLeftPaneCollapsed = leftPaneRatio <= 8;
@@ -974,7 +1114,11 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
         <div ref={splitContainerRef} className="flex h-full min-h-0">
           <div
             className={`h-full ${isLeftPaneCollapsed ? "" : "min-w-0"}`}
-            style={isLeftPaneCollapsed ? { width: "44px" } : { width: `${leftPaneRatio}%` }}
+            style={
+              isLeftPaneCollapsed
+                ? { width: "44px" }
+                : { width: `${leftPaneRatio}%` }
+            }
           >
             {isLeftPaneCollapsed ? (
               <div
@@ -1010,7 +1154,10 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                       ? "border-app-border-strong bg-app-elevated text-app-primary"
                       : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
                   }`}
-                  style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
+                  style={{
+                    writingMode: "vertical-rl",
+                    textOrientation: "mixed",
+                  }}
                 >
                   Description
                 </button>
@@ -1025,7 +1172,10 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                       ? "border-app-border-strong bg-app-elevated text-app-primary"
                       : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
                   }`}
-                  style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
+                  style={{
+                    writingMode: "vertical-rl",
+                    textOrientation: "mixed",
+                  }}
                 >
                   Submission
                 </button>
@@ -1062,75 +1212,98 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                     </button>
                   </div>
 
-                {leftPanelTab === "description" ? (
-                  <>
-                    <div className="rounded-2xl border border-app-border bg-app-elevated p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
-                        Solo
-                      </p>
-                      <h1 className="mt-2 text-2xl font-semibold tracking-tight text-app-primary">
-                        {problem.problemId}. {problem.title}
-                      </h1>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <StatusPill variant="dark">{problem.difficulty}</StatusPill>
-                        <StatusPill variant="dark">오프라인 솔로</StatusPill>
-                      </div>
-                    </div>
-                    <DefinitionGrid
-                      compact
-                      variant="dark"
-                      items={[
-                        { label: "timeLimitMs", value: problem.timeLimitMs },
-                        { label: "memoryLimitMb", value: problem.memoryLimitMb },
-                      ]}
-                    />
-                    <div className="space-y-4 rounded-2xl border border-app-border bg-app-elevated p-4">
-                      <div>
+                  {leftPanelTab === "description" ? (
+                    <>
+                      <div className="rounded-2xl border border-app-border bg-app-elevated p-4">
                         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
-                          Content
+                          Solo
                         </p>
-                        <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
-                          {problem.content}
-                        </MathText>
+                        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-app-primary">
+                          {problem.problemId}. {problem.title}
+                        </h1>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <StatusPill variant="dark">
+                            {problem.difficulty}
+                          </StatusPill>
+                          <StatusPill variant="dark">오프라인 솔로</StatusPill>
+                          <StatusPill variant="dark">
+                            {problem.language?.toUpperCase()}
+                          </StatusPill>
+                        </div>
+                        <ContentLanguageToggle
+                          contentLanguage={contentLanguage}
+                          onChange={handleContentLanguageChange}
+                        />
                       </div>
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
-                          Input
-                        </p>
-                        <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
-                          {problem.inputFormat}
-                        </MathText>
+
+                      <DefinitionGrid
+                        compact
+                        variant="dark"
+                        items={[
+                          { label: "timeLimitMs", value: problem.timeLimitMs },
+                          {
+                            label: "memoryLimitMb",
+                            value: problem.memoryLimitMb,
+                          },
+                        ]}
+                      />
+
+                      <div className="space-y-4 rounded-2xl border border-app-border bg-app-elevated p-4">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                            Content
+                          </p>
+                          <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
+                            {problem.content}
+                          </MathText>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                            Input
+                          </p>
+                          <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
+                            {problem.inputFormat}
+                          </MathText>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                            Output
+                          </p>
+                          <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
+                            {problem.outputFormat}
+                          </MathText>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
-                          Output
-                        </p>
-                        <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
-                          {problem.outputFormat}
-                        </MathText>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  submitHasResult ? (
-                    <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
+                    </>
+                  ) : submitHasResult ? (
+                    <div
+                      className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}
+                    >
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                         Submit Result
                       </p>
                       <div className="flex flex-wrap items-start gap-3">
-                        <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
+                        <p
+                          className={`text-2xl font-semibold ${submitHeadlineClass}`}
+                        >
                           {submitHeadline}
                         </p>
                         {submitProgressText ? (
-                          <p className="pt-1 text-sm text-app-muted">{submitProgressText}</p>
+                          <p className="pt-1 text-sm text-app-muted">
+                            {submitProgressText}
+                          </p>
                         ) : null}
                         <div className="ml-auto flex flex-col items-end gap-1 text-right">
                           {submitCode ? (
-                            <span className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${submitBadgeClass}`}>
+                            <span
+                              className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${submitBadgeClass}`}
+                            >
                               {submitCode}
                             </span>
                           ) : null}
-                          <p className="text-xs text-app-muted">language: {language}</p>
+                          <p className="text-xs text-app-muted">
+                            language: {language}
+                          </p>
                         </div>
                       </div>
 
@@ -1153,8 +1326,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                     <div className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm text-app-muted">
                       아직 제출 결과가 없습니다.
                     </div>
-                  )
-                )}
+                  )}
                 </div>
               </Panel>
             )}
@@ -1166,7 +1338,9 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
             onMouseDown={startVerticalResize}
             onDoubleClick={() => setLeftPaneRatio(50)}
             className={`group mx-1 items-center justify-center ${
-              isLeftPaneCollapsed ? "pointer-events-none hidden opacity-0" : "flex w-3 cursor-col-resize opacity-100"
+              isLeftPaneCollapsed
+                ? "pointer-events-none hidden opacity-0"
+                : "flex w-3 cursor-col-resize opacity-100"
             }`}
           >
             <div className="relative flex h-full w-full items-center justify-center">
@@ -1180,16 +1354,24 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
           <div
             ref={rightColumnRef}
             className={`relative flex h-full min-w-0 flex-col overflow-hidden ${isLeftPaneCollapsed ? "flex-1" : ""}`}
-            style={isLeftPaneCollapsed ? undefined : { width: `${100 - leftPaneRatio}%` }}
+            style={
+              isLeftPaneCollapsed
+                ? undefined
+                : { width: `${100 - leftPaneRatio}%` }
+            }
           >
             <div
               className={`min-h-0 ${isTestcaseCollapsed ? "pb-[3.25rem]" : ""}`}
-              style={isTestcaseCollapsed ? { height: "100%" } : { height: `${rightTopPaneRatio}%` }}
+              style={
+                isTestcaseCollapsed
+                  ? { height: "100%" }
+                  : { height: `${rightTopPaneRatio}%` }
+              }
             >
               <SoloCodeEditor
                 languages={languages}
                 language={language}
-                onLanguageChange={(nextLanguage) => handleLanguageChange(nextLanguage)}
+                onLanguageChange={handleEditorLanguageChange}
                 value={code}
                 onChange={setCode}
                 onRun={() => {
@@ -1227,8 +1409,16 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
             </div>
 
             <div
-              className={isTestcaseCollapsed ? "absolute inset-x-0 bottom-0 z-10 h-10" : "min-h-0"}
-              style={isTestcaseCollapsed ? undefined : { height: `${100 - rightTopPaneRatio}%` }}
+              className={
+                isTestcaseCollapsed
+                  ? "absolute inset-x-0 bottom-0 z-10 h-10"
+                  : "min-h-0"
+              }
+              style={
+                isTestcaseCollapsed
+                  ? undefined
+                  : { height: `${100 - rightTopPaneRatio}%` }
+              }
             >
               {isTestcaseCollapsed ? (
                 <div
@@ -1248,12 +1438,16 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                       <div className="h-0.5 w-6 rounded-full bg-app-elevated transition group-hover:bg-app-accent-soft" />
                     </div>
                   </div>
-                  <p className="text-base font-semibold text-app-primary">TestCase</p>
+                  <p className="text-base font-semibold text-app-primary">
+                    TestCase
+                  </p>
                 </div>
               ) : (
                 <section className="flex h-full min-h-0 flex-col rounded-2xl border border-app-border bg-app-surface p-5 shadow-[0_14px_32px_rgba(0,0,0,0.28)]">
                   <div className="mb-4 flex items-center justify-between gap-3">
-                    <h2 className="text-lg font-semibold text-app-primary">TestCase</h2>
+                    <h2 className="text-lg font-semibold text-app-primary">
+                      TestCase
+                    </h2>
                     <p className="shrink-0 text-xs font-medium text-app-dim">
                       {TESTCASE_SHORTCUT_HINT}
                     </p>
@@ -1261,151 +1455,169 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                   <div className="space-y-4 min-h-0 flex-1 overflow-y-auto">
                     {sampleCases.length > 0 ? (
                       <>
-                      <div className="flex items-center gap-3">
-                        <div className="min-w-0 flex-1 overflow-x-auto pb-1">
-                          <div className="flex w-max gap-2 pr-1">
-                          {sampleCases.map((_, index) => {
-                            const caseResult = caseRunResults[index];
-                            const badgeState = getCaseBadgeState(caseResult);
-                            const isSelected = selectedCaseIndex === index;
-                            const idleClass = "border-app-border bg-app-elevated text-app-secondary hover:bg-app-elevated";
-                            const passClass = "border-app-success/30 bg-app-success/10 text-app-success hover:bg-app-success/15";
-                            const failClass = "border-app-danger/35 bg-app-danger/10 text-app-danger hover:bg-app-danger/15";
-                            const pendingClass = "border-app-warn/30 bg-app-warn/10 text-app-warn hover:bg-app-warn/15";
+                        <div className="flex items-center gap-3">
+                          <div className="min-w-0 flex-1 overflow-x-auto pb-1">
+                            <div className="flex w-max gap-2 pr-1">
+                              {sampleCases.map((_, index) => {
+                                const caseResult = caseRunResults[index];
+                                const badgeState =
+                                  getCaseBadgeState(caseResult);
+                                const isSelected = selectedCaseIndex === index;
+                                const idleClass =
+                                  "border-app-border bg-app-elevated text-app-secondary hover:bg-app-elevated";
+                                const passClass =
+                                  "border-app-success/30 bg-app-success/10 text-app-success hover:bg-app-success/15";
+                                const failClass =
+                                  "border-app-danger/35 bg-app-danger/10 text-app-danger hover:bg-app-danger/15";
+                                const pendingClass =
+                                  "border-app-warn/30 bg-app-warn/10 text-app-warn hover:bg-app-warn/15";
 
-                            const colorClass = isSelected
-                              ? "border-app-border-strong bg-app-elevated text-app-primary"
-                              : badgeState?.tone === "pass"
-                                ? passClass
-                                : badgeState?.tone === "fail"
-                                  ? failClass
-                                  : badgeState?.tone === "pending"
-                                    ? pendingClass
-                                    : idleClass;
+                                const colorClass = isSelected
+                                  ? "border-app-border-strong bg-app-elevated text-app-primary"
+                                  : badgeState?.tone === "pass"
+                                    ? passClass
+                                    : badgeState?.tone === "fail"
+                                      ? failClass
+                                      : badgeState?.tone === "pending"
+                                        ? pendingClass
+                                        : idleClass;
 
-                            return (
-                              <button
-                                key={`case-tab-${index}`}
-                                type="button"
-                                onClick={() => setSelectedCaseIndex(index)}
-                                className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${colorClass}`}
-                              >
-                                <span>Case {index + 1}</span>
-                                {badgeState ? (
-                                  <span
-                                    className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${
-                                      badgeState.tone === "pass"
-                                        ? "bg-app-success/15 text-app-success"
-                                        : badgeState.tone === "fail"
-                                          ? "bg-app-danger/15 text-app-danger"
-                                          : "bg-app-warn/15 text-app-warn"
-                                    }`}
+                                return (
+                                  <button
+                                    key={`case-tab-${index}`}
+                                    type="button"
+                                    onClick={() => setSelectedCaseIndex(index)}
+                                    className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${colorClass}`}
                                   >
-                                    {badgeState.label}
-                                  </span>
-                                ) : null}
-                              </button>
-                            );
-                          })}
+                                    <span>Case {index + 1}</span>
+                                    {badgeState ? (
+                                      <span
+                                        className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${
+                                          badgeState.tone === "pass"
+                                            ? "bg-app-success/15 text-app-success"
+                                            : badgeState.tone === "fail"
+                                              ? "bg-app-danger/15 text-app-danger"
+                                              : "bg-app-warn/15 text-app-warn"
+                                        }`}
+                                      >
+                                        {badgeState.label}
+                                      </span>
+                                    ) : null}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {activeCase ? (
-                        <div className="grid gap-3 lg:grid-cols-[1fr_0.95fr]">
-                          <div className="space-y-3 rounded-2xl border border-app-border bg-app-elevated p-4">
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
-                                Input
-                              </p>
-                              <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
-                                {activeCase.input || "(empty)"}
-                              </MathText>
-                            </div>
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
-                                Output
-                              </p>
-                              <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
-                                {activeCase.output || "(empty)"}
-                              </MathText>
-                            </div>
-                          </div>
-
-                          <div className="space-y-3 rounded-2xl border border-app-border bg-app-elevated p-4">
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
-                              Run Result
-                            </p>
-                            <div
-                              className={`rounded-xl border p-3 text-sm ${
-                                !activeCaseResult
-                                  ? "border-app-border bg-app-base text-app-secondary"
-                                  : activeCasePass
-                                    ? "border-app-success/30 bg-app-success/10 text-app-success"
-                                    : "border-app-danger/35 bg-app-danger/10 text-app-danger"
-                              }`}
-                            >
-                              {runningCaseIndex === selectedCaseIndex ? (
-                                <p className="text-app-warn">실행 요청 중입니다...</p>
-                              ) : activeCaseResult ? (
-                                <div className="space-y-2">
-                                  <p
-                                    className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${
-                                      activeCasePass
-                                        ? "bg-app-success/15 text-app-success"
-                                        : "bg-app-danger/15 text-app-danger"
-                                    }`}
-                                  >
-                                    {activeCasePass
-                                      ? "PASS"
-                                      : activeCaseWrongAnswer
-                                        ? "WRONG ANSWER"
-                                        : normalizeVerdict(activeCaseResult.verdict)}
-                                  </p>
-                                  {activeCaseResult.stderr ? (
-                                    <div className="rounded-lg border border-app-danger/35 bg-app-base/80 p-2">
-                                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-danger">
-                                        Error
-                                      </p>
-                                      <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-danger">
-                                        {activeCaseResult.stderr}
-                                      </pre>
-                                    </div>
-                                  ) : (
-                                    <div className="grid gap-2">
-                                      <div className="rounded-lg border border-app-border bg-app-base/80 p-2">
-                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-dim">
-                                          Output
-                                        </p>
-                                        <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
-                                          {activeCaseResult.output ?? "(empty)"}
-                                        </pre>
-                                      </div>
-                                      <div className="rounded-lg border border-app-border bg-app-base/80 p-2">
-                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-dim">
-                                          Expected
-                                        </p>
-                                        <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
-                                          {activeCaseResult.expected ?? "(empty)"}
-                                        </pre>
-                                      </div>
-                                    </div>
-                                  )}
-                                  {activeCaseResult.message ? (
-                                    <p className={activeCasePass ? "text-app-success" : "text-app-danger"}>
-                                      {activeCaseResult.message}
-                                    </p>
-                                  ) : null}
-                                </div>
-                              ) : (
-                                <p className="text-app-muted">
-                                  아직 실행 결과가 없습니다. Run 버튼으로 해당 케이스를 실행하세요.
+                        {activeCase ? (
+                          <div className="grid gap-3 lg:grid-cols-[1fr_0.95fr]">
+                            <div className="space-y-3 rounded-2xl border border-app-border bg-app-elevated p-4">
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                                  Input
                                 </p>
-                              )}
+                                <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
+                                  {activeCase.input || "(empty)"}
+                                </MathText>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                                  Output
+                                </p>
+                                <MathText className="mt-2 block text-sm leading-7 text-app-secondary">
+                                  {activeCase.output || "(empty)"}
+                                </MathText>
+                              </div>
+                            </div>
+
+                            <div className="space-y-3 rounded-2xl border border-app-border bg-app-elevated p-4">
+                              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                                Run Result
+                              </p>
+                              <div
+                                className={`rounded-xl border p-3 text-sm ${
+                                  !activeCaseResult
+                                    ? "border-app-border bg-app-base text-app-secondary"
+                                    : activeCasePass
+                                      ? "border-app-success/30 bg-app-success/10 text-app-success"
+                                      : "border-app-danger/35 bg-app-danger/10 text-app-danger"
+                                }`}
+                              >
+                                {runningCaseIndex === selectedCaseIndex ? (
+                                  <p className="text-app-warn">
+                                    실행 요청 중입니다...
+                                  </p>
+                                ) : activeCaseResult ? (
+                                  <div className="space-y-2">
+                                    <p
+                                      className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${
+                                        activeCasePass
+                                          ? "bg-app-success/15 text-app-success"
+                                          : "bg-app-danger/15 text-app-danger"
+                                      }`}
+                                    >
+                                      {activeCasePass
+                                        ? "PASS"
+                                        : activeCaseWrongAnswer
+                                          ? "WRONG ANSWER"
+                                          : normalizeVerdict(
+                                              activeCaseResult.verdict,
+                                            )}
+                                    </p>
+                                    {activeCaseResult.stderr ? (
+                                      <div className="rounded-lg border border-app-danger/35 bg-app-base/80 p-2">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-danger">
+                                          Error
+                                        </p>
+                                        <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-danger">
+                                          {activeCaseResult.stderr}
+                                        </pre>
+                                      </div>
+                                    ) : (
+                                      <div className="grid gap-2">
+                                        <div className="rounded-lg border border-app-border bg-app-base/80 p-2">
+                                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-dim">
+                                            Output
+                                          </p>
+                                          <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
+                                            {activeCaseResult.output ??
+                                              "(empty)"}
+                                          </pre>
+                                        </div>
+                                        <div className="rounded-lg border border-app-border bg-app-base/80 p-2">
+                                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-dim">
+                                            Expected
+                                          </p>
+                                          <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
+                                            {activeCaseResult.expected ??
+                                              "(empty)"}
+                                          </pre>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {activeCaseResult.message ? (
+                                      <p
+                                        className={
+                                          activeCasePass
+                                            ? "text-app-success"
+                                            : "text-app-danger"
+                                        }
+                                      >
+                                        {activeCaseResult.message}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                ) : (
+                                  <p className="text-app-muted">
+                                    아직 실행 결과가 없습니다. Run 버튼으로 해당
+                                    케이스를 실행하세요.
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ) : null}
+                        ) : null}
                       </>
                     ) : (
                       <div className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm text-app-muted">
@@ -1460,8 +1672,16 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                   <div className="mt-3 flex flex-wrap gap-2">
                     <StatusPill variant="dark">{problem.difficulty}</StatusPill>
                     <StatusPill variant="dark">오프라인 솔로</StatusPill>
+                    <StatusPill variant="dark">
+                      {problem.language?.toUpperCase()}
+                    </StatusPill>
                   </div>
+                  <ContentLanguageToggle
+                    contentLanguage={contentLanguage}
+                    onChange={handleContentLanguageChange}
+                  />
                 </div>
+
                 <DefinitionGrid
                   compact
                   variant="dark"
@@ -1470,6 +1690,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                     { label: "memoryLimitMb", value: problem.memoryLimitMb },
                   ]}
                 />
+
                 <div className="space-y-4 rounded-2xl border border-app-border bg-app-elevated p-4">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
@@ -1497,49 +1718,57 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                   </div>
                 </div>
               </>
-            ) : (
-              submitHasResult ? (
-                <div className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
-                    Submit Result
+            ) : submitHasResult ? (
+              <div
+                className={`space-y-4 rounded-2xl border p-4 ${submitCardClass}`}
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                  Submit Result
+                </p>
+                <div className="flex flex-wrap items-start gap-3">
+                  <p
+                    className={`text-2xl font-semibold ${submitHeadlineClass}`}
+                  >
+                    {submitHeadline}
                   </p>
-                  <div className="flex flex-wrap items-start gap-3">
-                    <p className={`text-2xl font-semibold ${submitHeadlineClass}`}>
-                      {submitHeadline}
+                  {submitProgressText ? (
+                    <p className="pt-1 text-sm text-app-muted">
+                      {submitProgressText}
                     </p>
-                    {submitProgressText ? (
-                      <p className="pt-1 text-sm text-app-muted">{submitProgressText}</p>
-                    ) : null}
-                    <div className="ml-auto flex flex-col items-end gap-1 text-right">
-                      {submitCode ? (
-                        <span className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${submitBadgeClass}`}>
-                          {submitCode}
-                        </span>
-                      ) : null}
-                      <p className="text-xs text-app-muted">language: {language}</p>
-                    </div>
-                  </div>
-
-                  {submitState.message ? (
-                    <div className="rounded-lg border border-app-border bg-app-base/80 px-3 py-2 text-sm text-app-secondary">
-                      {submitState.message}
-                    </div>
                   ) : null}
-
-                  <div className="rounded-xl border border-app-border bg-app-base/80 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
-                      Current Submission
+                  <div className="ml-auto flex flex-col items-end gap-1 text-right">
+                    {submitCode ? (
+                      <span
+                        className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide ${submitBadgeClass}`}
+                      >
+                        {submitCode}
+                      </span>
+                    ) : null}
+                    <p className="text-xs text-app-muted">
+                      language: {language}
                     </p>
-                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
-                      {code}
-                    </pre>
                   </div>
                 </div>
-              ) : (
-                <div className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm text-app-muted">
-                  아직 제출 결과가 없습니다.
+
+                {submitState.message ? (
+                  <div className="rounded-lg border border-app-border bg-app-base/80 px-3 py-2 text-sm text-app-secondary">
+                    {submitState.message}
+                  </div>
+                ) : null}
+
+                <div className="rounded-xl border border-app-border bg-app-base/80 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                    Current Submission
+                  </p>
+                  <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-primary">
+                    {code}
+                  </pre>
                 </div>
-              )
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-app-border bg-app-elevated px-4 py-3 text-sm text-app-muted">
+                아직 제출 결과가 없습니다.
+              </div>
             )}
           </div>
         </Panel>
@@ -1547,7 +1776,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
         <SoloCodeEditor
           languages={languages}
           language={language}
-          onLanguageChange={(nextLanguage) => handleLanguageChange(nextLanguage)}
+          onLanguageChange={handleEditorLanguageChange}
           value={code}
           onChange={setCode}
           onRun={() => {
@@ -1575,52 +1804,57 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                 <div className="flex items-center gap-3">
                   <div className="min-w-0 flex-1 overflow-x-auto pb-1">
                     <div className="flex w-max gap-2 pr-1">
-                    {sampleCases.map((_, index) => {
-                      const caseResult = caseRunResults[index];
-                      const badgeState = getCaseBadgeState(caseResult);
-                      const isSelected = selectedCaseIndex === index;
-                      const idleClass = "border-app-border bg-app-elevated text-app-secondary hover:bg-app-elevated";
-                      const passClass = "border-app-success/30 bg-app-success/10 text-app-success hover:bg-app-success/15";
-                      const failClass = "border-app-danger/35 bg-app-danger/10 text-app-danger hover:bg-app-danger/15";
-                      const pendingClass = "border-app-warn/30 bg-app-warn/10 text-app-warn hover:bg-app-warn/15";
+                      {sampleCases.map((_, index) => {
+                        const caseResult = caseRunResults[index];
+                        const badgeState = getCaseBadgeState(caseResult);
+                        const isSelected = selectedCaseIndex === index;
+                        const idleClass =
+                          "border-app-border bg-app-elevated text-app-secondary hover:bg-app-elevated";
+                        const passClass =
+                          "border-app-success/30 bg-app-success/10 text-app-success hover:bg-app-success/15";
+                        const failClass =
+                          "border-app-danger/35 bg-app-danger/10 text-app-danger hover:bg-app-danger/15";
+                        const pendingClass =
+                          "border-app-warn/30 bg-app-warn/10 text-app-warn hover:bg-app-warn/15";
 
-                      const colorClass = isSelected
-                        ? "border-app-border-strong bg-app-elevated text-app-primary"
-                        : badgeState?.tone === "pass"
-                          ? passClass
-                          : badgeState?.tone === "fail"
-                            ? failClass
-                            : badgeState?.tone === "pending"
-                              ? pendingClass
-                              : idleClass;
+                        const colorClass = isSelected
+                          ? "border-app-border-strong bg-app-elevated text-app-primary"
+                          : badgeState?.tone === "pass"
+                            ? passClass
+                            : badgeState?.tone === "fail"
+                              ? failClass
+                              : badgeState?.tone === "pending"
+                                ? pendingClass
+                                : idleClass;
 
-                      return (
-                        <button
-                          key={`case-tab-mobile-${index}`}
-                          type="button"
-                          onClick={() => setSelectedCaseIndex(index)}
-                          className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${colorClass}`}
-                        >
-                          <span>Case {index + 1}</span>
-                          {badgeState ? (
-                            <span
-                              className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${
-                                badgeState.tone === "pass"
-                                  ? "bg-app-success/15 text-app-success"
-                                  : badgeState.tone === "fail"
-                                    ? "bg-app-danger/15 text-app-danger"
-                                    : "bg-app-warn/15 text-app-warn"
-                              }`}
-                            >
-                              {badgeState.label}
-                            </span>
-                          ) : null}
-                        </button>
-                      );
-                    })}
+                        return (
+                          <button
+                            key={`case-tab-mobile-${index}`}
+                            type="button"
+                            onClick={() => setSelectedCaseIndex(index)}
+                            className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${colorClass}`}
+                          >
+                            <span>Case {index + 1}</span>
+                            {badgeState ? (
+                              <span
+                                className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${
+                                  badgeState.tone === "pass"
+                                    ? "bg-app-success/15 text-app-success"
+                                    : badgeState.tone === "fail"
+                                      ? "bg-app-danger/15 text-app-danger"
+                                      : "bg-app-warn/15 text-app-warn"
+                                }`}
+                              >
+                                {badgeState.label}
+                              </span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
+
                 {activeCase ? (
                   <div className="grid gap-3">
                     <div className="space-y-3 rounded-2xl border border-app-border bg-app-elevated p-4">
@@ -1641,6 +1875,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                         </MathText>
                       </div>
                     </div>
+
                     <div className="space-y-3 rounded-2xl border border-app-border bg-app-elevated p-4">
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                         Run Result
@@ -1671,6 +1906,7 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                                   ? "WRONG ANSWER"
                                   : normalizeVerdict(activeCaseResult.verdict)}
                             </p>
+
                             {activeCaseResult.stderr ? (
                               <div className="rounded-lg border border-app-danger/35 bg-app-base/80 p-2">
                                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-danger">
@@ -1700,15 +1936,23 @@ export default function ProblemSoloScreen({ problemId }: { problemId: string }) 
                                 </div>
                               </div>
                             )}
+
                             {activeCaseResult.message ? (
-                              <p className={activeCasePass ? "text-app-success" : "text-app-danger"}>
+                              <p
+                                className={
+                                  activeCasePass
+                                    ? "text-app-success"
+                                    : "text-app-danger"
+                                }
+                              >
                                 {activeCaseResult.message}
                               </p>
                             ) : null}
                           </div>
                         ) : (
                           <p className="text-app-muted">
-                            아직 실행 결과가 없습니다. Run 버튼으로 해당 케이스를 실행하세요.
+                            아직 실행 결과가 없습니다. Run 버튼으로 해당
+                            케이스를 실행하세요.
                           </p>
                         )}
                       </div>
