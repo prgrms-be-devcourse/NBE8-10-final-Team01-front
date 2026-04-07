@@ -1,14 +1,6 @@
 import type { NextConfig } from "next";
 
-const DEFAULT_BACKEND_BASE_URL = "http://localhost:8080";
-
-function normalizeBackendBaseUrl(url: string) {
-  return url.trim().replace(/\/+$/, "");
-}
-
-const BACKEND_BASE_URL = normalizeBackendBaseUrl(
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_BACKEND_BASE_URL,
-);
+const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 
 const nextConfig: NextConfig = {
   async rewrites() {
