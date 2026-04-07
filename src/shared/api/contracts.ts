@@ -38,6 +38,68 @@ export interface AuthMutationResponse extends SessionResponse {
   message: string;
 }
 
+export interface MyInfoResponse {
+  memberId: number;
+  nickname: string;
+  email: string;
+  score: number;
+  tier: string;
+  role: string;
+  battleRating?: number | null;
+  hardBattleRating?: number | null;
+  firstSolveScore?: number | null;
+  tierScore?: number | null;
+  battleMatchCount?: number | null;
+  firstSolvedProblemCount?: number | null;
+  solved1400Plus?: number | null;
+  solved1700Plus?: number | null;
+  solved2000Plus?: number | null;
+  solved2300Plus?: number | null;
+  recentTop2Rate?: number | null;
+}
+
+export type MyInfoApiResponse = RsData<MyInfoResponse | null>;
+
+export interface RatingRequirementProgress {
+  key: string;
+  label: string;
+  comparison: "AT_LEAST" | "AT_MOST";
+  current: number;
+  required: number;
+  remaining: number;
+  satisfied: boolean;
+}
+
+export interface NextTierProgress {
+  tier: string;
+  eligibleNow: boolean;
+  message: string;
+  seatRank?: number | null;
+  requirements: RatingRequirementProgress[];
+}
+
+export interface CurrentTierProgress {
+  displayTier: string;
+  tier: string;
+  battleRating: number;
+  hardBattleRating: number;
+  activityPoint: number;
+  battleMatchCount: number;
+  firstSolvedProblemCount: number;
+  solved1400Plus: number;
+  solved1700Plus: number;
+  solved2000Plus: number;
+  solved2300Plus: number;
+  recentTop2Ratio: number;
+}
+
+export interface RatingProgressResponse {
+  current: CurrentTierProgress;
+  next: NextTierProgress | null;
+}
+
+export type RatingProgressApiResponse = RsData<RatingProgressResponse | null>;
+
 export interface QueueJoinRequest {
   category: string;
   difficulty: Difficulty;

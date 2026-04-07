@@ -21,8 +21,14 @@ interface CookieStore {
 
 const DEFAULT_BACKEND_BASE_URL = "http://localhost:8080";
 
+function normalizeBackendBaseUrl(url: string) {
+  return url.trim().replace(/\/+$/, "");
+}
+
 export function getBackendBaseUrl() {
-  return process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_BACKEND_BASE_URL;
+  return normalizeBackendBaseUrl(
+    process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_BACKEND_BASE_URL,
+  );
 }
 
 export function buildBackendUrl(
