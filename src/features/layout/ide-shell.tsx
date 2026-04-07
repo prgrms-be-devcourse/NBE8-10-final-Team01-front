@@ -2,12 +2,16 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Client } from "@stomp/stompjs";
+import SockJS from "sockjs-client";
 
 import type {
+  BattleResultWsMessage,
   MyBattleResultItem,
   MyBattleResultsResponse,
   RoomResponse,
   SessionResponse,
+  UncheckedBattleResult,
 } from "@/shared/api/contracts";
 
 import ProfilePane from "@/features/home/components/profile-pane";
@@ -265,6 +269,79 @@ export default function IdeShell({
       active = false;
     };
   }, [refreshSession, session.authenticated]);
+
+  // 로그인 시 미확인 배틀 결과 조회 → 있으면 결과 화면으로 이동
+  useEffect(() => {
+    if (!session.authenticated) return;
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/battle/result/unchecked", {
+          cache: "no-store",
+          credentials: "include",
+        });
+
+        if (!response.ok) return;
+
+        const result = (await response.json()) as UncheckedBattleResult | null;
+        if (result?.roomId) {
+          router.push(`/battle/results/${result.roomId}`);
+        }
+      } catch {
+        // 미확인 결과 조회 실패는 무시
+      }
+    })();
+  }, [router, session.authenticated]);
+
+  // 전역 WebSocket: /topic/user/{myId}/battle 구독 (배틀 결과 실시간 수신)
+  useEffect(() => {
+    if (!session.authenticated || !session.member) return;
+
+    const myId = session.member.memberId;
+    const client = new Client({
+      webSocketFactory: () =>
+        new SockJS(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/ws`),
+      reconnectDelay: 3000,
+      beforeConnect: async () => {
+        client.connectHeaders = {};
+        try {
+          const res = await fetch("/api/v1/ws/token", { method: "POST" });
+          if (res.ok) {
+            const data = (await res.json()) as { token: string };
+            client.connectHeaders = { "X-WS-Token": data.token };
+          }
+        } catch {
+          // 쿠키 기반 인증으로 폴백
+        }
+      },
+      onConnect: () => {
+        client.subscribe(`/topic/user/${myId}/battle`, (frame) => {
+          let payload: unknown;
+          try {
+            payload = JSON.parse(frame.body) as unknown;
+          } catch {
+            return;
+          }
+
+          if (
+            typeof payload === "object" &&
+            payload !== null &&
+            "type" in payload &&
+            (payload as { type: unknown }).type === "BATTLE_RESULT"
+          ) {
+            const msg = payload as BattleResultWsMessage;
+            router.push(`/battle/results/${msg.roomId}`);
+          }
+        });
+      },
+    });
+
+    client.activate();
+
+    return () => {
+      void client.deactivate();
+    };
+  }, [router, session.authenticated, session.member]);
 
   async function handleLogout() {
     setIsLoggingOut(true);

@@ -194,7 +194,7 @@ export type MatchingWsMessage =
 export interface ParticipantInfo {
   userId: number;
   nickname: string;
-  status: "READY" | "PLAYING" | "EXIT" | "ABANDONED";
+  status: "READY" | "PLAYING" | "SOLVED" | "ABANDONED" | "TIMEOUT" | "QUIT";
 }
 
 export interface RoomResponse {
@@ -403,4 +403,18 @@ export interface RoomListResponse {
   problemTitle: string;
   currentPlayers: number;
   maxPlayers: number;
+}
+
+export interface BattleResultWsMessage {
+  type: "BATTLE_RESULT";
+  roomId: number;
+  rank: number;
+  scoreDelta: number;
+}
+
+export interface UncheckedBattleResult {
+  roomId: number;
+  rank: number;
+  scoreDelta: number;
+  problemTitle: string;
 }

@@ -1,7 +1,7 @@
 export interface ParticipantInfo {
   userId: number;
   nickname: string;
-  status: "READY" | "PLAYING" | "EXIT";
+  status: "READY" | "PLAYING" | "SOLVED";
 }
 
 export interface SpectatorCodePanel {
