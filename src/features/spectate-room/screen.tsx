@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 
 import type {
   ApiErrorResponse,
+  BattleFinishedWsMessage,
+  CodeSyncWsMessage,
   CodeUpdateWsMessage,
   ProblemDetailResponse,
   RoomResponse,
@@ -14,6 +17,7 @@ import type {
 import { useAppSession } from "@/features/layout/session-context";
 import {
   CodeWindow,
+  ConfirmDialog,
   MetricCard,
   MetricGrid,
   PageHero,
@@ -24,15 +28,19 @@ import {
 import { getSpectateRoom } from "./data";
 
 export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
+  const router = useRouter();
   const { session, sessionLoaded, refreshSession } = useAppSession();
   const [room, setRoom] = useState<RoomResponse | null>(null);
   const [problem, setProblem] = useState<ProblemDetailResponse | null>(null);
   const [message, setMessage] = useState("관전 정보를 불러오는 중입니다.");
   const [error, setError] = useState<string | null>(null);
   const [requiresLogin, setRequiresLogin] = useState(false);
+  const [battleFinished, setBattleFinished] = useState(false);
   const [codeByUserId, setCodeByUserId] = useState<Record<number, string>>({});
   const [lastUpdatedByUserId, setLastUpdatedByUserId] = useState<Record<number, string>>({});
   const stompClientRef = useRef<Client | null>(null);
+  const participantsRef = useRef<RoomResponse["participants"]>([]);
+  const roomStatusRef = useRef<RoomResponse["status"] | null>(null);
 
   // 세션 및 방 정보 로드
   useEffect(() => {
@@ -96,6 +104,8 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
         return;
       }
       setRoom(nextRoom);
+      participantsRef.current = nextRoom.participants;
+      roomStatusRef.current = nextRoom.status;
 
       const problemResponse = await fetch(`/api/problems/${nextRoom.problemId}`, {
         cache: "no-store",
@@ -143,6 +153,23 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
         }
       },
       onConnect: () => {
+        client.subscribe(`/topic/room/${roomId}`, (frame) => {
+          let payload: unknown;
+          try {
+            payload = JSON.parse(frame.body) as unknown;
+          } catch {
+            return;
+          }
+          if (
+            typeof payload === "object" &&
+            payload !== null &&
+            "type" in payload &&
+            (payload as { type: unknown }).type === "BATTLE_FINISHED"
+          ) {
+            setBattleFinished(true);
+          }
+        });
+
         client.subscribe(`/topic/room/${roomId}/spectate`, (frame) => {
           let payload: unknown;
           try {
@@ -160,13 +187,26 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
             return;
           }
 
-          if ((payload as { type: unknown }).type === "CODE_UPDATE") {
-            const msg = payload as CodeUpdateWsMessage;
+          const type = (payload as { type: unknown }).type;
+          if (type === "CODE_UPDATE" || type === "CODE_SYNC") {
+            const msg = payload as CodeUpdateWsMessage | CodeSyncWsMessage;
+            if (!msg.code) return;
             const now = new Date().toLocaleTimeString("ko-KR");
             setCodeByUserId((prev) => ({ ...prev, [msg.userId]: msg.code }));
             setLastUpdatedByUserId((prev) => ({ ...prev, [msg.userId]: now }));
           }
         });
+
+        // 구독 직후 모든 참여자의 최신 코드 동기화 요청 (방이 종료된 경우 코드가 삭제됐으므로 스킵)
+        if (roomStatusRef.current !== "FINISHED") {
+          for (const participant of participantsRef.current) {
+            client.publish({
+              destination: `/app/room/${roomId}/code/sync`,
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ targetUserId: participant.userId }),
+            });
+          }
+        }
       },
     });
 
@@ -229,6 +269,15 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
 
   return (
     <div className="space-y-8">
+      <ConfirmDialog
+        open={battleFinished}
+        title="배틀이 종료되었습니다"
+        description="참여자들의 최종 코드를 확인하거나 관전 목록으로 돌아갈 수 있습니다."
+        confirmLabel="관전 목록으로"
+        cancelLabel="계속 보기"
+        onConfirm={() => router.push("/spectate")}
+        onCancel={() => setBattleFinished(false)}
+      />
       <PageHero
         eyebrow="Spectate Room"
         title={`관전 Room ${roomId} — ${problemTitle}`}

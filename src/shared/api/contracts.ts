@@ -276,6 +276,16 @@ export interface CodeUpdateWsMessage {
   code: string;
 }
 
+export interface CodeSyncWsMessage {
+  type: "CODE_SYNC";
+  userId: number;
+  code: string;
+}
+
+export interface BattleFinishedWsMessage {
+  type: "BATTLE_FINISHED";
+}
+
 export interface ParticipantDoneWsMessage {
   type: "PARTICIPANT_DONE";
   userId: number;
