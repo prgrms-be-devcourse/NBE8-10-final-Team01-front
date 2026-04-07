@@ -281,6 +281,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   const hasAttemptedJoinRef = useRef(false);
   const joinRequestInFlightRef = useRef(false);
   const lastRejoinAttemptAtRef = useRef(0);
+  const roomRef = useRef<RoomResponse | null>(null);
   const stompClientRef = useRef<Client | null>(null);
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
   const rightColumnRef = useRef<HTMLDivElement | null>(null);
@@ -402,6 +403,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
           const fallbackProblem = getProblemDetail(fallbackRoom.problemId);
           const nextLanguage = resolveDefaultLanguage(fallbackProblem, submitTemplate.language);
           const nextStarterCode = resolveStarterCode(fallbackProblem, nextLanguage);
+          roomRef.current = fallbackRoom;
           setRoom(fallbackRoom);
           setProblem(fallbackProblem);
           setLanguage(nextLanguage);
@@ -428,6 +430,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
         return;
       }
 
+      roomRef.current = nextRoom;
       setRoom(nextRoom);
 
       const problemResponse = await fetch(`/api/problems/${nextRoom.problemId}`, {
@@ -563,7 +566,9 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
         });
 
         if (refreshed.ok) {
-          setRoom((await refreshed.json()) as RoomResponse);
+          const refreshedRoom = (await refreshed.json()) as RoomResponse;
+          roomRef.current = refreshedRoom;
+          setRoom(refreshedRoom);
         }
 
         const stateResponse = await fetch(`/api/battle/rooms/${roomId}/state`, {
@@ -606,6 +611,15 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
         }
       },
       onConnect: () => {
+        // 재연결 시 ABANDONED 상태면 grace period 취소를 위해 join 호출
+        const currentRoom = roomRef.current;
+        const me = currentRoom?.participants.find(
+          (p) => p.userId === session.member?.memberId,
+        );
+        if (currentRoom?.status === "PLAYING" && me?.status === "ABANDONED") {
+          void fetch(`/api/battle/rooms/${roomId}/join`, { method: "POST" });
+        }
+
         client.subscribe(`/topic/room/${roomId}`, (message) => {
           let payload: unknown;
 
@@ -626,6 +640,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
               .then((res) => (res.ok ? res.json() : null))
               .then((data: RoomResponse | null) => {
                 if (data) {
+                  roomRef.current = data;
                   setRoom(data);
                 }
               });
