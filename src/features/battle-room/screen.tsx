@@ -510,7 +510,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
       !hasAttemptedJoinRef.current;
     const shouldRejoinFromPlaying =
       room.status === "PLAYING" &&
-      (participant?.status === "ABANDONED" || participant?.status === "EXIT");
+      (participant?.status === "ABANDONED" || participant?.status === "SOLVED");
 
     if (!shouldJoinFromWaiting && !shouldRejoinFromPlaying) {
       return;

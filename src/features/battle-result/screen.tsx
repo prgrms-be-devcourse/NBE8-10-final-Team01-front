@@ -57,6 +57,12 @@ export default function BattleResultScreen({ roomId }: { roomId: string }) {
       setResult((await response.json()) as BattleResultResponse);
       setSource("api");
       setMessage("실제 API 기반 결과를 표시합니다.");
+
+      // 미확인 결과 확인 처리 (다음 접속 시 결과 화면으로 재유도 방지)
+      await fetch(`/api/battle/result/${roomId}/check`, {
+        method: "POST",
+        credentials: "include",
+      }).catch(() => undefined);
     })();
   }, [roomId]);
 
