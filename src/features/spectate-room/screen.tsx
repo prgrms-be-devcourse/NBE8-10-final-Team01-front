@@ -129,6 +129,20 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
     };
   }, [refreshSession, roomId, session.authenticated, sessionLoaded]);
 
+  // room이 로드됐을 때 WebSocket이 이미 연결된 경우 sync 요청 (race condition 보완)
+  useEffect(() => {
+    if (!room || !stompClientRef.current?.connected) return;
+    if (roomStatusRef.current === "FINISHED") return;
+
+    for (const participant of room.participants) {
+      stompClientRef.current.publish({
+        destination: `/app/room/${roomId}/code/sync`,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ targetUserId: participant.userId }),
+      });
+    }
+  }, [room, roomId]);
+
   // WebSocket: /topic/room/{roomId}/spectate 구독
   useEffect(() => {
     if (!session.authenticated) return;
