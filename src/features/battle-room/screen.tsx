@@ -447,7 +447,13 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
             return;
           }
           const fallbackProblem = getProblemDetail(fallbackRoom.problemId);
-          const nextLanguage = resolveDefaultLanguage(fallbackProblem, submitTemplate.language);
+          const preferredLanguage = readPreferredEditorLanguage();
+          const supportedLanguages = fallbackProblem?.supportedLanguages ?? [];
+          const nextLanguage =
+            preferredLanguage &&
+            (supportedLanguages.length === 0 || supportedLanguages.includes(preferredLanguage))
+              ? preferredLanguage
+              : resolveDefaultLanguage(fallbackProblem, submitTemplate.language);
           const nextStarterCode = resolveStarterCode(fallbackProblem, nextLanguage);
           roomRef.current = fallbackRoom;
           setRoom(fallbackRoom);
@@ -510,22 +516,58 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                 defaultLanguage: nextProblem.defaultLanguage ?? fallbackProblem.defaultLanguage,
               }
             : nextProblem;
-        const nextLanguage = resolveDefaultLanguage(mergedProblem, submitTemplate.language);
+        const preferredLanguage = readPreferredEditorLanguage();
+        const supportedLanguages = mergedProblem?.supportedLanguages ?? [];
+        const nextLanguage =
+          preferredLanguage &&
+          (supportedLanguages.length === 0 || supportedLanguages.includes(preferredLanguage))
+            ? preferredLanguage
+            : resolveDefaultLanguage(mergedProblem, submitTemplate.language);
         const nextStarterCode = resolveStarterCode(mergedProblem, nextLanguage);
+
+        let redisCode: string | null = null;
+        const stateRes = await fetch(`/api/battle/rooms/${roomId}/state`, { cache: "no-store" });
+        if (active && stateRes.ok) {
+          const stateData = (await stateRes.json()) as BattleRoomStateResponse;
+          if (typeof stateData.myCode === "string" && stateData.myCode.length > 0) {
+            redisCode = stateData.myCode;
+          }
+        }
+
+        if (!active) return;
+
         setProblem(mergedProblem);
         setLanguage(nextLanguage);
-        setCode(nextStarterCode);
+        setCode(redisCode ?? nextStarterCode);
         setMessage("");
       } else {
         if (!active) {
           return;
         }
         const fallbackProblem = getProblemDetail(nextRoom.problemId);
-        const nextLanguage = resolveDefaultLanguage(fallbackProblem, submitTemplate.language);
+        const preferredLanguage = readPreferredEditorLanguage();
+        const supportedLanguages = fallbackProblem?.supportedLanguages ?? [];
+        const nextLanguage =
+          preferredLanguage &&
+          (supportedLanguages.length === 0 || supportedLanguages.includes(preferredLanguage))
+            ? preferredLanguage
+            : resolveDefaultLanguage(fallbackProblem, submitTemplate.language);
         const nextStarterCode = resolveStarterCode(fallbackProblem, nextLanguage);
+
+        let redisCode: string | null = null;
+        const stateRes = await fetch(`/api/battle/rooms/${roomId}/state`, { cache: "no-store" });
+        if (active && stateRes.ok) {
+          const stateData = (await stateRes.json()) as BattleRoomStateResponse;
+          if (typeof stateData.myCode === "string" && stateData.myCode.length > 0) {
+            redisCode = stateData.myCode;
+          }
+        }
+
+        if (!active) return;
+
         setProblem(fallbackProblem);
         setLanguage(nextLanguage);
-        setCode(nextStarterCode);
+        setCode(redisCode ?? nextStarterCode);
         setMessage("문제 상세 조회에 실패해 샘플 설명을 함께 표시합니다.");
       }
     })();
