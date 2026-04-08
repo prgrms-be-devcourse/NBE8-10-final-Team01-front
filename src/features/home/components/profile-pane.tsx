@@ -110,6 +110,7 @@ interface ProfilePaneProps {
     }>;
     myStatus: string | null;
     myUserId: number | null;
+    isJoining: boolean;
   } | null;
   previewPlayedCount: number;
   previewSolvedCount: number;
@@ -201,7 +202,7 @@ export default function ProfilePane({
                   <div className="rounded border border-app-border bg-app-base px-2 py-1.5">
                     <p className="text-[10px] text-app-dim">내 상태</p>
                     <p className="text-sm font-semibold text-app-primary">
-                      {battleSidebarState.myStatus ?? "-"}
+                      {battleSidebarState.isJoining ? "참가 중" : (battleSidebarState.myStatus ?? "-")}
                     </p>
                   </div>
                 </div>
@@ -225,8 +226,8 @@ export default function ProfilePane({
                             </span>
                           ) : null}
                         </div>
-                        <StatusPill tone={participantTone(participant.status)}>
-                          {participant.status}
+                        <StatusPill tone={participantTone(battleSidebarState.isJoining && participant.status === "ABANDONED" ? "PLAYING" : participant.status)}>
+                          {battleSidebarState.isJoining && participant.status === "ABANDONED" ? "PLAYING" : participant.status}
                         </StatusPill>
                       </div>
                     );
