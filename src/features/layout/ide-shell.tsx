@@ -6,6 +6,7 @@ import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 
 import type {
+  BattleResultWsMessage,
   MyBattleResultItem,
   MyBattleResultsResponse,
   RoomResponse,
@@ -19,6 +20,15 @@ import QuickMenuPane, {
 import SessionContext from "@/features/layout/session-context";
 
 const PREVIEW_RESULTS_SIZE = 5;
+
+export interface NotificationItem {
+  id: string;
+  type: "BATTLE_RESULT";
+  roomId: number;
+  message: string;
+  timestamp: number;
+  read: boolean;
+}
 
 interface BattleSidebarState {
   status: RoomResponse["status"];
@@ -92,6 +102,8 @@ export default function IdeShell({
   const refreshInFlightRef = useRef<Promise<SessionResponse> | null>(null);
   const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
   const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(true);
+  const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [session, setSession] = useState<SessionResponse>(initialSession);
   const [sessionLoaded, setSessionLoaded] = useState(true);
   const [recentResults, setRecentResults] = useState<MyBattleResultItem[]>([]);
@@ -162,32 +174,36 @@ export default function IdeShell({
     let active = true;
 
     const poll = async () => {
-      const response = await fetch(`/api/battle/rooms/${targetRoomId}`, {
-        cache: "no-store",
-        credentials: "include",
-      });
+      try {
+        const response = await fetch(`/api/battle/rooms/${targetRoomId}`, {
+          cache: "no-store",
+          credentials: "include",
+        });
 
-      if (!active) {
-        return;
+        if (!active) {
+          return;
+        }
+
+        if (!response.ok) {
+          setBattleSidebarState(null);
+          return;
+        }
+
+        const payload = (await response.json()) as RoomResponse;
+        const me =
+          payload.participants.find((item) => item.userId === memberId) ?? null;
+
+        setBattleSidebarState({
+          status: payload.status,
+          remainingTime: formatRemainingTime(payload.timerEnd),
+          participants: payload.participants,
+          myStatus: me?.status ?? null,
+          myUserId: memberId,
+          isJoining: me?.status === "ABANDONED",
+        });
+      } catch {
+        // 네비게이션 중 fetch 취소 등 무시
       }
-
-      if (!response.ok) {
-        setBattleSidebarState(null);
-        return;
-      }
-
-      const payload = (await response.json()) as RoomResponse;
-      const me =
-        payload.participants.find((item) => item.userId === memberId) ?? null;
-
-      setBattleSidebarState({
-        status: payload.status,
-        remainingTime: formatRemainingTime(payload.timerEnd),
-        participants: payload.participants,
-        myStatus: me?.status ?? null,
-        myUserId: memberId,
-        isJoining: me?.status === "ABANDONED",
-      });
     };
 
     void poll();
@@ -265,7 +281,6 @@ export default function IdeShell({
     };
   }, [refreshSession, session.authenticated]);
 
-
   // 전역 WebSocket: /topic/user/{myId}/battle 구독 (배틀 결과 실시간 수신)
   useEffect(() => {
     if (!session.authenticated || !session.member) return;
@@ -298,7 +313,25 @@ export default function IdeShell({
             return;
           }
 
-          // TODO: 배틀 종료 알림 처리 예정
+          if (
+            typeof payload === "object" &&
+            payload !== null &&
+            "type" in payload &&
+            (payload as { type: unknown }).type === "BATTLE_RESULT"
+          ) {
+            const msg = payload as BattleResultWsMessage;
+            setNotifications((prev) => [
+              {
+                id: crypto.randomUUID(),
+                type: "BATTLE_RESULT",
+                roomId: msg.roomId,
+                message: `Room ${msg.roomId} 배틀이 종료되었습니다.`,
+                timestamp: Date.now(),
+                read: false,
+              },
+              ...prev,
+            ]);
+          }
         });
       },
     });
@@ -308,7 +341,13 @@ export default function IdeShell({
     return () => {
       void client.deactivate();
     };
-  }, [router, session.authenticated, session.member]);
+  }, [session.authenticated, session.member]);
+
+  const handleMarkNotificationRead = useCallback((id: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
+    );
+  }, []);
 
   async function handleLogout() {
     setIsLoggingOut(true);
@@ -340,11 +379,14 @@ export default function IdeShell({
   );
   const previewScoreDeltaLabel =
     previewScoreDelta > 0 ? `+${previewScoreDelta}` : String(previewScoreDelta);
+
+  const isPanelOpen = isProfilePanelOpen || isNotificationPanelOpen;
+
   const layoutColumnsClass = isQuickMenuOpen
-    ? isProfilePanelOpen
+    ? isPanelOpen
       ? "grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_250px] xl:grid-cols-[260px_minmax(0,1fr)_290px] 2xl:grid-cols-[290px_minmax(1200px,1fr)_320px]"
       : "grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_38px] xl:grid-cols-[260px_minmax(0,1fr)_38px] 2xl:grid-cols-[290px_minmax(1200px,1fr)_38px]"
-    : isProfilePanelOpen
+    : isPanelOpen
       ? "grid-cols-1 md:grid-cols-[48px_minmax(0,1fr)] lg:grid-cols-[48px_minmax(0,1fr)_250px] xl:grid-cols-[48px_minmax(0,1fr)_290px] 2xl:grid-cols-[48px_minmax(1200px,1fr)_320px]"
       : "grid-cols-1 md:grid-cols-[48px_minmax(0,1fr)] lg:grid-cols-[48px_minmax(0,1fr)_38px] xl:grid-cols-[48px_minmax(0,1fr)_38px] 2xl:grid-cols-[48px_minmax(1200px,1fr)_38px]";
 
@@ -443,9 +485,17 @@ export default function IdeShell({
 
           <ProfilePane
             isProfilePanelOpen={isProfilePanelOpen}
-            onToggleProfilePanel={() =>
-              setIsProfilePanelOpen((current) => !current)
-            }
+            onToggleProfilePanel={() => {
+              setIsProfilePanelOpen((current) => !current);
+              setIsNotificationPanelOpen(false);
+            }}
+            isNotificationPanelOpen={isNotificationPanelOpen}
+            onToggleNotificationPanel={() => {
+              setIsNotificationPanelOpen((current) => !current);
+              setIsProfilePanelOpen(false);
+            }}
+            notifications={notifications}
+            onMarkNotificationRead={handleMarkNotificationRead}
             session={session}
             battleSidebarState={battleSidebarState}
             previewPlayedCount={previewPlayedCount}

@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { SessionResponse } from "@/shared/api/contracts";
 import { StatusPill } from "@/shared/ui";
 import { formatRoleLabel } from "@/shared/utils/format-role-label";
+import type { NotificationItem } from "@/features/layout/ide-shell";
 
 const ideDbRailTopItems = [
   { icon: "notifications", title: "알림" },
@@ -26,7 +27,6 @@ function renderDbRailIcon(name: string) {
       return (
         <svg viewBox="0 0 16 16" fill="none" className={baseClass}>
           <path d="M8 3a3 3 0 0 0-3 3v2.2l-1 1.6h8l-1-1.6V6a3 3 0 0 0-3-3Z" stroke="currentColor" strokeWidth="1.2" />
-          <circle cx="12.2" cy="3.8" r="1.4" fill="var(--app-danger)" />
         </svg>
       );
     case "search":
@@ -99,6 +99,10 @@ function renderDbRailIcon(name: string) {
 interface ProfilePaneProps {
   isProfilePanelOpen: boolean;
   onToggleProfilePanel: () => void;
+  isNotificationPanelOpen: boolean;
+  onToggleNotificationPanel: () => void;
+  notifications: NotificationItem[];
+  onMarkNotificationRead: (id: string) => void;
   session: SessionResponse;
   battleSidebarState?: {
     status: "WAITING" | "PLAYING" | "FINISHED";
@@ -125,6 +129,10 @@ interface ProfilePaneProps {
 export default function ProfilePane({
   isProfilePanelOpen,
   onToggleProfilePanel,
+  isNotificationPanelOpen,
+  onToggleNotificationPanel,
+  notifications,
+  onMarkNotificationRead,
   session,
   battleSidebarState,
   previewPlayedCount,
@@ -136,6 +144,7 @@ export default function ProfilePane({
   isBusy,
   onLogout,
 }: ProfilePaneProps) {
+  const unreadCount = notifications.filter((n) => !n.read).length;
   const battleStatusTone =
     battleSidebarState?.status === "PLAYING"
       ? "success"
@@ -155,10 +164,58 @@ export default function ProfilePane({
     return "default" as const;
   };
 
+  const isPanelOpen = isProfilePanelOpen || isNotificationPanelOpen;
+
   return (
     <aside className="min-h-0 bg-app-elevated md:col-span-2 lg:col-span-1">
-      <div className={`grid h-full ${isProfilePanelOpen ? "grid-cols-[minmax(0,1fr)_38px]" : "grid-cols-[38px]"}`}>
-        <div className={`min-h-0 ${isProfilePanelOpen ? "block" : "hidden"}`}>
+      <div className={`grid h-full ${isPanelOpen ? "grid-cols-[minmax(0,1fr)_38px]" : "grid-cols-[38px]"}`}>
+        <div className={`min-h-0 ${isPanelOpen ? "block" : "hidden"}`}>
+          {isNotificationPanelOpen ? (
+            <>
+              <div className="flex h-12 items-center justify-between border-b border-app-border-strong/80 px-4">
+                <p className="text-sm font-semibold text-app-primary">알림</p>
+                {unreadCount > 0 && (
+                  <span className="rounded-full bg-app-danger px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    {unreadCount}
+                  </span>
+                )}
+              </div>
+              <div className="h-full overflow-y-auto p-3">
+                {notifications.length === 0 ? (
+                  <p className="text-center text-xs text-app-dim py-6">새 알림이 없습니다.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        className={`rounded-md border p-3 text-xs ${
+                          n.read
+                            ? "border-app-border bg-app-base text-app-secondary"
+                            : "border-app-accent/40 bg-app-accent/10 text-app-primary"
+                        }`}
+                      >
+                        <p className="font-medium">{n.message}</p>
+                        <p className="mt-1 text-app-dim">
+                          {new Date(n.timestamp).toLocaleTimeString("ko-KR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                        <Link
+                          href={`/battle/results/${n.roomId}`}
+                          onClick={() => onMarkNotificationRead(n.id)}
+                          className="mt-2 inline-flex h-7 items-center justify-center rounded border border-app-border bg-app-elevated px-2 text-[11px] font-medium text-app-primary transition hover:bg-app-surface"
+                        >
+                          결과 보기
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
           <div className="flex h-12 items-center justify-between border-b border-app-border-strong/80 px-4">
             <p className="text-sm font-semibold text-app-primary">프로필</p>
           </div>
@@ -311,30 +368,42 @@ export default function ProfilePane({
               )}
             </div>
           </div>
+            </>
+          )}
         </div>
 
         <div className="flex min-h-0 flex-col items-center justify-between border-l border-app-border-strong/80 bg-app-rail py-2">
           <div className="flex flex-col items-center gap-2">
-            {ideDbRailTopItems.map((item) => (
+            {ideDbRailTopItems.map((item) => {
+              const isActive =
+                (item.icon === "database" && isProfilePanelOpen) ||
+                (item.icon === "notifications" && isNotificationPanelOpen);
+              return (
               <button
                 key={item.title}
                 type="button"
                 onClick={() => {
                   if (item.icon === "database") {
                     onToggleProfilePanel();
+                  } else if (item.icon === "notifications") {
+                    onToggleNotificationPanel();
                   }
                 }}
                 title={item.title}
                 aria-label={item.title}
-                className={`h-8 w-8 rounded-md border transition ${
-                  item.icon === "database" && isProfilePanelOpen
+                className={`relative h-8 w-8 rounded-md border transition ${
+                  isActive
                     ? "border-app-accent/70 bg-app-accent text-white shadow-[0_0_0_1px_var(--app-accent-glow)]"
                     : "border-transparent text-app-muted hover:bg-app-elevated/90 hover:text-app-primary"
                 }`}
               >
                 <span className="flex items-center justify-center">{renderDbRailIcon(item.icon)}</span>
+                {item.icon === "notifications" && unreadCount > 0 && !isNotificationPanelOpen && (
+                  <span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-app-danger" />
+                )}
               </button>
-            ))}
+              );
+            })}
           </div>
           <div className="flex flex-col items-center gap-2">
             {ideDbRailBottomItems.map((item) => (
