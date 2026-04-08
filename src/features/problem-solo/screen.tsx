@@ -53,6 +53,8 @@ const SPLIT_SNAP_GAP = 4;
 const DEFAULT_LEFT_PANE_RATIO = 50;
 const DEFAULT_RIGHT_TOP_PANE_RATIO = 100;
 const SOLO_LAYOUT_STORAGE_KEY = "bracket:solo-editor-layout:v1";
+const SOLO_DRAFT_STORAGE_PREFIX = "bracket:solo-draft:v2";
+const SOLO_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TESTCASE_SHORTCUT_HINT = "⌘/Ctrl+Enter: Run · Shift+Enter: Submit";
 
 interface SoloCaseRunResult {
@@ -80,6 +82,11 @@ interface SoloSubmitState {
   message: string | null;
 }
 
+interface StoredSoloDraft {
+  code: string;
+  updatedAt: number;
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -87,6 +94,101 @@ function clamp(value: number, min: number, max: number) {
 function snapRatio(value: number, points: number[], gap: number) {
   const nearest = points.find((point) => Math.abs(value - point) <= gap);
   return nearest ?? value;
+}
+
+function buildSoloDraftStorageKey(params: {
+  memberId?: number | null;
+  problemId: string | number;
+  language: string;
+}) {
+  const userKey = params.memberId ? `user:${params.memberId}` : "guest";
+  return `${SOLO_DRAFT_STORAGE_PREFIX}:${userKey}:problem:${params.problemId}:language:${params.language}`;
+}
+
+function removeStoredDraft(params: {
+  memberId?: number | null;
+  problemId: string | number;
+  language: string;
+}) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(buildSoloDraftStorageKey(params));
+  } catch {
+    // ignore
+  }
+}
+
+function readStoredDraft(params: {
+  memberId?: number | null;
+  problemId: string | number;
+  language: string;
+}) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const storageKey = buildSoloDraftStorageKey(params);
+
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as StoredSoloDraft | null;
+
+    if (
+      !parsed ||
+      typeof parsed.code !== "string" ||
+      typeof parsed.updatedAt !== "number"
+    ) {
+      window.localStorage.removeItem(storageKey);
+      return null;
+    }
+
+    const isExpired = Date.now() - parsed.updatedAt > SOLO_DRAFT_TTL_MS;
+    if (isExpired) {
+      window.localStorage.removeItem(storageKey);
+      return null;
+    }
+
+    return parsed.code;
+  } catch {
+    try {
+      window.localStorage.removeItem(storageKey);
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+}
+
+function writeStoredDraft(params: {
+  memberId?: number | null;
+  problemId: string | number;
+  language: string;
+  code: string;
+}) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    const payload: StoredSoloDraft = {
+      code: params.code,
+      updatedAt: Date.now(),
+    };
+
+    window.localStorage.setItem(
+      buildSoloDraftStorageKey(params),
+      JSON.stringify(payload),
+    );
+  } catch {
+    // ignore
+  }
 }
 
 function readStoredLayout() {
@@ -322,16 +424,24 @@ async function readProblem(
 function ContentLanguageToggle({
   contentLanguage,
   onChange,
+  size = "normal",
 }: {
   contentLanguage: ContentLanguage;
   onChange: (next: ContentLanguage) => void;
+  size?: "normal" | "small";
 }) {
+  const isSmall = size === "small";
+
   return (
-    <div className="mt-3 flex flex-wrap gap-2">
+    <div
+      className={`flex flex-wrap items-center gap-2 ${isSmall ? "mt-0" : "mt-3"}`}
+    >
       <button
         type="button"
         onClick={() => onChange("ko")}
-        className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+        className={`rounded-md border transition font-semibold ${
+          isSmall ? "px-2 py-1 text-[11px]" : "px-3 py-1.5 text-sm"
+        } ${
           contentLanguage === "ko"
             ? "border-app-border-strong bg-app-elevated text-app-primary"
             : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
@@ -342,7 +452,9 @@ function ContentLanguageToggle({
       <button
         type="button"
         onClick={() => onChange("en")}
-        className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+        className={`rounded-md border transition font-semibold ${
+          isSmall ? "px-2 py-1 text-[11px]" : "px-3 py-1.5 text-sm"
+        } ${
           contentLanguage === "en"
             ? "border-app-border-strong bg-app-elevated text-app-primary"
             : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
@@ -466,7 +578,14 @@ export default function ProblemSoloScreen({
       }
 
       const nextLanguage = resolveDefaultEditorLanguage(nextProblem);
-      const nextStarterCode = resolveStarterCode(nextProblem, nextLanguage);
+      const memberId = session.member?.memberId;
+      const storedDraft = readStoredDraft({
+        memberId,
+        problemId: nextProblem.problemId,
+        language: nextLanguage,
+      });
+      const nextCode =
+        storedDraft ?? resolveStarterCode(nextProblem, nextLanguage);
       const hasSampleCase = (nextProblem.sampleCases?.length ?? 0) > 0;
 
       if (runTimeoutRef.current !== null) {
@@ -477,7 +596,7 @@ export default function ProblemSoloScreen({
       setProblem(nextProblem);
       setProblemError(null);
       setLanguage(nextLanguage);
-      setCode(nextStarterCode);
+      setCode(nextCode);
       setSelectedCaseIndex(hasSampleCase ? 0 : null);
       setRunningCaseIndex(null);
       setIsSubmitting(false);
@@ -490,7 +609,13 @@ export default function ProblemSoloScreen({
     return () => {
       active = false;
     };
-  }, [problemId, contentLanguage, session.authenticated, sessionLoaded]);
+  }, [
+    problemId,
+    contentLanguage,
+    session.authenticated,
+    sessionLoaded,
+    session.member?.memberId,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -522,6 +647,25 @@ export default function ProblemSoloScreen({
       }),
     );
   }, [leftPaneRatio, rightTopPaneRatio]);
+
+  useEffect(() => {
+    if (!problem) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      writeStoredDraft({
+        memberId: session.member?.memberId,
+        problemId: problem.problemId,
+        language,
+        code,
+      });
+    }, 700);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [code, language, problem, session.member?.memberId]);
 
   useEffect(() => {
     const memberId = session.member?.memberId;
@@ -637,13 +781,35 @@ export default function ProblemSoloScreen({
   }, [problem, session.authenticated, session.member?.memberId]);
 
   function handleEditorLanguageChange(nextLanguage: string) {
+    const memberId = session.member?.memberId;
+    const targetProblemId = problem?.problemId ?? problemId;
+    const storedDraft = readStoredDraft({
+      memberId,
+      problemId: targetProblemId,
+      language: nextLanguage,
+    });
+
     setLanguage(nextLanguage);
-    setCode(resolveStarterCode(problem, nextLanguage));
+    setCode(storedDraft ?? resolveStarterCode(problem, nextLanguage));
     writePreferredEditorLanguage(nextLanguage);
   }
 
   function handleContentLanguageChange(nextLanguage: ContentLanguage) {
     setContentLanguage(nextLanguage);
+  }
+
+  function handleResetDraft() {
+    if (!problem) {
+      return;
+    }
+
+    removeStoredDraft({
+      memberId: session.member?.memberId,
+      problemId: problem.problemId,
+      language,
+    });
+
+    setCode(resolveStarterCode(problem, language));
   }
 
   async function handleRunCase(caseIndex: number) {
@@ -1187,29 +1353,36 @@ export default function ProblemSoloScreen({
                 className="flex h-full min-h-0 flex-col"
               >
                 <div className="space-y-4 min-h-0 flex-1 overflow-y-auto pr-1">
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setLeftPanelTab("description")}
-                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                        leftPanelTab === "description"
-                          ? "border-app-border-strong bg-app-elevated text-app-primary"
-                          : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
-                      }`}
-                    >
-                      Description
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setLeftPanelTab("submission")}
-                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                        leftPanelTab === "submission"
-                          ? "border-app-border-strong bg-app-elevated text-app-primary"
-                          : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
-                      }`}
-                    >
-                      Submission
-                    </button>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setLeftPanelTab("description")}
+                        className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                          leftPanelTab === "description"
+                            ? "border-app-border-strong bg-app-elevated text-app-primary"
+                            : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
+                        }`}
+                      >
+                        Description
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLeftPanelTab("submission")}
+                        className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                          leftPanelTab === "submission"
+                            ? "border-app-border-strong bg-app-elevated text-app-primary"
+                            : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
+                        }`}
+                      >
+                        Submission
+                      </button>
+                    </div>
+                    <ContentLanguageToggle
+                      contentLanguage={contentLanguage}
+                      onChange={handleContentLanguageChange}
+                      size="small"
+                    />
                   </div>
 
                   {leftPanelTab === "description" ? (
@@ -1218,22 +1391,24 @@ export default function ProblemSoloScreen({
                         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
                           Solo
                         </p>
-                        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-app-primary">
-                          {problem.problemId}. {problem.title}
-                        </h1>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <StatusPill variant="dark">
-                            {problem.difficulty}
-                          </StatusPill>
-                          <StatusPill variant="dark">오프라인 솔로</StatusPill>
-                          <StatusPill variant="dark">
-                            {problem.language?.toUpperCase()}
-                          </StatusPill>
+                        <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <h1 className="text-2xl font-semibold tracking-tight text-app-primary">
+                              {problem.problemId}. {problem.title}
+                            </h1>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <StatusPill variant="dark">
+                                {problem.difficulty}
+                              </StatusPill>
+                              <StatusPill variant="dark">
+                                오프라인 솔로
+                              </StatusPill>
+                              <StatusPill variant="dark">
+                                {problem.language?.toUpperCase()}
+                              </StatusPill>
+                            </div>
+                          </div>
                         </div>
-                        <ContentLanguageToggle
-                          contentLanguage={contentLanguage}
-                          onChange={handleContentLanguageChange}
-                        />
                       </div>
 
                       <DefinitionGrid
@@ -1368,25 +1543,30 @@ export default function ProblemSoloScreen({
                   : { height: `${rightTopPaneRatio}%` }
               }
             >
-              <SoloCodeEditor
-                languages={languages}
-                language={language}
-                onLanguageChange={handleEditorLanguageChange}
-                value={code}
-                onChange={setCode}
-                onRun={() => {
-                  if (runTargetCaseIndex !== null) {
-                    void handleRunCase(runTargetCaseIndex);
-                  }
-                }}
-                onSubmit={() => void handleSubmit()}
-                runDisabled={runActionDisabled}
-                submitDisabled={isSubmitting}
-                runLabel={runActionLabel}
-                submitLabel={submitActionLabel}
-                height="100%"
-                className="h-full"
-              />
+              <div className="flex h-full min-h-0 flex-col">
+                <div className="min-h-0 flex-1">
+                  <SoloCodeEditor
+                    languages={languages}
+                    language={language}
+                    onLanguageChange={handleEditorLanguageChange}
+                    value={code}
+                    onChange={setCode}
+                    onRun={() => {
+                      if (runTargetCaseIndex !== null) {
+                        void handleRunCase(runTargetCaseIndex);
+                      }
+                    }}
+                    onSubmit={() => void handleSubmit()}
+                    onResetDraft={handleResetDraft}
+                    runDisabled={runActionDisabled}
+                    submitDisabled={isSubmitting}
+                    runLabel={runActionLabel}
+                    submitLabel={submitActionLabel}
+                    height="100%"
+                    className="h-full"
+                  />
+                </div>
+              </div>
             </div>
 
             <div
@@ -1635,51 +1815,60 @@ export default function ProblemSoloScreen({
       <div className="space-y-6 lg:hidden">
         <Panel variant="dark" title="문제 상세">
           <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setLeftPanelTab("description")}
-                className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                  leftPanelTab === "description"
-                    ? "border-app-border-strong bg-app-elevated text-app-primary"
-                    : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
-                }`}
-              >
-                Description
-              </button>
-              <button
-                type="button"
-                onClick={() => setLeftPanelTab("submission")}
-                className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                  leftPanelTab === "submission"
-                    ? "border-app-border-strong bg-app-elevated text-app-primary"
-                    : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
-                }`}
-              >
-                Submission
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setLeftPanelTab("description")}
+                  className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                    leftPanelTab === "description"
+                      ? "border-app-border-strong bg-app-elevated text-app-primary"
+                      : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
+                  }`}
+                >
+                  Description
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeftPanelTab("submission")}
+                  className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                    leftPanelTab === "submission"
+                      ? "border-app-border-strong bg-app-elevated text-app-primary"
+                      : "border-app-border bg-app-elevated text-app-muted hover:bg-app-elevated hover:text-app-primary"
+                  }`}
+                >
+                  Submission
+                </button>
+              </div>
+              <ContentLanguageToggle
+                contentLanguage={contentLanguage}
+                onChange={handleContentLanguageChange}
+                size="small"
+              />
             </div>
 
             {leftPanelTab === "description" ? (
               <>
                 <div className="rounded-2xl border border-app-border bg-app-elevated p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
-                    Solo
-                  </p>
-                  <h1 className="mt-2 text-2xl font-semibold tracking-tight text-app-primary">
-                    {problem.problemId}. {problem.title}
-                  </h1>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <StatusPill variant="dark">{problem.difficulty}</StatusPill>
-                    <StatusPill variant="dark">오프라인 솔로</StatusPill>
-                    <StatusPill variant="dark">
-                      {problem.language?.toUpperCase()}
-                    </StatusPill>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-dim">
+                        Solo
+                      </p>
+                      <h1 className="mt-2 text-2xl font-semibold tracking-tight text-app-primary">
+                        {problem.problemId}. {problem.title}
+                      </h1>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <StatusPill variant="dark">
+                          {problem.difficulty}
+                        </StatusPill>
+                        <StatusPill variant="dark">오프라인 솔로</StatusPill>
+                        <StatusPill variant="dark">
+                          {problem.language?.toUpperCase()}
+                        </StatusPill>
+                      </div>
+                    </div>
                   </div>
-                  <ContentLanguageToggle
-                    contentLanguage={contentLanguage}
-                    onChange={handleContentLanguageChange}
-                  />
                 </div>
 
                 <DefinitionGrid
@@ -1772,6 +1961,16 @@ export default function ProblemSoloScreen({
             )}
           </div>
         </Panel>
+
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleResetDraft}
+            className="rounded-lg border border-app-border bg-app-surface px-3 py-2 text-sm font-semibold text-app-secondary transition hover:bg-app-elevated hover:text-app-primary"
+          >
+            Reset Draft
+          </button>
+        </div>
 
         <SoloCodeEditor
           languages={languages}
