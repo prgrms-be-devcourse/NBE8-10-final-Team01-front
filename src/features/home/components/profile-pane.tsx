@@ -186,9 +186,11 @@ export default function ProfilePane({
                 ) : (
                   <div className="space-y-2">
                     {notifications.map((n) => (
-                      <div
+                      <Link
                         key={n.id}
-                        className={`rounded-md border p-3 text-xs ${
+                        href={`/battle/results/${n.roomId}`}
+                        onClick={() => onMarkNotificationRead(n.id)}
+                        className={`block rounded-md border p-3 text-xs transition hover:brightness-110 ${
                           n.read
                             ? "border-app-border bg-app-base text-app-secondary"
                             : "border-app-accent/40 bg-app-accent/10 text-app-primary"
@@ -201,14 +203,7 @@ export default function ProfilePane({
                             minute: "2-digit",
                           })}
                         </p>
-                        <Link
-                          href={`/battle/results/${n.roomId}`}
-                          onClick={() => onMarkNotificationRead(n.id)}
-                          className="mt-2 inline-flex h-7 items-center justify-center rounded border border-app-border bg-app-elevated px-2 text-[11px] font-medium text-app-primary transition hover:bg-app-surface"
-                        >
-                          결과 보기
-                        </Link>
-                      </div>
+                      </Link>
                     ))}
                   </div>
                 )}

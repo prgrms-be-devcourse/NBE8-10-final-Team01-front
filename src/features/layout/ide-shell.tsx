@@ -104,6 +104,8 @@ export default function IdeShell({
   const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(true);
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [toast, setToast] = useState<{ key: number; message: string } | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [session, setSession] = useState<SessionResponse>(initialSession);
   const [sessionLoaded, setSessionLoaded] = useState(true);
   const [recentResults, setRecentResults] = useState<MyBattleResultItem[]>([]);
@@ -320,17 +322,26 @@ export default function IdeShell({
             (payload as { type: unknown }).type === "BATTLE_RESULT"
           ) {
             const msg = payload as BattleResultWsMessage;
+            const notifMessage = `Room ${msg.roomId} 배틀이 종료되었습니다.`;
             setNotifications((prev) => [
               {
                 id: crypto.randomUUID(),
                 type: "BATTLE_RESULT",
                 roomId: msg.roomId,
-                message: `Room ${msg.roomId} 배틀이 종료되었습니다.`,
+                message: notifMessage,
                 timestamp: Date.now(),
                 read: false,
               },
               ...prev,
             ]);
+            if (toastTimerRef.current) {
+              clearTimeout(toastTimerRef.current);
+            }
+            setToast({ key: Date.now(), message: "참여했던 배틀이 종료되었습니다." });
+            toastTimerRef.current = setTimeout(() => {
+              setToast(null);
+              toastTimerRef.current = null;
+            }, 3000);
           }
         });
       },
@@ -462,6 +473,16 @@ export default function IdeShell({
     <SessionContext.Provider
       value={{ session, sessionLoaded, refreshSession, applySession }}
     >
+      {toast && (
+        <div
+          key={toast.key}
+          className="animate-toast-pop pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center"
+        >
+          <div className="rounded-xl border border-app-accent/40 bg-app-surface px-5 py-3 text-sm font-medium text-app-primary shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
+            {toast.message}
+          </div>
+        </div>
+      )}
       <div className="flex h-full min-h-0 flex-1 overflow-hidden bg-app-base">
         <div className={`grid h-full w-full ${layoutColumnsClass}`}>
           <QuickMenuPane
