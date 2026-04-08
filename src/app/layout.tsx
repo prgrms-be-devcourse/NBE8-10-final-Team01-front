@@ -28,8 +28,7 @@ export const metadata: Metadata = {
     default: "BRACKET {}",
     template: "%s | BRACKET {}",
   },
-  description:
-    "실제 백엔드 API와 화면 구조를 맞추는 Algo Battle 프론트엔드.",
+  description: "실제 백엔드 API와 화면 구조를 맞추는 Algo Battle 프론트엔드.",
 };
 
 export default async function RootLayout({
@@ -54,7 +53,10 @@ export default async function RootLayout({
         <div className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[image:var(--app-bg-shell-gradient)] text-app-primary">
           <header className="sticky top-0 z-20 h-[var(--app-header-h)] border-b border-app-accent/25 bg-app-header/90 text-app-primary shadow-[0_10px_24px_-18px_rgba(0,0,0,0.82)] backdrop-blur">
             <div className="mx-auto flex h-full w-full max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
-              <Link href="/" className="text-sm font-semibold tracking-tight text-app-primary">
+              <Link
+                href="/"
+                className="text-sm font-semibold tracking-tight text-app-primary"
+              >
                 BRACKET {"{}"}
               </Link>
             </div>
