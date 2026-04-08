@@ -105,7 +105,6 @@ export default function IdeShell({
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [toast, setToast] = useState<{ key: number; message: string } | null>(null);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [session, setSession] = useState<SessionResponse>(initialSession);
   const [sessionLoaded, setSessionLoaded] = useState(true);
   const [recentResults, setRecentResults] = useState<MyBattleResultItem[]>([]);
@@ -334,14 +333,7 @@ export default function IdeShell({
               },
               ...prev,
             ]);
-            if (toastTimerRef.current) {
-              clearTimeout(toastTimerRef.current);
-            }
             setToast({ key: Date.now(), message: "참여했던 배틀이 종료되었습니다." });
-            toastTimerRef.current = setTimeout(() => {
-              setToast(null);
-              toastTimerRef.current = null;
-            }, 3000);
           }
         });
       },
@@ -353,6 +345,12 @@ export default function IdeShell({
       void client.deactivate();
     };
   }, [session.authenticated, session.member]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(id);
+  }, [toast]);
 
   const handleMarkNotificationRead = useCallback((id: string) => {
     setNotifications((prev) =>
