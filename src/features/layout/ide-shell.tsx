@@ -28,6 +28,7 @@ interface BattleSidebarState {
   participants: RoomResponse["participants"];
   myStatus: string | null;
   myUserId: number | null;
+  isJoining: boolean;
 }
 
 function formatRemainingTime(timerEnd: string | null) {
@@ -187,6 +188,7 @@ export default function IdeShell({
         participants: payload.participants,
         myStatus: me?.status ?? null,
         myUserId: memberId,
+        isJoining: me?.status === "ABANDONED",
       });
     };
 

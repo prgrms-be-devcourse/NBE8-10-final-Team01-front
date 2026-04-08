@@ -25,6 +25,7 @@ import {
   writePreferredEditorLanguage,
 } from "@/shared/utils/editor-language";
 
+import BattleRoomLoading from "@/app/battle/rooms/[roomId]/loading";
 import {
   getBattleRoom,
   getProblemDetail,
@@ -1052,6 +1053,10 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
     );
   }
 
+  if (!room && !error) {
+    return <BattleRoomLoading />;
+  }
+
   if (!room) {
     return (
       <div className="space-y-8">
@@ -1063,7 +1068,7 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
         </div>
         <Panel variant="dark" title="오류" description="응답 메시지">
           <p className="text-sm leading-7 text-app-secondary">
-            {error ?? message}
+            {error}
           </p>
         </Panel>
       </div>

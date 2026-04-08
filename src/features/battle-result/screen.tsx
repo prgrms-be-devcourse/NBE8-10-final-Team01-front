@@ -17,6 +17,8 @@ import {
 import { formatDateTime } from "@/shared/utils/format-date-time";
 import { useAppSession } from "@/features/layout/session-context";
 
+import BattleResultLoading from "@/app/battle/results/[roomId]/loading";
+
 import { getBattleResult } from "./data";
 
 export default function BattleResultScreen({ roomId }: { roomId: string }) {
@@ -116,6 +118,10 @@ export default function BattleResultScreen({ roomId }: { roomId: string }) {
     );
   }
 
+  if (!result && !error) {
+    return <BattleResultLoading />;
+  }
+
   if (!result) {
     return (
       <main className="flex h-full min-h-0 flex-col border-b border-app-border/80 bg-app-base lg:border-b-0 lg:border-r">
@@ -144,7 +150,7 @@ export default function BattleResultScreen({ roomId }: { roomId: string }) {
                 <h1 className="text-xl font-semibold text-app-danger">결과를 열지 못했습니다.</h1>
                 <StatusPill tone="danger">Load failed</StatusPill>
               </div>
-              <p className="text-sm text-app-secondary">{error ?? message}</p>
+              <p className="text-sm text-app-secondary">{error}</p>
             </section>
           </div>
         </div>
