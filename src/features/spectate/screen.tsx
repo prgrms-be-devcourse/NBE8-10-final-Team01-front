@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+const SPECTATE_ACCESS_KEY = "spectate-from-hub";
+
 import type { ActiveRoomResponse, ApiErrorResponse, RoomListResponse } from "@/shared/api/contracts";
 import {
   ApiCallout,
@@ -261,10 +263,14 @@ export default function SpectateScreen() {
 
       <section className="grid gap-6 lg:grid-cols-2">
         {rooms.map((room) => (
-          <Link
+          <button
             key={room.roomId}
-            href={`/spectate/rooms/${room.roomId}`}
-            className="rounded-2xl border border-app-border bg-app-surface p-5 shadow-sm transition hover:border-app-border-strong"
+            type="button"
+            onClick={() => {
+              sessionStorage.setItem(SPECTATE_ACCESS_KEY, "1");
+              router.push(`/spectate/rooms/${room.roomId}`);
+            }}
+            className="rounded-2xl border border-app-border bg-app-surface p-5 shadow-sm transition hover:border-app-border-strong text-left w-full"
           >
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -293,7 +299,7 @@ export default function SpectateScreen() {
                 </p>
               </div>
             </div>
-          </Link>
+          </button>
         ))}
       </section>
 
