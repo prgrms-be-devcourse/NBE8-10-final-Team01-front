@@ -104,6 +104,72 @@ export interface RatingProgressResponse {
 
 export type RatingProgressApiResponse = RsData<RatingProgressResponse | null>;
 
+export interface RankingDashboardProfile {
+  memberId: number;
+  nickname: string;
+  tier: string;
+  rank: number;
+  percentile: number;
+  score: number;
+  nextTier: string | null;
+  battleMatchCount: number;
+  top2Rate: number;
+  scoreDeltaTotal: number;
+}
+
+export interface RankingDashboardTrendPoint {
+  label: string;
+  occurredAt: string;
+  score: number;
+  delta: number;
+}
+
+export interface RankingDashboardGateProgress {
+  key: string;
+  label: string;
+  current: number;
+  target: number;
+  suffix: string;
+}
+
+export interface RankingDashboardNearbyRank {
+  rank: number;
+  memberId: number;
+  nickname: string;
+  tier: string;
+  score: number;
+  isMe: boolean;
+}
+
+export interface RankingDashboardTierDistribution {
+  tier: string;
+  count: number;
+  percentage: number;
+  isMyTier: boolean;
+}
+
+export interface RankingDashboardTagStat {
+  tag: string;
+  solvedCount: number;
+  submissionCount: number;
+  accuracy: number;
+}
+
+export interface RankingDashboardReviewSummary {
+  dueTodayCount: number;
+  upcomingCount: number;
+}
+
+export interface RankingDashboardResponse {
+  profile: RankingDashboardProfile;
+  scoreTrend: RankingDashboardTrendPoint[];
+  gateProgress: RankingDashboardGateProgress[];
+  nearbyRanking: RankingDashboardNearbyRank[];
+  tierDistribution: RankingDashboardTierDistribution[];
+  tagStats: RankingDashboardTagStat[];
+  reviewSummary: RankingDashboardReviewSummary;
+}
+
 export interface QueueJoinRequest {
   category: string;
   difficulty: Difficulty;
