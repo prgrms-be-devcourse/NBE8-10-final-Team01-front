@@ -218,6 +218,7 @@ export interface BattleRoomStateResponse {
 
 export interface ProblemDetailResponse {
   problemId: number;
+  language: string;
   title: string;
   difficulty: string;
   content: string;
