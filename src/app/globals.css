@@ -112,6 +112,17 @@ pre {
   color: #0b0f16;
 }
 
+@keyframes toast-pop {
+  0%   { opacity: 0; transform: translateY(-12px); }
+  12%  { opacity: 1; transform: translateY(0); }
+  75%  { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-12px); }
+}
+
+.animate-toast-pop {
+  animation: toast-pop 3s ease forwards;
+}
+
 @keyframes skeleton-shimmer {
   0% { background-position: -200% center; }
   100% { background-position: 200% center; }

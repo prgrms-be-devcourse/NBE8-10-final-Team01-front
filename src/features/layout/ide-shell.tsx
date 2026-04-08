@@ -11,7 +11,6 @@ import type {
   MyBattleResultsResponse,
   RoomResponse,
   SessionResponse,
-  UncheckedBattleResult,
 } from "@/shared/api/contracts";
 
 import ProfilePane from "@/features/home/components/profile-pane";
@@ -21,6 +20,15 @@ import QuickMenuPane, {
 import SessionContext from "@/features/layout/session-context";
 
 const PREVIEW_RESULTS_SIZE = 5;
+
+export interface NotificationItem {
+  id: string;
+  type: "BATTLE_RESULT";
+  roomId: number;
+  message: string;
+  timestamp: number;
+  read: boolean;
+}
 
 interface BattleSidebarState {
   status: RoomResponse["status"];
@@ -94,6 +102,9 @@ export default function IdeShell({
   const refreshInFlightRef = useRef<Promise<SessionResponse> | null>(null);
   const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
   const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(true);
+  const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [toast, setToast] = useState<{ key: number; message: string } | null>(null);
   const [session, setSession] = useState<SessionResponse>(initialSession);
   const [sessionLoaded, setSessionLoaded] = useState(true);
   const [recentResults, setRecentResults] = useState<MyBattleResultItem[]>([]);
@@ -164,32 +175,36 @@ export default function IdeShell({
     let active = true;
 
     const poll = async () => {
-      const response = await fetch(`/api/battle/rooms/${targetRoomId}`, {
-        cache: "no-store",
-        credentials: "include",
-      });
+      try {
+        const response = await fetch(`/api/battle/rooms/${targetRoomId}`, {
+          cache: "no-store",
+          credentials: "include",
+        });
 
-      if (!active) {
-        return;
+        if (!active) {
+          return;
+        }
+
+        if (!response.ok) {
+          setBattleSidebarState(null);
+          return;
+        }
+
+        const payload = (await response.json()) as RoomResponse;
+        const me =
+          payload.participants.find((item) => item.userId === memberId) ?? null;
+
+        setBattleSidebarState({
+          status: payload.status,
+          remainingTime: formatRemainingTime(payload.timerEnd),
+          participants: payload.participants,
+          myStatus: me?.status ?? null,
+          myUserId: memberId,
+          isJoining: me?.status === "ABANDONED",
+        });
+      } catch {
+        // 네비게이션 중 fetch 취소 등 무시
       }
-
-      if (!response.ok) {
-        setBattleSidebarState(null);
-        return;
-      }
-
-      const payload = (await response.json()) as RoomResponse;
-      const me =
-        payload.participants.find((item) => item.userId === memberId) ?? null;
-
-      setBattleSidebarState({
-        status: payload.status,
-        remainingTime: formatRemainingTime(payload.timerEnd),
-        participants: payload.participants,
-        myStatus: me?.status ?? null,
-        myUserId: memberId,
-        isJoining: me?.status === "ABANDONED",
-      });
     };
 
     void poll();
@@ -267,29 +282,6 @@ export default function IdeShell({
     };
   }, [refreshSession, session.authenticated]);
 
-  // 로그인 시 미확인 배틀 결과 조회 → 있으면 결과 화면으로 이동
-  useEffect(() => {
-    if (!session.authenticated) return;
-
-    void (async () => {
-      try {
-        const response = await fetch("/api/battle/result/unchecked", {
-          cache: "no-store",
-          credentials: "include",
-        });
-
-        if (!response.ok) return;
-
-        const result = (await response.json()) as UncheckedBattleResult | null;
-        if (result?.roomId) {
-          router.push(`/battle/results/${result.roomId}`);
-        }
-      } catch {
-        // 미확인 결과 조회 실패는 무시
-      }
-    })();
-  }, [router, session.authenticated]);
-
   // 전역 WebSocket: /topic/user/{myId}/battle 구독 (배틀 결과 실시간 수신)
   useEffect(() => {
     if (!session.authenticated || !session.member) return;
@@ -329,7 +321,19 @@ export default function IdeShell({
             (payload as { type: unknown }).type === "BATTLE_RESULT"
           ) {
             const msg = payload as BattleResultWsMessage;
-            router.push(`/battle/results/${msg.roomId}`);
+            const notifMessage = `Room ${msg.roomId} 배틀이 종료되었습니다.`;
+            setNotifications((prev) => [
+              {
+                id: crypto.randomUUID(),
+                type: "BATTLE_RESULT",
+                roomId: msg.roomId,
+                message: notifMessage,
+                timestamp: Date.now(),
+                read: false,
+              },
+              ...prev,
+            ]);
+            setToast({ key: Date.now(), message: "참여했던 배틀이 종료되었습니다." });
           }
         });
       },
@@ -340,7 +344,19 @@ export default function IdeShell({
     return () => {
       void client.deactivate();
     };
-  }, [router, session.authenticated, session.member]);
+  }, [session.authenticated, session.member]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(id);
+  }, [toast]);
+
+  const handleMarkNotificationRead = useCallback((id: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
+    );
+  }, []);
 
   async function handleLogout() {
     setIsLoggingOut(true);
@@ -372,11 +388,14 @@ export default function IdeShell({
   );
   const previewScoreDeltaLabel =
     previewScoreDelta > 0 ? `+${previewScoreDelta}` : String(previewScoreDelta);
+
+  const isPanelOpen = isProfilePanelOpen || isNotificationPanelOpen;
+
   const layoutColumnsClass = isQuickMenuOpen
-    ? isProfilePanelOpen
+    ? isPanelOpen
       ? "grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_250px] xl:grid-cols-[260px_minmax(0,1fr)_290px] 2xl:grid-cols-[290px_minmax(1200px,1fr)_320px]"
       : "grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_38px] xl:grid-cols-[260px_minmax(0,1fr)_38px] 2xl:grid-cols-[290px_minmax(1200px,1fr)_38px]"
-    : isProfilePanelOpen
+    : isPanelOpen
       ? "grid-cols-1 md:grid-cols-[48px_minmax(0,1fr)] lg:grid-cols-[48px_minmax(0,1fr)_250px] xl:grid-cols-[48px_minmax(0,1fr)_290px] 2xl:grid-cols-[48px_minmax(1200px,1fr)_320px]"
       : "grid-cols-1 md:grid-cols-[48px_minmax(0,1fr)] lg:grid-cols-[48px_minmax(0,1fr)_38px] xl:grid-cols-[48px_minmax(0,1fr)_38px] 2xl:grid-cols-[48px_minmax(1200px,1fr)_38px]";
 
@@ -452,6 +471,16 @@ export default function IdeShell({
     <SessionContext.Provider
       value={{ session, sessionLoaded, refreshSession, applySession }}
     >
+      {toast && (
+        <div
+          key={toast.key}
+          className="animate-toast-pop pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center"
+        >
+          <div className="rounded-xl border border-app-accent/40 bg-app-surface px-5 py-3 text-sm font-medium text-app-primary shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
+            {toast.message}
+          </div>
+        </div>
+      )}
       <div className="flex h-full min-h-0 flex-1 overflow-hidden bg-app-base">
         <div className={`grid h-full w-full ${layoutColumnsClass}`}>
           <QuickMenuPane
@@ -475,9 +504,17 @@ export default function IdeShell({
 
           <ProfilePane
             isProfilePanelOpen={isProfilePanelOpen}
-            onToggleProfilePanel={() =>
-              setIsProfilePanelOpen((current) => !current)
-            }
+            onToggleProfilePanel={() => {
+              setIsProfilePanelOpen((current) => !current);
+              setIsNotificationPanelOpen(false);
+            }}
+            isNotificationPanelOpen={isNotificationPanelOpen}
+            onToggleNotificationPanel={() => {
+              setIsNotificationPanelOpen((current) => !current);
+              setIsProfilePanelOpen(false);
+            }}
+            notifications={notifications}
+            onMarkNotificationRead={handleMarkNotificationRead}
             session={session}
             battleSidebarState={battleSidebarState}
             previewPlayedCount={previewPlayedCount}
