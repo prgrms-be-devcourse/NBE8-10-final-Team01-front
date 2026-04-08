@@ -33,6 +33,7 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
   const router = useRouter();
   const { session, sessionLoaded, refreshSession } = useAppSession();
   const [accessGranted, setAccessGranted] = useState(false);
+  const accessCheckedRef = useRef(false);
   const [room, setRoom] = useState<RoomResponse | null>(null);
   const [problem, setProblem] = useState<ProblemDetailResponse | null>(null);
   const [message, setMessage] = useState("관전 정보를 불러오는 중입니다.");
@@ -47,6 +48,9 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
 
   // 허브를 통한 정상 진입 여부 확인 — 직접 URL 접근 차단
   useEffect(() => {
+    if (accessCheckedRef.current) return;
+    accessCheckedRef.current = true;
+
     const token = sessionStorage.getItem(SPECTATE_ACCESS_KEY);
     if (!token) {
       router.replace("/spectate");

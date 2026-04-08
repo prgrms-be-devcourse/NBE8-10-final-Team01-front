@@ -1138,9 +1138,12 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
         title="문제를 풀었습니다!"
         description="다른 참여자들의 풀이를 관전하시겠습니까?"
         confirmLabel="관전하기"
-        cancelLabel="계속 있기"
-        onConfirm={() => router.push(`/spectate/rooms/${roomId}`)}
-        onCancel={() => setShowSpectateDialog(false)}
+        cancelLabel="나가기"
+        onConfirm={() => {
+          sessionStorage.setItem("spectate-from-hub", "1");
+          router.push(`/spectate/rooms/${roomId}`);
+        }}
+        onCancel={() => router.push("/")}
       />
 
       <ConfirmDialog
