@@ -272,11 +272,32 @@ export default function HomeScreen() {
   const personalSubscriptionRef = useRef<SubscriptionHandle | null>(null);
   const queueTopicSubscriptionRef = useRef<SubscriptionHandle | null>(null);
   const queueTopicDestinationRef = useRef<string | null>(null);
+  const matchStateRef = useRef(defaultMatchState);
+  const modalModeRef = useRef<ModalMode>(null);
   const hasConnectedOnceRef = useRef(false);
   const editorPaneRef = useRef<HTMLDivElement | null>(null);
   const [editorLineCount, setEditorLineCount] = useState(28);
   const [editorLineHeight, setEditorLineHeight] = useState(32);
   const [editorFontSize, setEditorFontSize] = useState(13);
+
+  const applyMatchState = useCallback((nextMatchState: MatchStateResponse) => {
+    matchStateRef.current = nextMatchState;
+    setMatchState(nextMatchState);
+  }, []);
+
+  const applyModalMode = useCallback((nextModalMode: ModalMode) => {
+    modalModeRef.current = nextModalMode;
+    setModalMode(nextModalMode);
+  }, []);
+
+  const isMatchStageActive = useCallback(() => {
+    return (
+      matchStateRef.current.status !== "IDLE" ||
+      modalModeRef.current === "READY_CHECK" ||
+      modalModeRef.current === "ROOM_READY" ||
+      modalModeRef.current === "TERMINAL"
+    );
+  }, []);
 
   const clearQueueTopicSubscription = useCallback(() => {
     queueTopicSubscriptionRef.current?.unsubscribe();
@@ -286,25 +307,25 @@ export default function HomeScreen() {
 
   const resetFlow = useCallback((nextFeedback = DEFAULT_FEEDBACK) => {
     setQueueState(defaultQueueState);
-    setMatchState(defaultMatchState);
+    applyMatchState(defaultMatchState);
     setQueueStartedAt(null);
     setTerminalMessage(null);
-    setModalMode(null);
+    applyModalMode(null);
     setPollStage("IDLE");
     setError(null);
     setFeedback(nextFeedback);
     joiningRoomIdRef.current = null;
-  }, []);
+  }, [applyMatchState, applyModalMode]);
 
   const applyMatchSnapshot = useCallback((nextMatchState: MatchStateResponse) => {
-    setMatchState(nextMatchState);
+    applyMatchState(nextMatchState);
     setQueueState(defaultQueueState);
     setQueueStartedAt(null);
     setError(null);
 
     if (nextMatchState.status === "ACCEPT_PENDING") {
       setTerminalMessage(null);
-      setModalMode("READY_CHECK");
+      applyModalMode("READY_CHECK");
       setPollStage("MATCH");
       setFeedback(nextMatchState.message ?? "매칭이 성사되었습니다. 수락 여부를 선택해주세요.");
       return;
@@ -312,7 +333,7 @@ export default function HomeScreen() {
 
     if (nextMatchState.status === "ROOM_READY") {
       setTerminalMessage(null);
-      setModalMode("ROOM_READY");
+      applyModalMode("ROOM_READY");
       setPollStage("IDLE");
       setFeedback(nextMatchState.message ?? "전원이 수락했습니다. 배틀룸으로 입장합니다.");
       return;
@@ -326,17 +347,17 @@ export default function HomeScreen() {
           : "다른 참가자가 매칭을 거절했습니다.");
 
       setTerminalMessage(nextMessage);
-      setModalMode("TERMINAL");
+      applyModalMode("TERMINAL");
       setPollStage("IDLE");
       setFeedback(nextMessage);
       return;
     }
 
     setTerminalMessage(null);
-    setModalMode(null);
+    applyModalMode(null);
     setPollStage("IDLE");
     setFeedback(DEFAULT_FEEDBACK);
-  }, []);
+  }, [applyMatchState, applyModalMode]);
 
   const attemptRoomEntry = useCallback(
     async (roomId: number) => {
@@ -406,12 +427,12 @@ export default function HomeScreen() {
         return;
       }
 
-      setMatchState(defaultMatchState);
-      setModalMode("READY_CHECK");
+      applyMatchState(defaultMatchState);
+      applyModalMode("READY_CHECK");
       setPollStage("MATCH");
       setFeedback("ready-check 세션을 확인하는 중입니다.");
     },
-    [applyMatchSnapshot, clearQueueTopicSubscription],
+    [applyMatchSnapshot, applyMatchState, applyModalMode, clearQueueTopicSubscription],
   );
 
   const handleMatchStateEvent = useCallback(
@@ -590,10 +611,10 @@ export default function HomeScreen() {
               ...restoredQueueState,
               requiredCount: restoredQueueState.requiredCount ?? DEFAULT_REQUIRED_COUNT,
             });
-            setMatchState(defaultMatchState);
+            applyMatchState(defaultMatchState);
             setQueueStartedAt((current) => current ?? new Date().toISOString());
             setTerminalMessage(null);
-            setModalMode("SEARCHING");
+            applyModalMode("SEARCHING");
             setPollStage("QUEUE");
             setError(null);
             setFeedback("?湲곗뿴?먯꽌 ?곷?瑜?李얘퀬 ?덉뒿?덈떎.");
@@ -627,6 +648,8 @@ export default function HomeScreen() {
     };
   }, [
     applyMatchSnapshot,
+    applyMatchState,
+    applyModalMode,
     clearQueueTopicSubscription,
     handleMatchStateEvent,
     handleQueueStateChangedEvent,
@@ -739,10 +762,10 @@ export default function HomeScreen() {
           requiredCount: nextQueueState.requiredCount ?? DEFAULT_REQUIRED_COUNT,
         });
         logMatchingDebug("initial restore queue/me inQueue=true", nextQueueState);
-        setMatchState(defaultMatchState);
+        applyMatchState(defaultMatchState);
         setQueueStartedAt((current) => current ?? new Date().toISOString());
         setTerminalMessage(null);
-        setModalMode("SEARCHING");
+        applyModalMode("SEARCHING");
         setPollStage("QUEUE");
         setError(null);
         setFeedback("대기열에서 상대를 찾고 있습니다.");
@@ -761,7 +784,7 @@ export default function HomeScreen() {
     return () => {
       active = false;
     };
-  }, [applyMatchSnapshot, resetFlow, session.authenticated, sessionLoaded]);
+  }, [applyMatchSnapshot, applyMatchState, applyModalMode, resetFlow, session.authenticated, sessionLoaded]);
 
   useEffect(() => {
     if (
@@ -809,7 +832,7 @@ export default function HomeScreen() {
           ...nextQueueState,
           requiredCount: nextQueueState.requiredCount ?? DEFAULT_REQUIRED_COUNT,
         });
-        setModalMode("SEARCHING");
+        applyModalMode("SEARCHING");
         setError(null);
         setFeedback("대기열에서 상대를 찾고 있습니다.");
         return;
@@ -819,7 +842,7 @@ export default function HomeScreen() {
       logMatchingDebug("poll queue/me inQueue=false -> switch to matches/me", nextQueueState);
       setQueueState(nextQueueState);
       setQueueStartedAt(null);
-      setModalMode("READY_CHECK");
+      applyModalMode("READY_CHECK");
       setPollStage("MATCH");
       setError(null);
       setFeedback("ready-check 세션을 확인하는 중입니다.");
@@ -853,6 +876,7 @@ export default function HomeScreen() {
     };
   }, [
     applyMatchSnapshot,
+    applyModalMode,
     clearQueueTopicSubscription,
     pollStage,
     resetFlow,
@@ -931,6 +955,16 @@ export default function HomeScreen() {
         | null;
 
       if ((response.ok || response.status === 409) && isQueueStatusResponse(payload)) {
+        if (isMatchStageActive()) {
+          logMatchingDebug("ignored queue/join success because match stage is already active", {
+            modalMode: modalModeRef.current,
+            matchStatus: matchStateRef.current.status,
+            queueStatus: payload,
+          });
+          return;
+        }
+
+        logMatchingDebug("applied queue/join success -> SEARCHING", payload);
         setQueueState({
           inQueue: true,
           category: payload.category,
@@ -938,9 +972,9 @@ export default function HomeScreen() {
           waitingCount: payload.waitingCount,
           requiredCount: payload.requiredCount ?? DEFAULT_REQUIRED_COUNT,
         });
-        setMatchState(defaultMatchState);
+        applyMatchState(defaultMatchState);
         setQueueStartedAt(new Date().toISOString());
-        setModalMode("SEARCHING");
+        applyModalMode("SEARCHING");
         setPollStage("QUEUE");
         setFeedback(payload.message);
         syncQueueTopicSubscription(payload.category, payload.difficulty);
