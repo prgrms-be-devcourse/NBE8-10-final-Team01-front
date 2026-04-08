@@ -111,3 +111,19 @@ pre {
   background: var(--app-accent);
   color: #0b0f16;
 }
+
+@keyframes skeleton-shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--app-bg-elevated) 25%,
+    rgba(255, 255, 255, 0.055) 50%,
+    var(--app-bg-elevated) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
