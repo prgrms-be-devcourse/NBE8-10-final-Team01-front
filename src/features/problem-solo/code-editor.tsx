@@ -10,6 +10,7 @@ interface SoloCodeEditorProps {
   onChange: (nextValue: string) => void;
   onRun?: () => void;
   onSubmit?: () => void;
+  onResetDraft?: () => void;
   runDisabled?: boolean;
   submitDisabled?: boolean;
   runLabel?: string;
@@ -52,6 +53,7 @@ export default function SoloCodeEditor({
   onChange,
   onRun,
   onSubmit,
+  onResetDraft,
   runDisabled = false,
   submitDisabled = false,
   runLabel = "Run",
@@ -64,8 +66,13 @@ export default function SoloCodeEditor({
       className={`flex min-h-0 flex-col overflow-hidden rounded-2xl border border-app-border bg-app-base ${className}`.trim()}
     >
       <div className="flex h-12 items-center gap-3 border-b border-app-border bg-app-base px-4">
-        <span className="font-mono text-lg font-semibold text-app-success">&lt;/&gt;</span>
-        <span className="ml-2 text-sm font-semibold text-app-primary">Code</span>
+        <span className="font-mono text-lg font-semibold text-app-success">
+          &lt;/&gt;
+        </span>
+        <span className="ml-2 text-sm font-semibold text-app-primary">
+          Code
+        </span>
+
         <div className="relative ml-1">
           <select
             value={language}
@@ -82,6 +89,24 @@ export default function SoloCodeEditor({
             ▼
           </span>
         </div>
+
+        {onResetDraft ? (
+          <div className="group relative">
+            <button
+              type="button"
+              onClick={onResetDraft}
+              aria-label="Reset draft"
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-app-border bg-app-base text-app-secondary transition hover:border-app-border-strong hover:text-app-primary"
+            >
+              <span className="text-sm">↻</span>
+            </button>
+
+            <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-app-border bg-app-surface px-2 py-1 text-xs text-app-primary opacity-0 shadow-lg transition group-hover:opacity-100">
+              현재 언어의 임시 코드를 초기화합니다
+            </div>
+          </div>
+        ) : null}
+
         <div className="ml-auto flex items-center gap-2">
           <button
             type="button"
@@ -101,6 +126,7 @@ export default function SoloCodeEditor({
           </button>
         </div>
       </div>
+
       <div className="min-h-0 flex-1">
         <Editor
           height={height}

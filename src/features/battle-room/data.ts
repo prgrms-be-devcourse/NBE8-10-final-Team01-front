@@ -40,13 +40,15 @@ const room302Events: LiveEvent[] = [
     timestamp: "18:19:20",
     type: "BATTLE_FINISHED",
     headline: "정산 완료",
-    detail: "모든 참여자 상태를 기반으로 결과 정산이 끝났고 결과 화면으로 이동할 수 있다.",
+    detail:
+      "모든 참여자 상태를 기반으로 결과 정산이 끝났고 결과 화면으로 이동할 수 있다.",
   },
 ];
 
 export const problemDetailsById: Record<number, ProblemDetailResponse> = {
   101: {
     problemId: 101,
+    language: "ko",
     title: "연속 구간의 최대 합",
     difficulty: "MEDIUM",
     content:
@@ -59,6 +61,7 @@ export const problemDetailsById: Record<number, ProblemDetailResponse> = {
   },
   102: {
     problemId: 102,
+    language: "ko",
     title: "단방향 그래프 최단 탈출",
     difficulty: "HARD",
     content:
