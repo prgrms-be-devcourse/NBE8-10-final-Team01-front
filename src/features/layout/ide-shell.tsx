@@ -70,7 +70,9 @@ async function readMyBattleResultsPreview(size: number) {
     credentials: "include",
   });
 
-  const payload = (await response.json().catch(() => null)) as MyBattleResultsResponse | null;
+  const payload = (await response
+    .json()
+    .catch(() => null)) as MyBattleResultsResponse | null;
 
   return {
     ok: response.ok,
@@ -97,8 +99,11 @@ export default function IdeShell({
   const [resultsPreviewMessage, setResultsPreviewMessage] = useState(
     "로그인 후 최근 전적을 확인할 수 있습니다.",
   );
-  const [resultsPreviewError, setResultsPreviewError] = useState<string | null>(null);
-  const [battleSidebarState, setBattleSidebarState] = useState<BattleSidebarState | null>(null);
+  const [resultsPreviewError, setResultsPreviewError] = useState<string | null>(
+    null,
+  );
+  const [battleSidebarState, setBattleSidebarState] =
+    useState<BattleSidebarState | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const applySession = useCallback((nextSession: SessionResponse) => {
     setSession(nextSession);
@@ -132,26 +137,12 @@ export default function IdeShell({
     }
   }, []);
 
+  // 최초 마운트 시 1회만 세션을 로딩한다.
+  // focus/visibilitychange 마다 재조회하면 배틀룸 WebSocket heartbeat에 영향을 줄 수 있으므로 제거.
   useEffect(() => {
-    // 라우트 이동마다 재조회하지 않고, 탭 복귀 시점에만 세션을 최신화한다.
-    const onWindowFocus = () => {
-      void refreshSession();
-    };
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void refreshSession();
-      }
-    };
-
-    window.addEventListener("focus", onWindowFocus);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    return () => {
-      window.removeEventListener("focus", onWindowFocus);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [refreshSession]);
+    void refreshSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const battleRoomMatch = pathname.match(/^\/battle\/rooms\/(\d+)$/);
@@ -187,7 +178,8 @@ export default function IdeShell({
       }
 
       const payload = (await response.json()) as RoomResponse;
-      const me = payload.participants.find((item) => item.userId === memberId) ?? null;
+      const me =
+        payload.participants.find((item) => item.userId === memberId) ?? null;
 
       setBattleSidebarState({
         status: payload.status,
@@ -235,7 +227,8 @@ export default function IdeShell({
     setResultsPreviewMessage("최근 전적을 불러오는 중입니다.");
 
     void (async () => {
-      const { ok, status, payload } = await readMyBattleResultsPreview(PREVIEW_RESULTS_SIZE);
+      const { ok, status, payload } =
+        await readMyBattleResultsPreview(PREVIEW_RESULTS_SIZE);
 
       if (!active) {
         return;
@@ -252,7 +245,9 @@ export default function IdeShell({
 
       if (!ok || !payload || payload.resultCode !== "200" || !payload.data) {
         setRecentResults([]);
-        setResultsPreviewError(payload?.msg ?? "최근 전적을 불러오지 못했습니다.");
+        setResultsPreviewError(
+          payload?.msg ?? "최근 전적을 불러오지 못했습니다.",
+        );
         setResultsPreviewMessage(payload?.msg ?? "전적 조회에 실패했습니다.");
         return;
       }
@@ -300,7 +295,9 @@ export default function IdeShell({
     const myId = session.member.memberId;
     const client = new Client({
       webSocketFactory: () =>
-        new SockJS(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/ws`),
+        new SockJS(
+          `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/ws`,
+        ),
       reconnectDelay: 3000,
       beforeConnect: async () => {
         client.connectHeaders = {};
@@ -364,8 +361,13 @@ export default function IdeShell({
   const previewPlayedCount = recentResults.length;
   const previewSolvedCount = recentResults.filter((item) => item.solved).length;
   const previewWinRate =
-    previewPlayedCount > 0 ? Math.round((previewSolvedCount / previewPlayedCount) * 100) : 0;
-  const previewScoreDelta = recentResults.reduce((acc, item) => acc + item.scoreDelta, 0);
+    previewPlayedCount > 0
+      ? Math.round((previewSolvedCount / previewPlayedCount) * 100)
+      : 0;
+  const previewScoreDelta = recentResults.reduce(
+    (acc, item) => acc + item.scoreDelta,
+    0,
+  );
   const previewScoreDeltaLabel =
     previewScoreDelta > 0 ? `+${previewScoreDelta}` : String(previewScoreDelta);
   const layoutColumnsClass = isQuickMenuOpen
@@ -378,7 +380,9 @@ export default function IdeShell({
 
   const projectTreeItems = useMemo<QuickMenuTreeItem[]>(() => {
     const isCurrent = (href: string) =>
-      href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+      href === "/"
+        ? pathname === "/"
+        : pathname === href || pathname.startsWith(`${href}/`);
 
     return [
       {
@@ -443,7 +447,9 @@ export default function IdeShell({
     pathname.startsWith("/battle/rooms/");
 
   return (
-    <SessionContext.Provider value={{ session, sessionLoaded, refreshSession, applySession }}>
+    <SessionContext.Provider
+      value={{ session, sessionLoaded, refreshSession, applySession }}
+    >
       <div className="flex h-full min-h-0 flex-1 overflow-hidden bg-app-base">
         <div className={`grid h-full w-full ${layoutColumnsClass}`}>
           <QuickMenuPane
@@ -458,14 +464,18 @@ export default function IdeShell({
               <div className="h-full min-h-0">{children}</div>
             ) : (
               <div className="h-full overflow-y-auto">
-                <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8">{children}</div>
+                <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+                  {children}
+                </div>
               </div>
             )}
           </section>
 
           <ProfilePane
             isProfilePanelOpen={isProfilePanelOpen}
-            onToggleProfilePanel={() => setIsProfilePanelOpen((current) => !current)}
+            onToggleProfilePanel={() =>
+              setIsProfilePanelOpen((current) => !current)
+            }
             session={session}
             battleSidebarState={battleSidebarState}
             previewPlayedCount={previewPlayedCount}
