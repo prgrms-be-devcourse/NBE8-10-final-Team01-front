@@ -6,12 +6,10 @@ import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 
 import type {
-  BattleResultWsMessage,
   MyBattleResultItem,
   MyBattleResultsResponse,
   RoomResponse,
   SessionResponse,
-  UncheckedBattleResult,
 } from "@/shared/api/contracts";
 
 import ProfilePane from "@/features/home/components/profile-pane";
@@ -267,28 +265,6 @@ export default function IdeShell({
     };
   }, [refreshSession, session.authenticated]);
 
-  // 로그인 시 미확인 배틀 결과 조회 → 있으면 결과 화면으로 이동
-  useEffect(() => {
-    if (!session.authenticated) return;
-
-    void (async () => {
-      try {
-        const response = await fetch("/api/battle/result/unchecked", {
-          cache: "no-store",
-          credentials: "include",
-        });
-
-        if (!response.ok) return;
-
-        const result = (await response.json()) as UncheckedBattleResult | null;
-        if (result?.roomId) {
-          router.push(`/battle/results/${result.roomId}`);
-        }
-      } catch {
-        // 미확인 결과 조회 실패는 무시
-      }
-    })();
-  }, [router, session.authenticated]);
 
   // 전역 WebSocket: /topic/user/{myId}/battle 구독 (배틀 결과 실시간 수신)
   useEffect(() => {
@@ -322,15 +298,7 @@ export default function IdeShell({
             return;
           }
 
-          if (
-            typeof payload === "object" &&
-            payload !== null &&
-            "type" in payload &&
-            (payload as { type: unknown }).type === "BATTLE_RESULT"
-          ) {
-            const msg = payload as BattleResultWsMessage;
-            router.push(`/battle/results/${msg.roomId}`);
-          }
+          // TODO: 배틀 종료 알림 처리 예정
         });
       },
     });
