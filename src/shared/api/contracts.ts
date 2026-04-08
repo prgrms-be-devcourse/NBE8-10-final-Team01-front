@@ -1,5 +1,9 @@
 export type Difficulty = "EASY" | "MEDIUM" | "HARD";
 
+export interface ActiveRoomResponse {
+  roomId: number;
+}
+
 export interface RsData<T> {
   resultCode: string;
   msg: string;

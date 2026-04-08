@@ -6,6 +6,7 @@ import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 
 import type {
+  ActiveRoomResponse,
   ApiErrorResponse,
   Difficulty,
   MatchStateResponse,
@@ -14,6 +15,7 @@ import type {
   QueueStatusResponse,
 } from "@/shared/api/contracts";
 import { useAppSession } from "@/features/layout/session-context";
+import { ConfirmDialog } from "@/shared/ui";
 
 import {
   DEFAULT_REQUIRED_COUNT,
@@ -262,6 +264,8 @@ export default function HomeScreen() {
   const [pollStage, setPollStage] = useState<PollStage>("IDLE");
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const [now, setNow] = useState(Date.now());
+  const [pendingActiveRoomId, setPendingActiveRoomId] = useState<number | null>(null);
+  const [confirmingForfeit, setConfirmingForfeit] = useState(false);
 
   const joiningRoomIdRef = useRef<number | null>(null);
   const stompClientRef = useRef<Client | null>(null);
@@ -903,22 +907,7 @@ export default function HomeScreen() {
     void attemptRoomEntry(roomId);
   }, [attemptRoomEntry, matchState.room?.roomId, modalMode, session.authenticated]);
 
-  async function handleStartMatch() {
-    if (!session.authenticated) {
-      router.push("/login?next=/");
-      return;
-    }
-
-    if (category === "RANDOM") {
-      setError("현재는 구체적인 카테고리만 매칭할 수 있습니다.");
-      return;
-    }
-
-    if (modalMode && modalMode !== "TERMINAL") {
-      setError("이미 진행 중인 매칭 흐름이 있습니다.");
-      return;
-    }
-
+  async function joinQueue() {
     setBusyAction("start");
     setError(null);
     setTerminalMessage(null);
@@ -962,6 +951,55 @@ export default function HomeScreen() {
     } finally {
       setBusyAction(null);
     }
+  }
+
+  async function handleStartMatch() {
+    if (!session.authenticated) {
+      router.push("/login?next=/");
+      return;
+    }
+
+    if (category === "RANDOM") {
+      setError("현재는 구체적인 카테고리만 매칭할 수 있습니다.");
+      return;
+    }
+
+    if (modalMode && modalMode !== "TERMINAL") {
+      setError("이미 진행 중인 매칭 흐름이 있습니다.");
+      return;
+    }
+
+    setBusyAction("start");
+    setError(null);
+
+    try {
+      const activeRes = await fetch("/api/battle/rooms/me/active", { cache: "no-store" });
+      if (activeRes.ok) {
+        const body = (await activeRes.json()) as ActiveRoomResponse | null;
+        if (body?.roomId != null) {
+          setPendingActiveRoomId(body.roomId);
+          return;
+        }
+      }
+    } finally {
+      setBusyAction(null);
+    }
+
+    await joinQueue();
+  }
+
+  function handleRejoin() {
+    if (pendingActiveRoomId === null) return;
+    router.push(`/battle/rooms/${pendingActiveRoomId}`);
+    setPendingActiveRoomId(null);
+  }
+
+  async function handleForfeitAndMatch() {
+    if (pendingActiveRoomId === null) return;
+    await fetch(`/api/battle/rooms/${pendingActiveRoomId}/exit`, { method: "POST" });
+    setPendingActiveRoomId(null);
+    setConfirmingForfeit(false);
+    await joinQueue();
   }
 
   async function handleCancelMatch() {
@@ -1081,6 +1119,26 @@ export default function HomeScreen() {
 
   return (
     <div className="relative h-full min-h-0">
+      <ConfirmDialog
+        open={pendingActiveRoomId !== null && !confirmingForfeit}
+        title="현재 진행 중인 배틀이 있습니다."
+        confirmLabel="재참여하기"
+        cancelLabel="포기하고 매칭 시작"
+        onConfirm={handleRejoin}
+        onCancel={() => setConfirmingForfeit(true)}
+      />
+
+      <ConfirmDialog
+        open={confirmingForfeit}
+        title="배틀을 포기하시겠습니까?"
+        description="포기하면 최하위 처리되며 다시 참여할 수 없습니다."
+        confirmLabel="포기 확인"
+        cancelLabel="취소"
+        confirmTone="danger"
+        onConfirm={() => void handleForfeitAndMatch()}
+        onCancel={() => setConfirmingForfeit(false)}
+      />
+
       <QueueEditorPane
         editorPaneRef={editorPaneRef}
         editorContentStyle={editorContentStyle}

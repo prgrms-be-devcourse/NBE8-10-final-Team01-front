@@ -3,6 +3,7 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 
@@ -18,7 +19,7 @@ import type {
   SubmissionWsMessage,
 } from "@/shared/api/contracts";
 import { useAppSession } from "@/features/layout/session-context";
-import { DefinitionGrid, MathText, Panel, StatusPill } from "@/shared/ui";
+import { ConfirmDialog, DefinitionGrid, MathText, Panel, StatusPill } from "@/shared/ui";
 import {
   readPreferredEditorLanguage,
   writePreferredEditorLanguage,
@@ -251,7 +252,12 @@ function getSubmitHeadline(isSubmitting: boolean, result: string | null | undefi
 }
 
 export default function BattleRoomScreen({ roomId }: { roomId: string }) {
+  const router = useRouter();
   const { session, sessionLoaded, refreshSession } = useAppSession();
+  const [showSpectateDialog, setShowSpectateDialog] = useState(false);
+  const [showExitDialog, setShowExitDialog] = useState(false);
+  const pendingNavRef = useRef<(() => void) | null>(null);
+  const bypassGuardRef = useRef(false);
   const [room, setRoom] = useState<RoomResponse | null>(null);
   const [problem, setProblem] = useState<ProblemDetailResponse | null>(null);
   const [latestSubmission, setLatestSubmission] =
@@ -289,6 +295,45 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   const rightTopPaneRatioRef = useRef(rightTopPaneRatio);
   const sampleCasesRef = useRef(problem?.sampleCases ?? []);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const myParticipantStatus = room?.participants.find(
+    (p) => p.userId === session.member?.memberId,
+  )?.status;
+  const shouldGuard =
+    room?.status === "PLAYING" &&
+    (myParticipantStatus === "PLAYING" || myParticipantStatus === "ABANDONED");
+
+  // 탭 닫기 / 새로고침 가드
+  useEffect(() => {
+    if (!shouldGuard) return;
+
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [shouldGuard]);
+
+  // 뒤로가기 가드 — 히스토리 스택에 더미 엔트리를 쌓아 popstate를 가로챔
+  useEffect(() => {
+    if (!shouldGuard) return;
+
+    window.history.pushState(null, "", window.location.href);
+
+    const handler = () => {
+      if (bypassGuardRef.current) return;
+      window.history.pushState(null, "", window.location.href);
+      pendingNavRef.current = () => {
+        bypassGuardRef.current = true;
+        window.history.go(-2);
+      };
+      setShowExitDialog(true);
+    };
+
+    window.addEventListener("popstate", handler);
+    return () => window.removeEventListener("popstate", handler);
+  }, [router, shouldGuard]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 1024px)");
@@ -669,6 +714,11 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
               );
               setIsSubmitting(false);
               setMessage(`채점 완료: ${msg.result} (${msg.passedCount}/${msg.totalCount})`);
+
+              const normalizedResult = normalizeVerdict(msg.result);
+              if (normalizedResult === "AC" || normalizedResult === "ACCEPTED") {
+                setShowSpectateDialog(true);
+              }
             }
           }
         });
@@ -1035,6 +1085,14 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
   const activeRunCasePass = isPassVerdict(activeRunCase?.status);
   const activeRunCaseWrongAnswer = isWrongAnswerVerdict(activeRunCase?.status);
   const isPlayable = room.status === "PLAYING";
+
+  async function handleExitConfirm() {
+    bypassGuardRef.current = true;
+    await fetch(`/api/battle/rooms/${roomId}/exit`, { method: "POST" });
+    setShowExitDialog(false);
+    pendingNavRef.current?.();
+  }
+
   const latestResultCode = normalizeVerdict(latestSubmission?.result ?? undefined);
   const submitHeadline = getSubmitHeadline(isSubmitting, latestSubmission?.result);
   const submitIsAccepted = latestResultCode === "AC" || latestResultCode === "ACCEPTED";
@@ -1075,6 +1133,30 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
 
   return (
     <div className="h-full space-y-6 lg:space-y-0">
+      <ConfirmDialog
+        open={showSpectateDialog}
+        title="문제를 풀었습니다!"
+        description="다른 참여자들의 풀이를 관전하시겠습니까?"
+        confirmLabel="관전하기"
+        cancelLabel="나가기"
+        onConfirm={() => {
+          sessionStorage.setItem("spectate-from-hub", "1");
+          router.push(`/spectate/rooms/${roomId}`);
+        }}
+        onCancel={() => router.push("/")}
+      />
+
+      <ConfirmDialog
+        open={showExitDialog}
+        title="배틀을 포기하시겠습니까?"
+        description="지금 나가면 최하위 처리되며 다시 참여할 수 없습니다."
+        confirmLabel="포기하고 나가기"
+        cancelLabel="계속 풀기"
+        confirmTone="danger"
+        onConfirm={() => void handleExitConfirm()}
+        onCancel={() => setShowExitDialog(false)}
+      />
+
       {error && (
         <div
           className="rounded-2xl border border-app-danger/35 bg-app-danger/10 px-4 py-3 text-sm text-app-danger"
@@ -1830,18 +1912,44 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
         </section>
 
         <div className="flex flex-wrap gap-3">
-          <Link
-            href={`/battle/results/${room.roomId}`}
-            className="rounded-2xl bg-app-base px-4 py-3 text-sm font-medium text-white"
-          >
-            결과 화면 보기
-          </Link>
-          <Link
-            href="/"
-            className="rounded-2xl border border-app-border bg-app-surface px-4 py-3 text-sm font-medium text-app-primary"
-          >
-            메인으로 돌아가기
-          </Link>
+          {shouldGuard ? (
+            <button
+              type="button"
+              onClick={() => {
+                pendingNavRef.current = () => router.push(`/battle/results/${room.roomId}`);
+                setShowExitDialog(true);
+              }}
+              className="rounded-2xl bg-app-base px-4 py-3 text-sm font-medium text-white"
+            >
+              결과 화면 보기
+            </button>
+          ) : (
+            <Link
+              href={`/battle/results/${room.roomId}`}
+              className="rounded-2xl bg-app-base px-4 py-3 text-sm font-medium text-white"
+            >
+              결과 화면 보기
+            </Link>
+          )}
+          {shouldGuard ? (
+            <button
+              type="button"
+              onClick={() => {
+                pendingNavRef.current = () => router.push("/");
+                setShowExitDialog(true);
+              }}
+              className="rounded-2xl border border-app-border bg-app-surface px-4 py-3 text-sm font-medium text-app-primary"
+            >
+              메인으로 돌아가기
+            </button>
+          ) : (
+            <Link
+              href="/"
+              className="rounded-2xl border border-app-border bg-app-surface px-4 py-3 text-sm font-medium text-app-primary"
+            >
+              메인으로 돌아가기
+            </Link>
+          )}
         </div>
       </div>
     </div>
