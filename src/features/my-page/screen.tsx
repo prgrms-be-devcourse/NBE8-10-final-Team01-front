@@ -127,21 +127,22 @@ function buildRequirementActionGuide(requirement: RatingRequirementProgress) {
   }
 
   if (requirement.key === "battleRating") {
-    const remaining = Math.max(0, requirement.required - requirement.current);
-    const realisticFast = Math.max(1, Math.ceil(remaining / 15));
-    const realisticSafe = Math.max(1, Math.ceil(remaining / 8));
-    const optimistic = Math.max(1, Math.ceil(remaining / 25));
+    const remaining = Math.max(0, Math.ceil(requirement.required - requirement.current));
+    const normalFast = Math.max(1, Math.ceil(remaining / 15));
+    const normalSafe = Math.max(1, Math.ceil(remaining / 8));
+    const earlyFast = Math.max(1, Math.ceil(remaining / 25));
+    const earlySafe = Math.max(1, Math.ceil(remaining / 15));
     const absoluteMin = Math.max(1, Math.ceil(remaining / 35));
-    return `배틀 SR 조건입니다. 동급 매칭 체감 기준(+8~15)으로 약 ${realisticFast}~${realisticSafe}판, 초반 K 구간(+15~25) 기준 약 ${optimistic}판이 필요합니다. (+35는 상한이라 이론 최소 ${absoluteMin}판)`;
-  }
 
-  if (requirement.key === "hardBattleRating") {
-    const remaining = Math.max(0, requirement.required - requirement.current);
-    const realisticFast = Math.max(1, Math.ceil(remaining / 15));
-    const realisticSafe = Math.max(1, Math.ceil(remaining / 8));
-    const optimistic = Math.max(1, Math.ceil(remaining / 25));
-    const absoluteMin = Math.max(1, Math.ceil(remaining / 35));
-    return `Hard SR은 난이도 2000+ 배틀에서만 반영됩니다. 동급 매칭 체감 기준(+8~15)으로 약 ${realisticFast}~${realisticSafe}판, 초반 K 구간(+15~25) 기준 약 ${optimistic}판이 필요합니다. (+35는 상한이라 이론 최소 ${absoluteMin}판)`;
+    if (remaining <= 20) {
+      return `배틀 SR 근접 구간입니다. 남은 ${remaining}점 기준 동급 매칭 체감(+8~15)으로 약 ${normalFast}~${normalSafe}판, 초반 K 구간(+15~25)에서는 약 ${earlyFast}판(이론 최소 ${absoluteMin}판)으로 도달 가능합니다.`;
+    }
+
+    if (remaining <= 60) {
+      return `배틀 SR 중간 구간입니다. 남은 ${remaining}점 기준 동급 매칭 체감(+8~15)으로 약 ${normalFast}~${normalSafe}판, 초반 K 구간(+15~25) 기준 약 ${earlyFast}~${earlySafe}판이 필요합니다.`;
+    }
+
+    return `배틀 SR 장기 구간입니다. 남은 ${remaining}점 기준 동급 매칭 체감(+8~15)으로 약 ${normalFast}~${normalSafe}판이 필요하고, 초반 K 구간(+15~25)에서도 약 ${earlyFast}~${earlySafe}판이 필요합니다. (+35는 상한이라 이론 최소 ${absoluteMin}판)`;
   }
 
   if (requirement.key === "activityPoint" || requirement.key === "firstSolveScore") {
@@ -444,7 +445,6 @@ export default function MyPageScreen() {
     ratingProgress?.current.battleRating ??
     myInfo?.battleRating ??
     (typeof myInfo?.score === "number" ? myInfo.score : null);
-  const hardBattleRating = ratingProgress?.current.hardBattleRating ?? myInfo?.hardBattleRating ?? null;
   const firstSolveScore = ratingProgress?.current.activityPoint ?? myInfo?.firstSolveScore ?? null;
   const tierScore = myInfo?.tierScore ?? battleRating;
   const recentTop2Ratio =
@@ -455,6 +455,10 @@ export default function MyPageScreen() {
         : null;
   const nextTier = ratingProgress?.next ?? null;
   const nextRequirements = nextTier?.requirements ?? [];
+  const apRequirement =
+    nextRequirements.find(
+      (requirement) => requirement.key === "activityPoint" || requirement.key === "firstSolveScore",
+    ) ?? null;
   const satisfiedRequirementCount = nextRequirements.filter((requirement) => requirement.satisfied).length;
 
   return (
@@ -479,7 +483,7 @@ export default function MyPageScreen() {
       </div>
 
       <div className="flex-1 overflow-auto bg-app-base">
-        <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
+        <div className="w-full px-4 py-6 sm:px-6">
           <section className="mb-5 rounded-2xl border border-app-border bg-gradient-to-r from-app-surface to-app-elevated px-4 py-4 shadow-[0_14px_32px_rgba(0,0,0,0.22)]">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -580,13 +584,7 @@ export default function MyPageScreen() {
 
               {showAdvancedStats ? (
                 <div className="space-y-3">
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <div className={infoCardClass}>
-                      <p className="text-xs text-app-dim">Hard SR</p>
-                      <p className="mt-1 text-base font-semibold text-app-primary">
-                        {hardBattleRating ?? "-"}
-                      </p>
-                    </div>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     <div className={infoCardClass}>
                       <p className="text-xs text-app-dim">랭킹 표시 점수 (tierScore)</p>
                       <p className="mt-1 text-base font-semibold text-app-primary">{tierScore ?? "-"}</p>
@@ -657,6 +655,22 @@ export default function MyPageScreen() {
                   <p className="text-sm text-app-success">현재 GOD 티어입니다. 더 높은 티어는 없습니다.</p>
                 ) : (
                   <div className="space-y-3">
+                    {apRequirement ? (
+                      <div className="rounded-xl border border-app-border bg-app-base px-3 py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-medium text-app-primary">AP (firstSolveScore)</p>
+                          <p className="text-xs font-semibold text-app-accent-soft">승급 필수</p>
+                        </div>
+                        <p className="mt-1 text-xs text-app-muted">
+                          현재 {Math.round(firstSolveScore ?? 0)} / 목표 {Math.round(apRequirement.required)} · 남은 값{" "}
+                          {Math.max(0, Math.round(apRequirement.required - apRequirement.current))}
+                        </p>
+                        <p className="mt-2 text-xs text-app-secondary">
+                          다음 티어 승급에 AP 조건이 포함됩니다. first solve를 누적해 목표를 채우세요.
+                        </p>
+                      </div>
+                    ) : null}
+
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                       <p className="text-app-secondary">{nextTier.message}</p>
                       <p className="text-app-dim">
