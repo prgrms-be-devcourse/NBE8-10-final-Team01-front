@@ -50,7 +50,6 @@ export interface MyInfoResponse {
   tier: string;
   role: string;
   battleRating?: number | null;
-  hardBattleRating?: number | null;
   firstSolveScore?: number | null;
   tierScore?: number | null;
   battleMatchCount?: number | null;
@@ -86,7 +85,6 @@ export interface CurrentTierProgress {
   displayTier: string;
   tier: string;
   battleRating: number;
-  hardBattleRating: number;
   activityPoint: number;
   battleMatchCount: number;
   firstSolvedProblemCount: number;
