@@ -6,6 +6,7 @@ import type {
   RankingDashboardGateProgress,
   RankingDashboardResponse,
   RankingDashboardTagStat,
+  RankingDashboardTierDistribution,
   RankingDashboardTrendPoint,
 } from "@/shared/api/contracts";
 
@@ -14,6 +15,23 @@ interface ApiErrorResponse {
 }
 
 const numberFormatter = new Intl.NumberFormat("ko-KR");
+
+const tierWindowByFamily = {
+  BRONZE: ["BRONZE_5", "BRONZE_4", "BRONZE_3", "BRONZE_2", "BRONZE_1", "SILVER_5"],
+  SILVER: ["SILVER_5", "SILVER_4", "SILVER_3", "SILVER_2", "SILVER_1", "GOLD_5"],
+  GOLD: ["GOLD_5", "GOLD_4", "GOLD_3", "GOLD_2", "GOLD_1", "PLATINUM_5"],
+  PLATINUM: [
+    "PLATINUM_5",
+    "PLATINUM_4",
+    "PLATINUM_3",
+    "PLATINUM_2",
+    "PLATINUM_1",
+    "DIAMOND_5",
+  ],
+  DIAMOND: ["DIAMOND_5", "DIAMOND_4", "DIAMOND_3", "DIAMOND_2", "DIAMOND_1", "MASTER_4"],
+  MASTER: ["MASTER_4", "MASTER_3", "MASTER_2", "MASTER_1", "GOD"],
+  GOD: ["MASTER_4", "MASTER_3", "MASTER_2", "MASTER_1", "GOD"],
+} as const;
 
 async function readRankingDashboard(signal: AbortSignal) {
   const response = await fetch("/api/v1/rankings/me/dashboard", {
@@ -32,8 +50,82 @@ async function readRankingDashboard(signal: AbortSignal) {
 }
 
 function formatSignedNumber(value: number) {
-  if (value > 0) return `+${numberFormatter.format(value)}`;
+  if (value > 0) {
+    return `+${numberFormatter.format(value)}`;
+  }
+
   return numberFormatter.format(value);
+}
+
+function formatPercentileLabel(percentile: number) {
+  if (percentile <= 50) {
+    return `상위 ${percentile.toFixed(1)}%`;
+  }
+
+  return `하위 ${(100 - percentile).toFixed(1)}%`;
+}
+
+function getTierFamily(tier: string) {
+  if (tier === "GOD") {
+    return "GOD";
+  }
+
+  const [family] = tier.split("_");
+
+  if (family in tierWindowByFamily) {
+    return family as keyof typeof tierWindowByFamily;
+  }
+
+  return null;
+}
+
+function abbreviateTier(tier: string) {
+  if (tier === "GOD") {
+    return "GOD";
+  }
+
+  const [family, level] = tier.split("_");
+  const prefixMap: Record<string, string> = {
+    BRONZE: "B",
+    SILVER: "S",
+    GOLD: "G",
+    PLATINUM: "P",
+    DIAMOND: "D",
+    MASTER: "M",
+  };
+
+  if (!level) {
+    return tier;
+  }
+
+  return `${prefixMap[family] ?? family.charAt(0)}${level}`;
+}
+
+function getVisibleTierDistribution(
+  items: RankingDashboardTierDistribution[],
+  currentTier: string,
+) {
+  const family = getTierFamily(currentTier);
+
+  if (!family) {
+    return items;
+  }
+
+  const visibleTiers = tierWindowByFamily[family];
+  const itemMap = new Map(items.map((item) => [item.tier, item]));
+
+  return visibleTiers.map((tier) => {
+    const existing = itemMap.get(tier);
+
+    return (
+      existing ?? {
+        tier,
+        count: 0,
+        percentage: 0,
+        isMyTier: tier === currentTier,
+      }
+    );
+  });
 }
 
 function getGateTone(index: number) {
@@ -90,12 +182,12 @@ function TrendChart({ scoreTrend }: { scoreTrend: RankingDashboardTrendPoint[] }
   }
 
   return (
-    <div className="mt-4 rounded-md border border-app-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-3">
+    <div className="mt-4 flex min-h-[20rem] flex-1 rounded-md border border-app-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-3">
       <svg
         viewBox="0 0 100 78"
         role="img"
         aria-label="최근 배틀 레이팅 변화 그래프"
-        className="h-40 w-full overflow-visible"
+        className="h-full min-h-[17rem] w-full overflow-visible"
       >
         <defs>
           <linearGradient id="ratingDashboardTrendGradient" x1="0" x2="1" y1="0" y2="0">
@@ -199,11 +291,65 @@ function TagStatsList({ items }: { items: RankingDashboardTagStat[] }) {
             />
           </div>
           <p className="mt-1 text-[10px] text-app-dim">
-            solved {numberFormatter.format(item.solvedCount)} / submissions{" "}
-            {numberFormatter.format(item.submissionCount)}
+            AC 문제 {numberFormatter.format(item.solvedCount)}개 / 제출{" "}
+            {numberFormatter.format(item.submissionCount)}회
           </p>
         </div>
       ))}
+    </div>
+  );
+}
+
+function TierDistributionCard({
+  items,
+  currentTier,
+  maxPercentage,
+}: {
+  items: RankingDashboardTierDistribution[];
+  currentTier: string;
+  maxPercentage: number;
+}) {
+  return (
+    <div className="rounded-lg border border-app-border bg-app-base p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="font-mono text-xs text-app-dim">tier distribution</p>
+        <p className="font-mono text-xs text-app-secondary">내 위치: {currentTier}</p>
+      </div>
+      {items.length === 0 ? (
+        <div className="flex h-28 items-center justify-center rounded-md border border-dashed border-app-border/80 bg-app-elevated/40 text-xs text-app-dim">
+          티어 분포 데이터가 아직 없습니다.
+        </div>
+      ) : (
+        <div className="-mx-1 overflow-x-auto px-1 pb-2">
+          <div className="flex min-w-max items-end justify-center gap-3">
+            {items.map((item) => {
+              const height = Math.max(6, Math.round((item.percentage / maxPercentage) * 100));
+
+              return (
+                <div
+                  key={item.tier}
+                  className="flex w-12 shrink-0 flex-col items-center gap-2"
+                  title={`${item.tier}: ${numberFormatter.format(item.count)}명 (${item.percentage}%)`}
+                >
+                  <div className="relative flex h-20 w-full items-end overflow-hidden rounded-t-md bg-app-elevated">
+                    <div
+                      className={`w-full rounded-t-md ${
+                        item.isMyTier
+                          ? "bg-gradient-to-t from-app-accent to-app-success"
+                          : "bg-gradient-to-t from-app-border-strong to-app-surface"
+                      }`}
+                      style={{ height: `${height}%` }}
+                    />
+                  </div>
+                  <span className="font-mono text-[10px] text-app-dim">
+                    {abbreviateTier(item.tier)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -253,8 +399,13 @@ export default function RatingPreviewPanel() {
         const nextDashboard = await readRankingDashboard(controller.signal);
         setDashboard(nextDashboard);
       } catch (caught) {
-        if (controller.signal.aborted) return;
-        setError(caught instanceof Error ? caught.message : "랭킹 대시보드를 불러오지 못했습니다.");
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setError(
+          caught instanceof Error ? caught.message : "랭킹 대시보드를 불러오지 못했습니다.",
+        );
       } finally {
         if (!controller.signal.aborted) {
           setIsLoading(false);
@@ -279,9 +430,14 @@ export default function RatingPreviewPanel() {
 
   const { profile } = dashboard;
   const nextTierLabel = profile.nextTier ?? "최고 티어";
+  const battleRating = profile.battleRating;
+  const visibleTierDistribution = getVisibleTierDistribution(
+    dashboard.tierDistribution,
+    profile.tier,
+  );
   const tierDistributionMax = Math.max(
     1,
-    ...dashboard.tierDistribution.map((item) => item.percentage),
+    ...visibleTierDistribution.map((item) => item.percentage),
   );
 
   return (
@@ -291,11 +447,10 @@ export default function RatingPreviewPanel() {
           <p className="font-mono text-xs uppercase tracking-[0.24em] text-app-accent-soft">
             RATING_MONITOR
           </p>
-          <h2 className="mt-1 text-lg font-semibold text-app-primary">
-            내 성장/랭킹 대시보드
-          </h2>
+          <h2 className="mt-1 text-lg font-semibold text-app-primary">내 성장/랭킹 대시보드</h2>
           <p className="mt-1 text-xs text-app-secondary">
-            {profile.nickname}님의 배틀 레이팅, 승급 조건, 주변 랭킹을 실시간 운영 데이터로 보여줍니다.
+            {profile.nickname}의 배틀 레이팅, 승급 조건, 주변 랭킹을 실시간 운영 데이터로
+            보여줍니다.
           </p>
         </div>
 
@@ -309,12 +464,17 @@ export default function RatingPreviewPanel() {
             <p className="mt-1 text-app-primary">#{numberFormatter.format(profile.rank)}</p>
           </div>
           <div className="rounded-md border border-app-border bg-app-base px-3 py-2">
-            <p className="text-app-dim">SCORE</p>
-            <p className="mt-1 text-app-success">{numberFormatter.format(profile.score)}</p>
+            <p className="text-app-dim">B.RATING</p>
+            <p className="mt-1 text-app-success">{numberFormatter.format(battleRating)}</p>
           </div>
-          <div className="rounded-md border border-app-border bg-app-base px-3 py-2">
-            <p className="text-app-dim">TOP2</p>
-            <p className="mt-1 text-app-accent-soft">{profile.top2Rate}%</p>
+          <div
+            className="rounded-md border border-app-border bg-app-base px-3 py-2"
+            title="최근 완료 배틀 기준 Top2 비율"
+          >
+            <p className="text-app-dim">TOP2 RATE</p>
+            <p className="mt-1 text-app-accent-soft">
+              {profile.top2Rate}% ({numberFormatter.format(profile.top2SampleSize)}판)
+            </p>
           </div>
           <div className="rounded-md border border-app-border bg-app-base px-3 py-2">
             <p className="text-app-dim">MATCH</p>
@@ -325,8 +485,8 @@ export default function RatingPreviewPanel() {
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.9fr)]">
-        <div className="rounded-lg border border-app-border bg-app-base p-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.9fr)]">
+        <div className="flex h-full min-h-[32rem] flex-col rounded-lg border border-app-border bg-app-base p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="font-mono text-xs text-app-dim">battle score trend</p>
@@ -339,7 +499,7 @@ export default function RatingPreviewPanel() {
                   : "border-app-danger/40 bg-app-danger/10 text-app-danger"
               }`}
             >
-              {formatSignedNumber(profile.scoreDeltaTotal)}
+              최근 변동 {formatSignedNumber(profile.scoreDeltaTotal)}
             </span>
           </div>
 
@@ -357,9 +517,9 @@ export default function RatingPreviewPanel() {
 
           <div className="rounded-lg border border-app-border bg-app-base p-4">
             <div className="mb-3 flex items-center justify-between">
-              <p className="font-mono text-xs text-app-dim">nearby ranking</p>
+              <p className="font-mono text-xs text-app-dim">battle nearby ranking</p>
               <span className="font-mono text-xs text-app-accent-soft">
-                TOP {profile.percentile.toFixed(1)}%
+                {formatPercentileLabel(profile.percentile)}
               </span>
             </div>
             {dashboard.nearbyRanking.length === 0 ? (
@@ -384,66 +544,29 @@ export default function RatingPreviewPanel() {
               </div>
             )}
           </div>
+
+          <TierDistributionCard
+            items={visibleTierDistribution}
+            currentTier={profile.tier}
+            maxPercentage={tierDistributionMax}
+          />
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(260px,0.8fr)]">
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
         <div className="rounded-lg border border-app-border bg-app-base p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="font-mono text-xs text-app-dim">tier distribution</p>
-            <p className="font-mono text-xs text-app-secondary">내 위치: {profile.tier}</p>
-          </div>
-          {dashboard.tierDistribution.length === 0 ? (
-            <div className="flex h-28 items-center justify-center rounded-md border border-dashed border-app-border/80 bg-app-elevated/40 text-xs text-app-dim">
-              티어 분포 데이터가 아직 없습니다.
-            </div>
-          ) : (
-            <div className="flex h-28 items-end gap-2">
-              {dashboard.tierDistribution.map((item) => {
-                const height = Math.max(6, Math.round((item.percentage / tierDistributionMax) * 100));
-
-                return (
-                  <div key={item.tier} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-                    <div className="relative flex h-20 w-full items-end overflow-hidden rounded-t-md bg-app-elevated">
-                      <div
-                        className={`w-full rounded-t-md ${
-                          item.isMyTier
-                            ? "bg-gradient-to-t from-app-accent to-app-success"
-                            : "bg-gradient-to-t from-app-border-strong to-app-surface"
-                        }`}
-                        style={{ height: `${height}%` }}
-                        title={`${item.tier}: ${item.count}명 (${item.percentage}%)`}
-                      />
-                    </div>
-                    <span className="truncate font-mono text-[10px] text-app-dim">{item.tier}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <p className="font-mono text-xs text-app-dim">tag strength</p>
+          <TagStatsList items={dashboard.tagStats} />
         </div>
 
-        <div className="grid gap-4">
-          <div className="rounded-lg border border-app-border bg-app-base p-4">
-            <p className="font-mono text-xs text-app-dim">tag strength</p>
-            <TagStatsList items={dashboard.tagStats} />
-          </div>
-
-          <div className="rounded-lg border border-app-border bg-app-base p-4">
-            <p className="font-mono text-xs text-app-dim">review queue</p>
-            <div className="mt-3 grid grid-cols-2 gap-2 font-mono text-xs">
-              <div className="rounded-md border border-app-border bg-app-elevated px-3 py-2">
-                <p className="text-app-dim">TODAY</p>
-                <p className="mt-1 text-app-warn">
-                  {numberFormatter.format(dashboard.reviewSummary.dueTodayCount)}
-                </p>
-              </div>
-              <div className="rounded-md border border-app-border bg-app-elevated px-3 py-2">
-                <p className="text-app-dim">UPCOMING</p>
-                <p className="mt-1 text-app-primary">
-                  {numberFormatter.format(dashboard.reviewSummary.upcomingCount)}
-                </p>
-              </div>
+        <div className="rounded-lg border border-app-border bg-app-base p-4">
+          <p className="font-mono text-xs text-app-dim">today review</p>
+          <div className="mt-3 font-mono text-xs">
+            <div className="rounded-md border border-app-border bg-app-elevated px-3 py-2">
+              <p className="text-app-dim">오늘 복습</p>
+              <p className="mt-1 text-app-warn">
+                {numberFormatter.format(dashboard.reviewSummary.dueTodayCount)}
+              </p>
             </div>
           </div>
         </div>
