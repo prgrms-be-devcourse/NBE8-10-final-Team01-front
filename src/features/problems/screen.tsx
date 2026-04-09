@@ -255,6 +255,10 @@ export default function ProblemsScreen() {
                 </div>
               ) : null}
 
+              <p className="text-xs text-app-dim">
+                * 레이팅 : 숫자로 표기된 상세 난이도
+              </p>
+
               <div className="overflow-hidden rounded-md border border-app-border">
                 <div className="overflow-x-auto">
                   <table className="min-w-full border-collapse text-sm">
