@@ -492,6 +492,11 @@ export interface UncheckedBattleResult {
   problemTitle: string;
 }
 
+export interface ReviewScheduleResponse {
+  reviewCount: number;
+  isReviewRequired: boolean;
+}
+
 export interface AdminProblemStarterCodeRequest {
   language: string;
   code: string;
