@@ -3,6 +3,7 @@ import type { CSSProperties, RefObject } from "react";
 import type { Difficulty } from "@/shared/api/contracts";
 
 import type { QueueCategoryOption, QueueCategoryValue } from "../data";
+import RatingPreviewPanel from "./rating-preview-panel";
 
 interface QueueEditorPaneProps {
   editorPaneRef: RefObject<HTMLDivElement | null>;
@@ -208,6 +209,7 @@ export default function QueueEditorPane({
                   {error ?? terminalMessage}
                 </div>
               ) : null}
+              <RatingPreviewPanel />
             </div>
           </div>
         </div>
