@@ -489,3 +489,8 @@ export interface UncheckedBattleResult {
   scoreDelta: number;
   problemTitle: string;
 }
+
+export interface ReviewScheduleResponse {
+  reviewCount: number;
+  isReviewRequired: boolean;
+}

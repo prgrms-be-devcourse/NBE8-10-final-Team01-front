@@ -9,6 +9,7 @@ import SockJS from "sockjs-client";
 import type {
   ApiErrorResponse,
   ProblemDetailResponse,
+  ReviewScheduleResponse,
   SoloRunRequest,
   SoloRunResponse,
   SoloSubmitRequest,
@@ -498,6 +499,10 @@ export default function ProblemSoloScreen({
   const [submitState, setSubmitState] = useState<SoloSubmitState>(
     createInitialSubmitState,
   );
+  const [reviewSchedule, setReviewSchedule] =
+    useState<ReviewScheduleResponse | null>(null);
+  const [isDismissing, setIsDismissing] = useState(false);
+
   const [leftPaneRatio, setLeftPaneRatio] = useState(() => {
     const stored = readStoredLayout();
     return stored?.leftPaneRatio ?? DEFAULT_LEFT_PANE_RATIO;
@@ -668,6 +673,29 @@ export default function ProblemSoloScreen({
   }, [code, language, problem, session.member?.memberId]);
 
   useEffect(() => {
+    if (!sessionLoaded || !session.authenticated) {
+      setReviewSchedule(null);
+      return;
+    }
+
+    let active = true;
+
+    (async () => {
+      const res = await fetch(`/api/v1/review?problemId=${problemId}`, {
+        cache: "no-store",
+      });
+      if (active && res.ok) {
+        const body = await res.json();
+        setReviewSchedule(body.data ?? null);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [problemId, session.authenticated, sessionLoaded]);
+
+  useEffect(() => {
     const memberId = session.member?.memberId;
 
     if (!session.authenticated || !memberId) {
@@ -796,6 +824,17 @@ export default function ProblemSoloScreen({
 
   function handleContentLanguageChange(nextLanguage: ContentLanguage) {
     setContentLanguage(nextLanguage);
+  }
+
+  async function handleDismissReview() {
+    setIsDismissing(true);
+    await fetch(`/api/v1/review/dismiss?problemId=${problemId}`, {
+      method: "PATCH",
+    });
+    setReviewSchedule((prev) =>
+      prev ? { ...prev, isReviewRequired: false } : null,
+    );
+    setIsDismissing(false);
   }
 
   function handleResetDraft() {
@@ -1407,6 +1446,26 @@ export default function ProblemSoloScreen({
                                 {problem.language?.toUpperCase()}
                               </StatusPill>
                             </div>
+                            <div className="mt-3 flex items-center justify-between gap-2">
+                              <span className="text-sm text-app-secondary">
+                                풀이횟수:{" "}
+                                <span className="font-semibold text-app-primary">
+                                  {reviewSchedule?.reviewCount ?? 0}회
+                                </span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={handleDismissReview}
+                                disabled={
+                                  !reviewSchedule ||
+                                  !reviewSchedule.isReviewRequired ||
+                                  isDismissing
+                                }
+                                className="rounded-md border border-app-border px-2.5 py-1 text-xs font-semibold text-app-secondary transition hover:border-app-border-strong hover:text-app-primary disabled:cursor-not-allowed disabled:text-app-dim"
+                              >
+                                이 문제 복습 안하기
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1866,6 +1925,26 @@ export default function ProblemSoloScreen({
                         <StatusPill variant="dark">
                           {problem.language?.toUpperCase()}
                         </StatusPill>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <span className="text-sm text-app-secondary">
+                          풀이횟수:{" "}
+                          <span className="font-semibold text-app-primary">
+                            {reviewSchedule?.reviewCount ?? 0}회
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleDismissReview}
+                          disabled={
+                            !reviewSchedule ||
+                            !reviewSchedule.isReviewRequired ||
+                            isDismissing
+                          }
+                          className="rounded-md border border-app-border px-2.5 py-1 text-xs font-semibold text-app-secondary transition hover:border-app-border-strong hover:text-app-primary disabled:cursor-not-allowed disabled:text-app-dim"
+                        >
+                          이 문제 복습 안하기
+                        </button>
                       </div>
                     </div>
                   </div>
