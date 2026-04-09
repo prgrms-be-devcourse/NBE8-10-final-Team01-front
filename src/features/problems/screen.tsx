@@ -50,7 +50,10 @@ async function readTodayReviews() {
     };
   }
 
-  const body = (await response.json()) as RsData<TodayReviewResponse>;
+  const body = (await response.json().catch(() => null)) as RsData<TodayReviewResponse> | null;
+  if (!body) {
+    return { data: null, error: "응답 파싱 실패" };
+  }
   return { data: body.data, error: null };
 }
 
