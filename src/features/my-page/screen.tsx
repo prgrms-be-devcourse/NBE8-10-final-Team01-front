@@ -296,7 +296,9 @@ function SolveHeatmapSection({
 }) {
   const availableYears =
     heatmap?.availableYears.length ? [...heatmap.availableYears].sort((a, b) => b - a) : [selectedYear];
-  const monthLabelMap = new Map(heatmap?.monthLabels.map((item) => [item.weekIndex, item.label]) ?? []);
+  const monthLabelMap = new Map(
+    (heatmap?.monthLabels ?? []).map((item) => [item.weekIndex, item.label]),
+  );
   const weekCount = heatmap?.weeks.length ?? 0;
 
   return (
