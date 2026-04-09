@@ -489,3 +489,75 @@ export interface UncheckedBattleResult {
   scoreDelta: number;
   problemTitle: string;
 }
+
+export interface AdminProblemStarterCodeRequest {
+  language: string;
+  code: string;
+  isDefault: boolean;
+}
+
+export interface AdminProblemTestCaseRequest {
+  input: string;
+  output: string;
+}
+
+export interface AdminProblemUpsertRequest {
+  sourceProblemId?: string;
+  title: string;
+  difficulty: Difficulty;
+  content: string;
+  difficultyRating: number;
+  timeLimitMs: number;
+  memoryLimitMb: number;
+  inputFormat: string | null;
+  outputFormat: string | null;
+  inputMode?: "STDIO" | "FILE";
+  judgeType?: "EXACT" | "CHECKER";
+  checkerCode: string | null;
+  tags: string[];
+  starterCodes?: AdminProblemStarterCodeRequest[];
+  sampleCases: AdminProblemTestCaseRequest[];
+  hiddenCases: AdminProblemTestCaseRequest[];
+}
+
+export interface AdminProblemBulkRequest {
+  problems: AdminProblemUpsertRequest[];
+  validationToken?: string;
+}
+
+export interface AdminProblemMutationResponse {
+  problemId: number;
+  mode: "CREATED" | "UPDATED";
+  sourceProblemId: string;
+  title: string;
+}
+
+export interface AdminProblemValidationError {
+  index: number;
+  field: string;
+  message: string;
+}
+
+export interface AdminProblemBulkValidateResponse {
+  total: number;
+  validCount: number;
+  errors: AdminProblemValidationError[];
+  validationToken?: string | null;
+}
+
+export interface AdminProblemSingleValidationError {
+  field: string;
+  message: string;
+}
+
+export interface AdminProblemSingleValidateResponse {
+  valid: boolean;
+  errors: AdminProblemSingleValidationError[];
+}
+
+export interface AdminProblemBulkImportResponse {
+  total: number;
+  inserted: number;
+  updated: number;
+  problemIds: number[];
+}
