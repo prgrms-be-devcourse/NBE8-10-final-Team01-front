@@ -111,9 +111,11 @@ export interface RankingDashboardProfile {
   rank: number;
   percentile: number;
   score: number;
+  battleRating: number;
   nextTier: string | null;
   battleMatchCount: number;
   top2Rate: number;
+  top2SampleSize: number;
   scoreDeltaTotal: number;
 }
 
