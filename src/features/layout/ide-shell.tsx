@@ -405,7 +405,7 @@ export default function IdeShell({
         ? pathname === "/"
         : pathname === href || pathname.startsWith(`${href}/`);
 
-    return [
+    const items: QuickMenuTreeItem[] = [
       {
         key: "root",
         label: "BRACKET {}",
@@ -456,7 +456,20 @@ export default function IdeShell({
         href: "/mypage",
       },
     ];
-  }, [pathname]);
+
+    if (session.member?.role === "ROLE_ADMIN") {
+      items.push({
+        key: "admin-page",
+        label: "관리자페이지",
+        depth: 2,
+        icon: "class",
+        rowTone: isCurrent("/admin") ? "selected" : undefined,
+        href: "/admin",
+      });
+    }
+
+    return items;
+  }, [pathname, session.member?.role]);
 
   const isFullBleedCenter =
     pathname === "/" ||
@@ -464,6 +477,7 @@ export default function IdeShell({
     pathname === "/login" ||
     pathname === "/problems" ||
     pathname.startsWith("/problems/") ||
+    pathname.startsWith("/admin") ||
     pathname === "/mypage" ||
     pathname.startsWith("/battle/rooms/");
 
