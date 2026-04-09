@@ -497,6 +497,21 @@ export interface ReviewScheduleResponse {
   isReviewRequired: boolean;
 }
 
+export interface TodayReviewItem {
+  problemId: number;
+  problemTitle: string;
+  difficulty: string;
+  difficultyRating: number | null;
+  timeLimitMs: number;
+  memoryLimitMb: number;
+  reviewCount: number;
+}
+
+export interface TodayReviewResponse {
+  totalCount: number;
+  reviews: TodayReviewItem[];
+}
+
 export interface AdminProblemStarterCodeRequest {
   language: string;
   code: string;

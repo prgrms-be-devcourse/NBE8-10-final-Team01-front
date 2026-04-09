@@ -6,6 +6,9 @@ import { useEffect, useState } from "react";
 import type {
   ApiErrorResponse,
   ProblemListResponse,
+  RsData,
+  TodayReviewItem,
+  TodayReviewResponse,
 } from "@/shared/api/contracts";
 import { useAppSession } from "@/features/layout/session-context";
 
@@ -36,6 +39,21 @@ async function readProblemList(page: number) {
   };
 }
 
+async function readTodayReviews() {
+  const response = await fetch("/api/v1/review/today", { cache: "no-store" });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
+    return {
+      data: null,
+      error: payload?.message ?? "복습 목록을 불러오지 못했습니다.",
+    };
+  }
+
+  const body = (await response.json()) as RsData<TodayReviewResponse>;
+  return { data: body.data, error: null };
+}
+
 function getPageTokens(currentPage: number, totalPages: number) {
   if (totalPages <= MAX_PAGE_BUTTONS) {
     return Array.from({ length: totalPages }, (_, index) => index);
@@ -63,12 +81,79 @@ function getPageTokens(currentPage: number, totalPages: number) {
   return tokens;
 }
 
+function ReviewTable({ reviews }: { reviews: TodayReviewItem[] }) {
+  return (
+    <div className="overflow-hidden rounded-md border border-app-border">
+      <div className="overflow-x-auto">
+        <table className="min-w-full border-collapse text-sm">
+          <thead className="bg-app-elevated text-app-secondary">
+            <tr>
+              <th className="px-4 py-3 text-left font-semibold">ID</th>
+              <th className="px-4 py-3 text-left font-semibold">제목</th>
+              <th className="px-4 py-3 text-left font-semibold">난이도</th>
+              <th className="px-4 py-3 text-left font-semibold">레이팅</th>
+              <th className="px-4 py-3 text-left font-semibold">시간 제한</th>
+              <th className="px-4 py-3 text-left font-semibold">메모리 제한</th>
+              <th className="px-4 py-3 text-left font-semibold">풀이 횟수</th>
+              <th className="px-4 py-3 text-left font-semibold">개인 풀이</th>
+            </tr>
+          </thead>
+          <tbody className="bg-app-base">
+            {reviews.length > 0 ? (
+              reviews.map((item) => (
+                <tr key={item.problemId} className="border-t border-app-border">
+                  <td className="px-4 py-3 font-medium text-app-primary">{item.problemId}</td>
+                  <td className="px-4 py-3 text-app-primary">
+                    <Link
+                      href={`/problems/${item.problemId}`}
+                      className="font-medium text-app-primary underline-offset-4 hover:text-app-accent-soft hover:underline"
+                    >
+                      {item.problemTitle}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-app-secondary">{item.difficulty}</td>
+                  <td className="px-4 py-3 text-app-secondary">{item.difficultyRating ?? "-"}</td>
+                  <td className="px-4 py-3 text-app-secondary">{item.timeLimitMs}ms</td>
+                  <td className="px-4 py-3 text-app-secondary">{item.memoryLimitMb}MB</td>
+                  <td className="px-4 py-3 text-app-secondary">{item.reviewCount}회</td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/problems/${item.problemId}`}
+                      className="inline-flex h-8 items-center justify-center rounded-md border border-app-border bg-app-elevated px-3 text-xs font-medium text-app-primary transition hover:bg-app-elevated/90"
+                    >
+                      열기
+                    </Link>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr className="border-t border-app-border">
+                <td colSpan={8} className="px-4 py-6 text-center text-app-dim">
+                  오늘 복습할 문제가 없습니다.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function ProblemsScreen() {
   const { session, sessionLoaded } = useAppSession();
+  const [view, setView] = useState<"all" | "review">("all");
+
+  // 전체 문제 목록
   const [problemPage, setProblemPage] = useState(0);
   const [problemList, setProblemList] = useState<ProblemListResponse | null>(null);
   const [problemError, setProblemError] = useState<string | null>(null);
   const [isProblemLoading, setIsProblemLoading] = useState(false);
+
+  // 복습 목록
+  const [reviewList, setReviewList] = useState<TodayReviewResponse | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [isReviewLoading, setIsReviewLoading] = useState(false);
 
   useEffect(() => {
     if (!sessionLoaded) {
@@ -115,6 +200,40 @@ export default function ProblemsScreen() {
     };
   }, [problemPage, session.authenticated, sessionLoaded]);
 
+  useEffect(() => {
+    if (!sessionLoaded || !session.authenticated || view !== "review") {
+      return;
+    }
+
+    let active = true;
+
+    void (async () => {
+      setIsReviewLoading(true);
+      setReviewError(null);
+
+      const result = await readTodayReviews();
+
+      if (!active) {
+        return;
+      }
+
+      if (result.error) {
+        setReviewList(null);
+        setReviewError(result.error);
+        setIsReviewLoading(false);
+        return;
+      }
+
+      setReviewList(result.data);
+      setReviewError(null);
+      setIsReviewLoading(false);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [view, session.authenticated, sessionLoaded]);
+
   const problemRows = problemList?.problems ?? [];
   const problemPageInfo = problemList?.pageInfo ?? null;
   const canMovePrevProblemPage = problemPage > 0 && !isProblemLoading;
@@ -147,18 +266,45 @@ export default function ProblemsScreen() {
         <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
           <div className="mb-5 flex flex-wrap items-end justify-between gap-2 border-b border-app-border/70 pb-3">
             <div>
-              <h1 className="text-xl font-semibold text-app-primary">문제 목록</h1>
-              <p className="mt-1 text-sm text-app-muted">문제를 선택해 개인 풀이 화면으로 이동합니다.</p>
-            </div>
-            {session.authenticated ? (
-              <p className="text-xs text-app-dim">
-                {problemPageInfo
-                  ? `총 ${problemPageInfo.totalElements.toLocaleString()}개 · ${problemPageInfo.page + 1}/${problemPageInfo.totalPages} 페이지`
-                  : isProblemLoading
-                    ? "문제 목록을 불러오는 중입니다."
-                    : ""}
+              <h1 className="text-xl font-semibold text-app-primary">
+                {view === "all" ? "문제 목록" : "오늘 복습할 문제"}
+              </h1>
+              <p className="mt-1 text-sm text-app-muted">
+                {view === "all"
+                  ? "문제를 선택해 개인 풀이 화면으로 이동합니다."
+                  : "오늘 복습 기한이 된 문제 목록입니다."}
               </p>
-            ) : null}
+            </div>
+            <div className="flex items-center gap-3">
+              {session.authenticated && view === "all" && problemPageInfo ? (
+                <p className="text-xs text-app-dim">
+                  {`총 ${problemPageInfo.totalElements.toLocaleString()}개 · ${problemPageInfo.page + 1}/${problemPageInfo.totalPages} 페이지`}
+                </p>
+              ) : session.authenticated && view === "review" && reviewList ? (
+                <p className="text-xs text-app-dim">
+                  {`총 ${reviewList.totalCount}개`}
+                </p>
+              ) : null}
+              {session.authenticated ? (
+                view === "all" ? (
+                  <button
+                    type="button"
+                    onClick={() => setView("review")}
+                    className="inline-flex h-9 items-center justify-center rounded-md border border-app-border bg-app-elevated px-3 text-sm font-medium text-app-primary transition hover:bg-app-elevated/90"
+                  >
+                    오늘 복습할 문제
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setView("all")}
+                    className="inline-flex h-9 items-center justify-center rounded-md border border-app-border bg-app-elevated px-3 text-sm font-medium text-app-primary transition hover:bg-app-elevated/90"
+                  >
+                    전체 문제보기
+                  </button>
+                )
+              ) : null}
+            </div>
           </div>
 
           {!sessionLoaded ? (
@@ -184,6 +330,21 @@ export default function ProblemsScreen() {
                   메인으로
                 </Link>
               </div>
+            </div>
+          ) : view === "review" ? (
+            <div className="space-y-5">
+              <p className="text-xs text-app-dim">* 레이팅 : 숫자로 표기된 상세 난이도</p>
+              {reviewError ? (
+                <div className="rounded-md border border-app-danger/60 bg-app-danger/20 px-3 py-2 text-sm text-app-danger">
+                  {reviewError}
+                </div>
+              ) : isReviewLoading ? (
+                <div className="rounded-md border border-app-border bg-app-elevated px-4 py-4 text-sm text-app-secondary">
+                  복습 목록을 불러오는 중입니다.
+                </div>
+              ) : (
+                <ReviewTable reviews={reviewList?.reviews ?? []} />
+              )}
             </div>
           ) : (
             <div className="space-y-5">
@@ -255,9 +416,7 @@ export default function ProblemsScreen() {
                 </div>
               ) : null}
 
-              <p className="text-xs text-app-dim">
-                * 레이팅 : 숫자로 표기된 상세 난이도
-              </p>
+              <p className="text-xs text-app-dim">* 레이팅 : 숫자로 표기된 상세 난이도</p>
 
               <div className="overflow-hidden rounded-md border border-app-border">
                 <div className="overflow-x-auto">
