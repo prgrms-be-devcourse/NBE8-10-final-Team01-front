@@ -12,6 +12,9 @@ import type {
   RatingProgressApiResponse,
   RatingProgressResponse,
   RatingRequirementProgress,
+  SolveHeatmapApiResponse,
+  SolveHeatmapData,
+  SolveHeatmapDay,
 } from "@/shared/api/contracts";
 import { useAppSession } from "@/features/layout/session-context";
 import { formatDateTime } from "@/shared/utils/format-date-time";
@@ -64,6 +67,21 @@ async function readMyRatingProgress() {
   });
 
   const payload = (await response.json().catch(() => null)) as RatingProgressApiResponse | null;
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    payload,
+  };
+}
+
+async function readMySolveHeatmap(year: number) {
+  const response = await fetch(`/api/members/me/solve-heatmap?year=${year}`, {
+    cache: "no-store",
+    credentials: "include",
+  });
+
+  const payload = (await response.json().catch(() => null)) as SolveHeatmapApiResponse | null;
 
   return {
     ok: response.ok,
@@ -195,6 +213,228 @@ function buildRequirementActionGuide(requirement: RatingRequirementProgress) {
 const statCardClass =
   "rounded-xl border border-app-border bg-app-surface px-3 py-2 shadow-[0_10px_22px_rgba(0,0,0,0.18)]";
 const infoCardClass = "rounded-xl border border-app-border bg-app-elevated px-3 py-2";
+const heatmapWeekdayLabels = [
+  { row: 1, label: "Mon" },
+  { row: 3, label: "Wed" },
+  { row: 5, label: "Fri" },
+];
+const heatmapLegendLevels: SolveHeatmapDay["level"][] = [0, 1, 2, 3, 4];
+const heatmapDateFormatter = new Intl.DateTimeFormat("ko-KR", {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  weekday: "short",
+});
+
+function parseDateOnly(dateString: string) {
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(year, (month ?? 1) - 1, day ?? 1);
+}
+
+function formatHeatmapDate(dateString: string) {
+  return heatmapDateFormatter.format(parseDateOnly(dateString));
+}
+
+function getHeatmapCellBackground(level: SolveHeatmapDay["level"]) {
+  switch (level) {
+    case 1:
+      return "linear-gradient(180deg, rgba(35, 55, 51, 0.94) 0%, rgba(24, 37, 35, 1) 100%)";
+    case 2:
+      return "linear-gradient(180deg, rgba(31, 112, 72, 0.95) 0%, rgba(24, 79, 53, 1) 100%)";
+    case 3:
+      return "linear-gradient(180deg, rgba(74, 198, 110, 0.95) 0%, rgba(33, 133, 77, 1) 100%)";
+    case 4:
+      return "linear-gradient(180deg, rgba(132, 255, 147, 1) 0%, rgba(45, 188, 91, 1) 100%)";
+    default:
+      return "linear-gradient(180deg, rgba(32, 37, 46, 0.92) 0%, rgba(18, 22, 29, 1) 100%)";
+  }
+}
+
+function HeatmapSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-[6px] pl-11 text-[10px]">
+        {Array.from({ length: 14 }).map((_, index) => (
+          <div key={index} className="h-3 w-4 rounded bg-app-base" />
+        ))}
+      </div>
+      <div className="flex gap-3">
+        <div className="flex h-[148px] w-8 flex-col justify-between pt-0.5 text-[10px] text-app-dim">
+          <span className="h-3 w-6 rounded bg-app-base" />
+          <span className="h-3 w-6 rounded bg-app-base" />
+          <span className="h-3 w-6 rounded bg-app-base" />
+        </div>
+        <div className="flex gap-[6px]">
+          {Array.from({ length: 18 }).map((_, weekIndex) => (
+            <div key={weekIndex} className="flex flex-col gap-[6px]">
+              {Array.from({ length: 7 }).map((_, dayIndex) => (
+                <div
+                  key={`${weekIndex}-${dayIndex}`}
+                  className="h-4 w-4 animate-pulse rounded-[4px] bg-app-base"
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SolveHeatmapSection({
+  heatmap,
+  selectedYear,
+  isLoading,
+  error,
+  onSelectYear,
+}: {
+  heatmap: SolveHeatmapData | null;
+  selectedYear: number;
+  isLoading: boolean;
+  error: string | null;
+  onSelectYear: (year: number) => void;
+}) {
+  const availableYears =
+    heatmap?.availableYears.length ? [...heatmap.availableYears].sort((a, b) => b - a) : [selectedYear];
+  const monthLabelMap = new Map(heatmap?.monthLabels.map((item) => [item.weekIndex, item.label]) ?? []);
+  const weekCount = heatmap?.weeks.length ?? 0;
+
+  return (
+    <section className="rounded-2xl border border-app-border bg-app-surface p-4 shadow-[0_10px_24px_rgba(0,0,0,0.2)]">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-app-dim">solve-heatmap</p>
+          <h2 className="mt-2 text-sm font-semibold text-app-primary">풀이 잔디 히트맵</h2>
+          <p className="mt-1 text-xs text-app-muted">
+            {heatmap
+              ? `${heatmap.year}년 총 ${heatmap.totalSolvedCount.toLocaleString()}회 풀이 · 일일 최대 ${heatmap.maxDailySolvedCount.toLocaleString()}회`
+              : `${selectedYear}년 풀이 기록을 불러오는 중입니다.`}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {availableYears.map((year) => {
+            const isActive = year === selectedYear;
+
+            return (
+              <button
+                key={year}
+                type="button"
+                onClick={() => onSelectYear(year)}
+                disabled={isLoading && isActive}
+                className={`inline-flex h-8 items-center justify-center rounded-md border px-3 text-xs font-semibold transition ${
+                  isActive
+                    ? "border-app-accent bg-app-accent/15 text-app-primary"
+                    : "border-app-border bg-app-base text-app-secondary hover:border-app-border-strong hover:bg-app-elevated"
+                }`}
+              >
+                {year}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {error ? (
+        <div className="mt-4 rounded-xl border border-app-warn/60 bg-app-warn/15 px-3 py-2 text-sm text-app-warn">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="mt-4 rounded-2xl border border-app-border bg-app-base/80 px-5 py-5">
+        {isLoading ? (
+          <HeatmapSkeleton />
+        ) : !heatmap || heatmap.weeks.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-app-border px-4 py-10 text-center text-sm text-app-muted">
+            아직 풀이 기록이 없습니다.
+          </div>
+        ) : (
+          <div className="overflow-visible">
+            <div className="overflow-x-auto overflow-y-visible pb-1">
+              <div className="mx-auto w-fit min-w-[860px]">
+                <div className="mb-3 flex gap-[6px] pl-11 text-[10px] text-app-dim">
+                  {heatmap.weeks.map((_, weekIndex) => (
+                    <div key={weekIndex} className="w-4 shrink-0 text-left">
+                      {monthLabelMap.get(weekIndex) ?? ""}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-3">
+                  <div className="flex h-[148px] w-8 flex-col justify-between pt-0.5 text-[10px] text-app-dim">
+                    {Array.from({ length: 7 }).map((_, rowIndex) => (
+                      <span key={rowIndex} className="inline-flex h-4 items-center justify-end">
+                        {heatmapWeekdayLabels.find((item) => item.row === rowIndex)?.label ?? ""}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-[6px]">
+                    {heatmap.weeks.map((week, weekIndex) => (
+                      <div key={weekIndex} className="flex flex-col gap-[6px]">
+                        {week.days.map((day) => {
+                          const tooltipText = [
+                            formatHeatmapDate(day.date),
+                            `Total solved: ${day.totalSolvedCount}`,
+                            `Solo solved: ${day.soloSolvedCount}`,
+                            `Battle solved: ${day.battleSolvedCount}`,
+                          ].join("\n");
+                          const dayRowIndex = week.days.findIndex((item) => item.date === day.date);
+                          const tooltipPlacement =
+                            dayRowIndex <= 2
+                              ? "top-full mt-2 origin-top"
+                              : "bottom-full mb-2 origin-bottom";
+                          const tooltipAlignment =
+                            weekIndex <= 3
+                              ? "left-0 translate-x-0"
+                              : weekIndex >= weekCount - 4
+                                ? "right-0 left-auto translate-x-0"
+                                : "left-1/2 -translate-x-1/2";
+
+                          return (
+                            <button
+                              key={day.date}
+                              type="button"
+                              aria-label={tooltipText}
+                              className={`group relative z-0 h-4 w-4 shrink-0 rounded-[4px] border border-app-border/70 transition-transform hover:z-[90] hover:-translate-y-[1px] focus-visible:z-[90] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent/70 ${
+                                day.inSelectedYear ? "" : "opacity-35"
+                              } ${day.isToday ? "ring-1 ring-app-accent-soft ring-offset-1 ring-offset-app-base" : ""}`}
+                              style={{ background: getHeatmapCellBackground(day.level) }}
+                            >
+                              <span
+                                className={`pointer-events-none absolute z-[80] hidden w-[196px] flex-col overflow-hidden rounded-lg border border-app-border-strong bg-app-base px-3 py-2 text-left text-[11px] leading-5 text-app-primary shadow-[0_18px_34px_rgba(0,0,0,0.42)] group-hover:flex group-focus-visible:flex ${tooltipPlacement} ${tooltipAlignment}`}
+                              >
+                                <span className="block text-app-dim">{formatHeatmapDate(day.date)}</span>
+                                <span className="block">Total solved: {day.totalSolvedCount}</span>
+                                <span className="block">Solo solved: {day.soloSolvedCount}</span>
+                                <span className="block">Battle solved: {day.battleSolvedCount}</span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-end gap-2 text-[11px] text-app-dim">
+                  <span>Less</span>
+                  {heatmapLegendLevels.map((level) => (
+                    <span
+                      key={level}
+                      className="inline-flex h-3.5 w-3.5 rounded-[4px] border border-app-border/70"
+                      style={{ background: getHeatmapCellBackground(level) }}
+                    />
+                  ))}
+                  <span>More</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
 function ResultCard({ item }: { item: MyBattleResultItem }) {
   return (
@@ -274,12 +514,18 @@ function LoadingRows() {
 
 export default function MyPageScreen() {
   const { session, sessionLoaded, refreshSession } = useAppSession();
+  const currentYear = new Date().getFullYear();
   const [myInfo, setMyInfo] = useState<MyInfoResponse | null>(null);
   const [myInfoError, setMyInfoError] = useState<string | null>(null);
   const [ratingProgress, setRatingProgress] = useState<RatingProgressResponse | null>(null);
   const [ratingProgressError, setRatingProgressError] = useState<string | null>(null);
   const [battleResults, setBattleResults] = useState<MyBattleResultItem[]>([]);
   const [pageInfo, setPageInfo] = useState(defaultPageInfo);
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [heatmap, setHeatmap] = useState<SolveHeatmapData | null>(null);
+  const [heatmapError, setHeatmapError] = useState<string | null>(null);
+  const [isHeatmapLoading, setIsHeatmapLoading] = useState(true);
+  const [hasInitializedHeatmap, setHasInitializedHeatmap] = useState(false);
   const [message, setMessage] = useState("내 전적을 불러오는 중입니다.");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -299,18 +545,28 @@ export default function MyPageScreen() {
         setMyInfoError(null);
         setRatingProgress(null);
         setRatingProgressError(null);
+        setHeatmap(null);
+        setHeatmapError(null);
+        setSelectedYear(currentYear);
+        setHasInitializedHeatmap(false);
         setBattleResults([]);
         setPageInfo(defaultPageInfo);
         setError(null);
         setIsLoading(false);
+        setIsHeatmapLoading(false);
         setMessage("로그인 후 내 전적을 확인할 수 있습니다.");
         return;
       }
 
-      const [myInfoResponse, battleResultsResponse, ratingProgressResponse] = await Promise.all([
+      setIsLoading(true);
+      setIsHeatmapLoading(true);
+      setHasInitializedHeatmap(false);
+
+      const [myInfoResponse, battleResultsResponse, ratingProgressResponse, heatmapResponse] = await Promise.all([
         readMyInfo(),
         readMyBattleResults(0, PAGE_SIZE),
         readMyRatingProgress(),
+        readMySolveHeatmap(currentYear),
       ]);
 
       if (!active) {
@@ -323,7 +579,9 @@ export default function MyPageScreen() {
         ratingProgressResponse.status === 401 ||
         ratingProgressResponse.payload?.resultCode === "MEMBER_401" ||
         battleResultsResponse.status === 401 ||
-        battleResultsResponse.payload?.resultCode === "MEMBER_401";
+        battleResultsResponse.payload?.resultCode === "MEMBER_401" ||
+        heatmapResponse.status === 401 ||
+        heatmapResponse.payload?.resultCode === "MEMBER_401";
 
       if (isUnauthorized) {
         void refreshSession();
@@ -331,16 +589,22 @@ export default function MyPageScreen() {
         setMyInfoError(null);
         setRatingProgress(null);
         setRatingProgressError(null);
+        setHeatmap(null);
+        setHeatmapError(null);
+        setSelectedYear(currentYear);
+        setHasInitializedHeatmap(false);
         setBattleResults([]);
         setPageInfo(defaultPageInfo);
         setError(null);
         setMessage(
           myInfoResponse.payload?.msg ??
             ratingProgressResponse.payload?.msg ??
+            heatmapResponse.payload?.msg ??
             battleResultsResponse.payload?.msg ??
             "로그인이 필요합니다.",
         );
         setIsLoading(false);
+        setIsHeatmapLoading(false);
         return;
       }
 
@@ -372,6 +636,23 @@ export default function MyPageScreen() {
         );
       }
 
+      if (
+        heatmapResponse.ok &&
+        heatmapResponse.payload &&
+        heatmapResponse.payload.resultCode === "200" &&
+        heatmapResponse.payload.data
+      ) {
+        setHeatmap(heatmapResponse.payload.data);
+        setSelectedYear(heatmapResponse.payload.data.year);
+        setHeatmapError(null);
+      } else {
+        setHeatmap(null);
+        setHeatmapError(heatmapResponse.payload?.msg ?? "풀이 히트맵을 불러오지 못했습니다.");
+      }
+
+      setIsHeatmapLoading(false);
+      setHasInitializedHeatmap(true);
+
       const { ok, payload } = battleResultsResponse;
 
       if (!ok || !payload || payload.resultCode !== "200" || !payload.data) {
@@ -393,7 +674,61 @@ export default function MyPageScreen() {
     return () => {
       active = false;
     };
-  }, [refreshSession, session.authenticated, sessionLoaded]);
+  }, [currentYear, refreshSession, session.authenticated, sessionLoaded]);
+
+  useEffect(() => {
+    if (!sessionLoaded || !session.authenticated || !hasInitializedHeatmap) {
+      return;
+    }
+
+    if (heatmap?.year === selectedYear) {
+      return;
+    }
+
+    let active = true;
+    setIsHeatmapLoading(true);
+
+    void (async () => {
+      const heatmapResponse = await readMySolveHeatmap(selectedYear);
+
+      if (!active) {
+        return;
+      }
+
+      if (heatmapResponse.status === 401 || heatmapResponse.payload?.resultCode === "MEMBER_401") {
+        void refreshSession();
+        setHeatmapError(heatmapResponse.payload?.msg ?? "로그인이 필요합니다.");
+        setIsHeatmapLoading(false);
+        return;
+      }
+
+      if (
+        heatmapResponse.ok &&
+        heatmapResponse.payload &&
+        heatmapResponse.payload.resultCode === "200" &&
+        heatmapResponse.payload.data
+      ) {
+        setHeatmap(heatmapResponse.payload.data);
+        setSelectedYear(heatmapResponse.payload.data.year);
+        setHeatmapError(null);
+      } else {
+        setHeatmapError(heatmapResponse.payload?.msg ?? "풀이 히트맵을 불러오지 못했습니다.");
+      }
+
+      setIsHeatmapLoading(false);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [
+    hasInitializedHeatmap,
+    heatmap?.year,
+    refreshSession,
+    selectedYear,
+    session.authenticated,
+    sessionLoaded,
+  ]);
 
   async function handleLoadMore() {
     if (!session.authenticated || !pageInfo.hasNext || isLoadingMore) {
@@ -627,6 +962,14 @@ export default function MyPageScreen() {
                   </div>
                 </div>
               ) : null}
+
+              <SolveHeatmapSection
+                heatmap={heatmap}
+                selectedYear={selectedYear}
+                isLoading={isHeatmapLoading}
+                error={heatmapError}
+                onSelectYear={setSelectedYear}
+              />
 
               <section className="rounded-2xl border border-app-border bg-app-surface p-4 shadow-[0_10px_24px_rgba(0,0,0,0.2)]">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
