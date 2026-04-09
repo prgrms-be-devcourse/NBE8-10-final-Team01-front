@@ -95,9 +95,9 @@ export default function QueueEditorPane({
           </button>
         </div>
 
-        <div ref={editorPaneRef} className="flex-1 overflow-hidden bg-app-base">
+        <div ref={editorPaneRef} className="flex-1 overflow-y-auto bg-app-base">
           <div
-            className="grid h-full grid-cols-[56px_minmax(0,1fr)] bg-app-base font-mono"
+            className="grid min-h-full grid-cols-[56px_minmax(0,1fr)] bg-app-base font-mono"
             style={editorContentStyle}
           >
             <div className="border-r border-app-border/70 bg-app-base px-3 py-4 text-right text-app-syntax-line-number">
