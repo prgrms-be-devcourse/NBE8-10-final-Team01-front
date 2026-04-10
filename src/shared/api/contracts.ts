@@ -170,6 +170,36 @@ export interface RankingDashboardResponse {
   reviewSummary: RankingDashboardReviewSummary;
 }
 
+export interface SolveHeatmapDay {
+  date: string;
+  soloSolvedCount: number;
+  battleSolvedCount: number;
+  totalSolvedCount: number;
+  level: 0 | 1 | 2 | 3 | 4;
+  inSelectedYear: boolean;
+  isToday: boolean;
+}
+
+export interface SolveHeatmapWeek {
+  days: SolveHeatmapDay[];
+}
+
+export interface SolveHeatmapMonthLabel {
+  weekIndex: number;
+  label: string;
+}
+
+export interface SolveHeatmapData {
+  year: number;
+  availableYears: number[];
+  totalSolvedCount: number;
+  maxDailySolvedCount: number;
+  monthLabels: SolveHeatmapMonthLabel[];
+  weeks: SolveHeatmapWeek[];
+}
+
+export type SolveHeatmapApiResponse = RsData<SolveHeatmapData | null>;
+
 export interface QueueJoinRequest {
   category: string;
   difficulty: Difficulty;
