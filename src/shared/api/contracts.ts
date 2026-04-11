@@ -421,6 +421,17 @@ export interface BattleFinishedWsMessage {
   type: "BATTLE_FINISHED";
 }
 
+export interface BattleStartedWsMessage {
+  type: "BATTLE_STARTED";
+  timerEnd?: string | null;
+}
+
+export interface ParticipantStatusChangedWsMessage {
+  type: "PARTICIPANT_STATUS_CHANGED";
+  userId: number;
+  status: "PLAYING" | "SOLVED" | "ABANDONED" | "TIMEOUT" | "QUIT";
+}
+
 export interface ParticipantDoneWsMessage {
   type: "PARTICIPANT_DONE";
   userId: number;

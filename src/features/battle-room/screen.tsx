@@ -10,7 +10,9 @@ import SockJS from "sockjs-client";
 import type {
   ApiErrorResponse,
   BattleRoomStateResponse,
+  BattleStartedWsMessage,
   JoinRoomResponse,
+  ParticipantStatusChangedWsMessage,
   ProblemDetailResponse,
   RoomResponse,
   RunTestCaseResult,
@@ -699,13 +701,20 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
         }
       },
       onConnect: () => {
-        // 재연결 시 ABANDONED 상태면 grace period 취소를 위해 join 호출
-        const currentRoom = roomRef.current;
-        const me = currentRoom?.participants.find(
-          (p) => p.userId === session.member?.memberId,
-        );
-        if (currentRoom?.status === "PLAYING" && me?.status === "ABANDONED") {
-          void fetch(`/api/battle/rooms/${roomId}/join`, { method: "POST" });
+        // 재연결 시 서버 상태를 재조회해 ABANDONED 여부를 확인한다.
+        // WS가 끊긴 동안 백엔드가 participant를 ABANDONED로 전환했을 수 있지만,
+        // 끊겨 있는 동안은 이벤트를 받지 못하므로 roomRef는 여전히 PLAYING을 가리킨다.
+        // roomRef가 null이면 초기 연결이므로 스킵 (별도 useEffect가 초기 room 조회를 담당).
+        if (roomRef.current !== null) {
+          void fetch(`/api/battle/rooms/${roomId}`, { cache: "no-store" })
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data: RoomResponse | null) => {
+              if (data) {
+                roomRef.current = data;
+                setRoom(data);
+                // setRoom 후 shouldRejoinFromPlaying useEffect가 ABANDONED 여부를 감지해 join 처리
+              }
+            });
         }
 
         client.subscribe(`/topic/room/${roomId}`, (message) => {
@@ -723,7 +732,49 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
 
           const type = (payload as { type: unknown }).type;
 
-          if (type === "BATTLE_STARTED" || type === "PARTICIPANT_DONE") {
+          if (type === "BATTLE_STARTED") {
+            const msg = payload as BattleStartedWsMessage;
+            setRoom((current) => {
+              if (!current) {
+                return current;
+              }
+
+              const nextRoom = {
+                ...current,
+                status: "PLAYING" as const,
+                timerEnd:
+                  typeof msg.timerEnd === "string" || msg.timerEnd === null
+                    ? msg.timerEnd
+                    : current.timerEnd,
+              };
+              roomRef.current = nextRoom;
+              return nextRoom;
+            });
+            return;
+          }
+
+          if (type === "PARTICIPANT_STATUS_CHANGED") {
+            const msg = payload as ParticipantStatusChangedWsMessage;
+            setRoom((current) => {
+              if (!current) {
+                return current;
+              }
+
+              const nextRoom = {
+                ...current,
+                participants: current.participants.map((participant) =>
+                  participant.userId === msg.userId
+                    ? { ...participant, status: msg.status }
+                    : participant,
+                ),
+              };
+              roomRef.current = nextRoom;
+              return nextRoom;
+            });
+            return;
+          }
+
+          if (type === "PARTICIPANT_DONE") {
             void fetch(`/api/battle/rooms/${roomId}`, { cache: "no-store" })
               .then((res) => (res.ok ? res.json() : null))
               .then((data: RoomResponse | null) => {
@@ -732,6 +783,22 @@ export default function BattleRoomScreen({ roomId }: { roomId: string }) {
                   setRoom(data);
                 }
               });
+            return;
+          }
+
+          if (type === "BATTLE_FINISHED") {
+            setRoom((current) => {
+              if (!current) {
+                return current;
+              }
+
+              const nextRoom = {
+                ...current,
+                status: "FINISHED" as const,
+              };
+              roomRef.current = nextRoom;
+              return nextRoom;
+            });
             return;
           }
 

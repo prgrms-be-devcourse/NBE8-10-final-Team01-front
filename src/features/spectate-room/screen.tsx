@@ -8,9 +8,10 @@ import SockJS from "sockjs-client";
 
 import type {
   ApiErrorResponse,
-  BattleFinishedWsMessage,
+  BattleStartedWsMessage,
   CodeSyncWsMessage,
   CodeUpdateWsMessage,
+  ParticipantStatusChangedWsMessage,
   ProblemDetailResponse,
   RoomResponse,
 } from "@/shared/api/contracts";
@@ -192,13 +193,71 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
           } catch {
             return;
           }
-          if (
-            typeof payload === "object" &&
-            payload !== null &&
-            "type" in payload &&
-            (payload as { type: unknown }).type === "BATTLE_FINISHED"
-          ) {
+          if (typeof payload !== "object" || payload === null || !("type" in payload)) {
+            return;
+          }
+
+          const type = (payload as { type: unknown }).type;
+
+          if (type === "PARTICIPANT_STATUS_CHANGED") {
+            const msg = payload as ParticipantStatusChangedWsMessage;
+            setRoom((current) => {
+              if (!current) {
+                return current;
+              }
+
+              const nextRoom = {
+                ...current,
+                participants: current.participants.map((participant) =>
+                  participant.userId === msg.userId
+                    ? { ...participant, status: msg.status }
+                    : participant,
+                ),
+              };
+              participantsRef.current = nextRoom.participants;
+              roomStatusRef.current = nextRoom.status;
+              return nextRoom;
+            });
+            return;
+          }
+
+          if (type === "BATTLE_STARTED") {
+            const msg = payload as BattleStartedWsMessage;
+            setRoom((current) => {
+              if (!current) {
+                return current;
+              }
+
+              const nextRoom = {
+                ...current,
+                status: "PLAYING" as const,
+                timerEnd:
+                  typeof msg.timerEnd === "string" || msg.timerEnd === null
+                    ? msg.timerEnd
+                    : current.timerEnd,
+              };
+              participantsRef.current = nextRoom.participants;
+              roomStatusRef.current = nextRoom.status;
+              return nextRoom;
+            });
+            return;
+          }
+
+          if (type === "BATTLE_FINISHED") {
             setBattleFinished(true);
+            setRoom((current) => {
+              if (!current) {
+                return current;
+              }
+
+              const nextRoom = {
+                ...current,
+                status: "FINISHED" as const,
+              };
+              participantsRef.current = nextRoom.participants;
+              roomStatusRef.current = nextRoom.status;
+              return nextRoom;
+            });
           }
         });
 
