@@ -224,7 +224,7 @@ export default function IdeShell({
             client.connectHeaders = { "X-WS-Token": data.token };
           }
         } catch {
-          // 荑좏궎 湲곕컲 ?몄쬆?쇰줈 ?대갚
+          // 쿠키 기반 인증으로 폴백
         }
       },
       onConnect: () => {
