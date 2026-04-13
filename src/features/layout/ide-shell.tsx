@@ -7,8 +7,10 @@ import SockJS from "sockjs-client";
 
 import type {
   BattleResultWsMessage,
+  BattleStartedWsMessage,
   MyBattleResultItem,
   MyBattleResultsResponse,
+  ParticipantStatusChangedWsMessage,
   RoomResponse,
   SessionResponse,
 } from "@/shared/api/contracts";
@@ -32,6 +34,7 @@ export interface NotificationItem {
 
 interface BattleSidebarState {
   status: RoomResponse["status"];
+  timerEnd: string | null;
   remainingTime: string;
   participants: RoomResponse["participants"];
   myStatus: string | null;
@@ -87,6 +90,39 @@ async function readMyBattleResultsPreview(size: number) {
     ok: response.ok,
     status: response.status,
     payload,
+  };
+}
+
+function createBattleSidebarState(payload: RoomResponse, memberId: number): BattleSidebarState {
+  const me = payload.participants.find((item) => item.userId === memberId) ?? null;
+
+  return {
+    status: payload.status,
+    timerEnd: payload.timerEnd,
+    remainingTime: formatRemainingTime(payload.timerEnd),
+    participants: payload.participants,
+    myStatus: me?.status ?? null,
+    myUserId: memberId,
+    isJoining: me?.status === "ABANDONED",
+  };
+}
+
+function updateBattleSidebarParticipantStatus(
+  current: BattleSidebarState,
+  message: ParticipantStatusChangedWsMessage,
+): BattleSidebarState {
+  const participants = current.participants.map((participant) =>
+    participant.userId === message.userId
+      ? { ...participant, status: message.status }
+      : participant,
+  );
+  const me = participants.find((participant) => participant.userId === current.myUserId) ?? null;
+
+  return {
+    ...current,
+    participants,
+    myStatus: me?.status ?? null,
+    isJoining: me?.status === "ABANDONED",
   };
 }
 
@@ -173,8 +209,85 @@ export default function IdeShell({
     }
 
     let active = true;
+    const client = new Client({
+      webSocketFactory: () =>
+        new SockJS(
+          `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/ws`,
+        ),
+      reconnectDelay: 3000,
+      beforeConnect: async () => {
+        client.connectHeaders = {};
+        try {
+          const res = await fetch("/api/v1/ws/token", { method: "POST" });
+          if (res.ok) {
+            const data = (await res.json()) as { token: string };
+            client.connectHeaders = { "X-WS-Token": data.token };
+          }
+        } catch {
+          // 쿠키 기반 인증으로 폴백
+        }
+      },
+      onConnect: () => {
+        client.subscribe(`/topic/room/${targetRoomId}`, (frame) => {
+          let payload: unknown;
+          try {
+            payload = JSON.parse(frame.body) as unknown;
+          } catch {
+            return;
+          }
 
-    const poll = async () => {
+          if (typeof payload !== "object" || payload === null || !("type" in payload)) {
+            return;
+          }
+
+          const type = (payload as { type: unknown }).type;
+
+          if (type === "PARTICIPANT_STATUS_CHANGED") {
+            const message = payload as ParticipantStatusChangedWsMessage;
+            setBattleSidebarState((current) =>
+              current ? updateBattleSidebarParticipantStatus(current, message) : current,
+            );
+            return;
+          }
+
+          if (type === "BATTLE_STARTED") {
+            const message = payload as BattleStartedWsMessage;
+            setBattleSidebarState((current) => {
+              if (!current) {
+                return current;
+              }
+
+              const nextTimerEnd =
+                typeof message.timerEnd === "string" || message.timerEnd === null
+                  ? message.timerEnd
+                  : current.timerEnd;
+
+              return {
+                ...current,
+                status: "PLAYING",
+                timerEnd: nextTimerEnd,
+                remainingTime: formatRemainingTime(nextTimerEnd),
+              };
+            });
+            return;
+          }
+
+          if (type === "BATTLE_FINISHED") {
+            setBattleSidebarState((current) =>
+              current
+                ? {
+                    ...current,
+                    status: "FINISHED",
+                    remainingTime: formatRemainingTime(current.timerEnd),
+                  }
+                : current,
+            );
+          }
+        });
+      },
+    });
+
+    const loadSidebarState = async () => {
       try {
         const response = await fetch(`/api/battle/rooms/${targetRoomId}`, {
           cache: "no-store",
@@ -191,33 +304,41 @@ export default function IdeShell({
         }
 
         const payload = (await response.json()) as RoomResponse;
-        const me =
-          payload.participants.find((item) => item.userId === memberId) ?? null;
-
-        setBattleSidebarState({
-          status: payload.status,
-          remainingTime: formatRemainingTime(payload.timerEnd),
-          participants: payload.participants,
-          myStatus: me?.status ?? null,
-          myUserId: memberId,
-          isJoining: me?.status === "ABANDONED",
-        });
+        setBattleSidebarState(createBattleSidebarState(payload, memberId));
+        client.activate();
       } catch {
         // 네비게이션 중 fetch 취소 등 무시
       }
     };
 
-    void poll();
-
-    const intervalId = window.setInterval(() => {
-      void poll();
-    }, 1000);
+    void loadSidebarState();
 
     return () => {
       active = false;
-      window.clearInterval(intervalId);
+      void client.deactivate();
     };
   }, [pathname, session.authenticated, session.member]);
+
+  useEffect(() => {
+    if (!battleSidebarState?.timerEnd) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setBattleSidebarState((current) =>
+        current
+          ? {
+              ...current,
+              remainingTime: formatRemainingTime(current.timerEnd),
+            }
+          : current,
+      );
+    }, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [battleSidebarState?.timerEnd]);
 
   useEffect(() => {
     const isSoloProblemRoute = /^\/problems\/\d+$/.test(pathname);
