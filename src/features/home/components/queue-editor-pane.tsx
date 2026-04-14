@@ -1,4 +1,14 @@
-import type { CSSProperties, RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 
 import type { Difficulty } from "@/shared/api/contracts";
 
@@ -32,6 +42,34 @@ function estimateTextWidth(text: string) {
   return Array.from(text).reduce((total, char) => {
     return total + (/^[\x20-\x7E]$/.test(char) ? 1 : 1.45);
   }, 0);
+}
+
+function getNextEnabledCategoryIndex(
+  options: QueueCategoryOption[],
+  startIndex: number,
+  step: 1 | -1,
+  includeStart = true,
+) {
+  const length = options.length;
+
+  if (length === 0) {
+    return -1;
+  }
+
+  let index = startIndex;
+
+  for (let attempt = 0; attempt < length; attempt += 1) {
+    const normalizedIndex = ((index % length) + length) % length;
+    const option = options[normalizedIndex];
+
+    if ((includeStart || attempt > 0) && option && !option.disabled) {
+      return normalizedIndex;
+    }
+
+    index += step;
+  }
+
+  return -1;
 }
 
 const difficultyToneStyles: Record<
@@ -82,12 +120,24 @@ export default function QueueEditorPane({
   error,
   terminalMessage,
 }: QueueEditorPaneProps) {
+  const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
+  const [highlightedCategoryIndex, setHighlightedCategoryIndex] = useState(-1);
+  const categoryDropdownRef = useRef<HTMLDivElement | null>(null);
+  const categoryTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const categoryOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const categoryListboxId = useId();
+
+  const selectedCategoryIndex = useMemo(
+    () => categoryOptions.findIndex((item) => item.value === category),
+    [category, categoryOptions],
+  );
   const selectedCategoryLabel =
     categoryOptions.find((item) => item.value === category)?.label ?? category;
   const categoryWidthCh = Math.min(
     36,
     Math.max(18, Math.ceil(estimateTextWidth(selectedCategoryLabel) + 8)),
   );
+  const categoryControlWidth = `calc(${categoryWidthCh}ch + 0.9rem)`;
   const memoText = queueMemo.trim();
   const javaSyntaxTone = {
     "--app-syntax-default": "#a9b7c6",
@@ -99,6 +149,192 @@ export default function QueueEditorPane({
     "--app-syntax-value": "#a9b7c6",
     "--app-syntax-constant": "#c77dbb",
   } as CSSProperties;
+
+  const closeCategoryMenu = useCallback((shouldFocusTrigger = false) => {
+    setIsCategoryMenuOpen(false);
+    setHighlightedCategoryIndex(-1);
+
+    if (shouldFocusTrigger) {
+      requestAnimationFrame(() => {
+        categoryTriggerRef.current?.focus();
+      });
+    }
+  }, []);
+
+  const openCategoryMenu = useCallback(
+    (direction: 1 | -1 = 1) => {
+      const fallbackIndex =
+        selectedCategoryIndex >= 0
+          ? selectedCategoryIndex
+          : direction === 1
+            ? 0
+            : categoryOptions.length - 1;
+      const nextIndex = getNextEnabledCategoryIndex(
+        categoryOptions,
+        fallbackIndex,
+        direction,
+        true,
+      );
+
+      setHighlightedCategoryIndex(nextIndex);
+      setIsCategoryMenuOpen(true);
+    },
+    [categoryOptions, selectedCategoryIndex],
+  );
+
+  const moveHighlightedCategory = useCallback(
+    (direction: 1 | -1) => {
+      setHighlightedCategoryIndex((currentIndex) => {
+        const fallbackIndex =
+          currentIndex >= 0
+            ? currentIndex + direction
+            : selectedCategoryIndex >= 0
+              ? selectedCategoryIndex + direction
+              : direction === 1
+                ? 0
+                : categoryOptions.length - 1;
+
+        return getNextEnabledCategoryIndex(categoryOptions, fallbackIndex, direction, true);
+      });
+    },
+    [categoryOptions, selectedCategoryIndex],
+  );
+
+  const handleCategorySelect = useCallback(
+    (nextCategory: QueueCategoryValue) => {
+      onCategoryChange(nextCategory);
+      closeCategoryMenu(true);
+    },
+    [closeCategoryMenu, onCategoryChange],
+  );
+
+  const handleCategoryTriggerKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>) => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        if (isCategoryMenuOpen) {
+          moveHighlightedCategory(1);
+          return;
+        }
+
+        openCategoryMenu(1);
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        if (isCategoryMenuOpen) {
+          moveHighlightedCategory(-1);
+          return;
+        }
+
+        openCategoryMenu(-1);
+        return;
+      }
+
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        if (isCategoryMenuOpen) {
+          closeCategoryMenu(false);
+          return;
+        }
+
+        openCategoryMenu(1);
+        return;
+      }
+
+      if (event.key === "Escape" && isCategoryMenuOpen) {
+        event.preventDefault();
+        closeCategoryMenu(false);
+      }
+    },
+    [closeCategoryMenu, isCategoryMenuOpen, moveHighlightedCategory, openCategoryMenu],
+  );
+
+  const handleCategoryOptionKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        moveHighlightedCategory(1);
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        moveHighlightedCategory(-1);
+        return;
+      }
+
+      if (event.key === "Home") {
+        event.preventDefault();
+        setHighlightedCategoryIndex(getNextEnabledCategoryIndex(categoryOptions, 0, 1, true));
+        return;
+      }
+
+      if (event.key === "End") {
+        event.preventDefault();
+        setHighlightedCategoryIndex(
+          getNextEnabledCategoryIndex(categoryOptions, categoryOptions.length - 1, -1, true),
+        );
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeCategoryMenu(true);
+        return;
+      }
+
+      if (event.key === "Tab") {
+        closeCategoryMenu(false);
+        return;
+      }
+
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+
+        const option = categoryOptions[index];
+        if (option && !option.disabled) {
+          handleCategorySelect(option.value);
+        }
+      }
+    },
+    [categoryOptions, closeCategoryMenu, handleCategorySelect, moveHighlightedCategory],
+  );
+
+  useEffect(() => {
+    if (!isCategoryMenuOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!categoryDropdownRef.current?.contains(event.target as Node)) {
+        closeCategoryMenu(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [closeCategoryMenu, isCategoryMenuOpen]);
+
+  useEffect(() => {
+    if (!isCategoryMenuOpen || highlightedCategoryIndex < 0) {
+      return;
+    }
+
+    const optionNode = categoryOptionRefs.current[highlightedCategoryIndex];
+    if (!optionNode) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      optionNode.focus();
+      optionNode.scrollIntoView({ block: "nearest" });
+    });
+  }, [highlightedCategoryIndex, isCategoryMenuOpen]);
 
   return (
     <main className="h-full overflow-hidden border-b border-app-border/80 bg-app-base lg:border-b-0 lg:border-r">
@@ -214,25 +450,115 @@ export default function QueueEditorPane({
                 <span className="text-app-syntax-operator">(</span>
                 <span className="text-app-syntax-string">{'"'}</span>
                 <div className="relative ml-0.5 w-fit max-w-full leading-none">
-                  <select
-                    value={category}
-                    onChange={(event) => onCategoryChange(event.target.value as QueueCategoryValue)}
-                    className="h-7 w-full cursor-pointer appearance-none rounded-sm border border-app-border/70 bg-app-elevated/35 px-2 pr-6 text-xs text-app-syntax-string outline-none transition hover:border-app-syntax-selected-border/65 focus:border-app-syntax-selected-border/85"
-                    style={{ width: `calc(${categoryWidthCh}ch + 0.75rem)`, maxWidth: "100%" }}
-                  >
-                    {categoryOptions.map((item) => (
-                      <option
-                        key={item.value}
-                        value={item.value}
-                        disabled={"disabled" in item ? item.disabled : false}
+                  <div ref={categoryDropdownRef} className="relative">
+                    <button
+                      ref={categoryTriggerRef}
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded={isCategoryMenuOpen}
+                      aria-controls={isCategoryMenuOpen ? categoryListboxId : undefined}
+                      onClick={() => {
+                        if (isCategoryMenuOpen) {
+                          closeCategoryMenu(false);
+                          return;
+                        }
+
+                        openCategoryMenu(1);
+                      }}
+                      onKeyDown={handleCategoryTriggerKeyDown}
+                      className={`inline-flex h-7 max-w-full items-center rounded-sm border px-2 pr-7 text-left text-xs font-medium outline-none transition ${
+                        isCategoryMenuOpen
+                          ? "border-app-syntax-selected-border/90 bg-[#1c2230] text-[#e6f0ff] shadow-[0_0_0_1px_rgba(78,137,255,0.24),0_0_16px_rgba(78,137,255,0.16)]"
+                          : "border-app-border/80 bg-[#1a1f27] text-[#d7e2f2] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] hover:border-app-syntax-selected-border/65 hover:bg-[#1d2330]"
+                      }`}
+                      style={{ width: categoryControlWidth, maxWidth: "100%" }}
+                    >
+                      <span className="truncate">{selectedCategoryLabel}</span>
+                      <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[#91c3ff]">
+                        <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5">
+                          <path
+                            d="M4 6.25L8 10.25L12 6.25"
+                            stroke="currentColor"
+                            strokeWidth="1.4"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </span>
+                    </button>
+
+                    {isCategoryMenuOpen ? (
+                      <div
+                        id={categoryListboxId}
+                        role="listbox"
+                        aria-label="카테고리 선택"
+                        className="absolute left-0 top-[calc(100%+0.35rem)] z-30 max-h-72 min-w-full overflow-y-auto rounded-md border border-app-border-strong bg-[#161b22] p-1 shadow-[0_18px_44px_-20px_rgba(0,0,0,0.96),0_0_0_1px_rgba(78,137,255,0.12)]"
+                        style={{
+                          width: `max(${categoryControlWidth}, 16rem)`,
+                          maxWidth: "min(22rem, calc(100vw - 5rem))",
+                        }}
                       >
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-app-syntax-string/80">
-                    ▾
-                  </span>
+                        {categoryOptions.map((item, index) => {
+                          const isDisabled = Boolean(item.disabled);
+                          const isSelected = item.value === category;
+                          const isHighlighted = index === highlightedCategoryIndex;
+
+                          return (
+                            <button
+                              key={item.value}
+                              ref={(node) => {
+                                categoryOptionRefs.current[index] = node;
+                              }}
+                              type="button"
+                              role="option"
+                              aria-selected={isSelected}
+                              disabled={isDisabled}
+                              tabIndex={isHighlighted ? 0 : -1}
+                              onMouseEnter={() => {
+                                if (!isDisabled) {
+                                  setHighlightedCategoryIndex(index);
+                                }
+                              }}
+                              onClick={() => {
+                                if (!isDisabled) {
+                                  handleCategorySelect(item.value);
+                                }
+                              }}
+                              onKeyDown={(event) => handleCategoryOptionKeyDown(event, index)}
+                              className={`flex w-full items-center justify-between rounded-sm px-2.5 py-2 text-left text-xs transition ${
+                                isDisabled
+                                  ? "cursor-not-allowed text-app-muted/65"
+                                  : isSelected
+                                    ? "bg-app-syntax-selected-bg text-app-syntax-selected-text shadow-[0_0_0_1px_rgba(78,137,255,0.2)]"
+                                    : isHighlighted
+                                      ? "bg-[#212938] text-[#edf4ff]"
+                                      : "text-[#d7e2f2] hover:bg-[#212938] hover:text-[#edf4ff]"
+                              }`}
+                            >
+                              <span className="truncate">{item.label}</span>
+                              {isSelected ? (
+                                <span className="ml-3 shrink-0 text-app-syntax-selected-border">
+                                  <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5">
+                                    <path
+                                      d="M3.5 8.5L6.5 11.5L12.5 4.5"
+                                      stroke="currentColor"
+                                      strokeWidth="1.6"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                  </svg>
+                                </span>
+                              ) : isDisabled ? (
+                                <span className="ml-3 shrink-0 text-[10px] uppercase tracking-[0.16em] text-app-muted/55">
+                                  SOON
+                                </span>
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
                 <span className="ml-0.5 text-app-syntax-string">{'"'}</span>
                 <span className="text-app-syntax-operator">)</span>
