@@ -28,6 +28,12 @@ interface QueueEditorPaneProps {
   terminalMessage: string | null;
 }
 
+function estimateTextWidth(text: string) {
+  return Array.from(text).reduce((total, char) => {
+    return total + (/^[\x20-\x7E]$/.test(char) ? 1 : 1.45);
+  }, 0);
+}
+
 const difficultyToneStyles: Record<
   Difficulty,
   {
@@ -77,6 +83,20 @@ export default function QueueEditorPane({
   error,
   terminalMessage,
 }: QueueEditorPaneProps) {
+  const selectedCategoryLabel =
+    categoryOptions.find((item) => item.value === category)?.label ?? category;
+  const categoryWidthCh = Math.min(
+    36,
+    Math.max(18, Math.ceil(estimateTextWidth(selectedCategoryLabel) + 8)),
+  );
+  const trimmedMemo = queueMemo.trim();
+  const memoSample = trimmedMemo.length > 0 ? trimmedMemo : "메모";
+  const memoContentWidthCh = Math.ceil(estimateTextWidth(memoSample));
+  const memoWidthCh =
+    trimmedMemo.length > 0
+      ? Math.min(72, Math.max(24, memoContentWidthCh + 5))
+      : 24;
+
   return (
     <main className="h-full overflow-hidden border-b border-app-border/80 bg-app-base lg:border-b-0 lg:border-r">
       <div className="flex h-full min-h-0 flex-col">
@@ -146,13 +166,14 @@ export default function QueueEditorPane({
                 </span>
               </div>
               <div className="flex items-center gap-2" style={editorRowStyle}>
-                <span className="w-40 text-app-syntax-name">QUEUE_CATEGORY</span>
-                <span className="text-app-syntax-operator">=</span>
-                <div className="relative min-w-[11rem] max-w-[18rem] flex-1 leading-none">
+                <span className="w-40 shrink-0 text-app-syntax-name">QUEUE_CATEGORY</span>
+                <span className="w-4 shrink-0 text-center text-app-syntax-operator">=</span>
+                <div className="relative w-fit max-w-full leading-none">
                   <select
                     value={category}
                     onChange={(event) => onCategoryChange(event.target.value as QueueCategoryValue)}
                     className="h-7 w-full appearance-none rounded-sm border border-app-border bg-app-elevated px-2 pr-6 text-xs text-app-syntax-string outline-none transition focus:border-app-accent/60"
+                    style={{ width: `calc(${categoryWidthCh}ch + 0.75rem)`, maxWidth: "100%" }}
                   >
                     {categoryOptions.map((item) => (
                       <option
@@ -170,8 +191,8 @@ export default function QueueEditorPane({
                 </div>
               </div>
               <div className="flex items-center gap-2" style={editorRowStyle}>
-                <span className="w-40 text-app-syntax-name">QUEUE_LEVEL</span>
-                <span className="text-app-syntax-operator">=</span>
+                <span className="w-40 shrink-0 text-app-syntax-name">QUEUE_LEVEL</span>
+                <span className="w-4 shrink-0 text-center text-app-syntax-operator">=</span>
                 <div className="flex flex-wrap gap-1 leading-none">
                   {difficultyOptions.map((option) => (
                     <label
@@ -196,21 +217,27 @@ export default function QueueEditorPane({
                 </div>
               </div>
               <div className="flex items-center gap-2" style={editorRowStyle}>
-                <span className="w-40 text-app-syntax-name">QUEUE_PARTY_SIZE</span>
-                <span className="text-app-syntax-operator">=</span>
-                <span className="inline-flex min-w-8 items-center justify-center rounded-sm border border-app-border bg-app-elevated px-2 text-xs text-app-syntax-constant">
-                  4
+                <span className="w-40 shrink-0 text-app-syntax-name">QUEUE_PARTY_SIZE</span>
+                <span className="w-4 shrink-0 text-center text-app-syntax-operator">=</span>
+                <span
+                  title="배틀 규칙상 4인 고정"
+                  className="inline-flex min-w-8 items-center justify-center rounded-sm border border-app-border bg-app-elevated px-2 text-xs font-semibold text-app-syntax-constant"
+                >
+                  4인 고정
                 </span>
               </div>
-              <div className="flex items-start gap-2" style={editorRowStyle}>
-                <span className="w-40 text-app-syntax-name">QUEUE_MEMO</span>
-                <span className="pt-1 text-app-syntax-operator">=</span>
-                <input
-                  type="text"
-                  value={queueMemo}
-                  onChange={(event) => onQueueMemoChange(event.target.value)}
-                  className="mt-0.5 h-7 w-full rounded-sm border border-app-border bg-app-elevated px-2 text-xs text-app-syntax-string outline-none transition focus:border-app-accent/60"
-                />
+              <div className="flex items-center gap-2" style={editorRowStyle}>
+                <span className="w-40 shrink-0 text-app-syntax-name">QUEUE_MEMO</span>
+                <span className="w-4 shrink-0 text-center text-app-syntax-operator">=</span>
+                <div className="w-fit max-w-full">
+                  <input
+                    type="text"
+                    value={queueMemo}
+                    onChange={(event) => onQueueMemoChange(event.target.value)}
+                    className="h-7 w-full rounded-sm border border-app-border bg-app-elevated px-2 text-xs text-app-syntax-string outline-none transition focus:border-app-accent/60"
+                    style={{ width: `calc(${memoWidthCh}ch + 1.25rem)`, maxWidth: "100%" }}
+                  />
+                </div>
               </div>
 
               <div className="mt-2 text-app-syntax-comment" style={editorLineStyle}>
