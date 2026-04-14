@@ -25,7 +25,7 @@ const SINGLE_TEMPLATE_OBJECT: AdminProblemUpsertRequest = {
   inputFormat:
     "첫 줄에 N, 둘째 줄에 N개의 정수 수열이 공백으로 주어진다. (음수 포함 가능)",
   outputFormat: "최대 부분합을 출력한다.",
-  tags: ["dp", "prefix-sum"],
+  tags: ["동적계획법", "누적합"],
   sampleCases: [
     { input: "5\\n1 -2 3 4 -1", output: "7" },
     { input: "4\\n-1 -2 -3 -4", output: "-1" },
