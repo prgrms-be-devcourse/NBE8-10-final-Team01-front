@@ -512,6 +512,22 @@ export default function QueueModal({
   }, [mode]);
   const actionButtonClass = "rounded-md border border-app-border-strong bg-app-elevated px-3 py-1.5 text-xs font-semibold text-app-primary transition hover:border-app-accent/55 hover:bg-app-accent/10 disabled:cursor-not-allowed disabled:border-app-border disabled:bg-app-base disabled:text-app-dim";
   const actionPrimaryButtonClass = "rounded-md border border-app-accent/45 bg-gradient-to-r from-app-accent to-app-accent-hover px-3 py-1.5 text-xs font-semibold text-white shadow-[0_0_0_1px_var(--app-accent-glow)] transition hover:from-app-accent-hover hover:to-app-accent disabled:cursor-not-allowed disabled:border-app-border disabled:bg-app-elevated disabled:text-app-secondary";
+  const readyDecisionButtonBaseClass =
+    "inline-flex items-center justify-center rounded-sm border px-3.5 py-1.5 text-xs font-semibold leading-none transition";
+  const readyDecisionToneStyles = {
+    accept: {
+      active:
+        "border-emerald-300 bg-emerald-400/30 text-emerald-50 shadow-[0_0_0_1px_rgba(52,211,153,0.45),0_0_12px_rgba(16,185,129,0.35)]",
+      inactive:
+        "border-emerald-500/35 bg-emerald-500/8 text-emerald-100/85 shadow-[0_0_0_1px_rgba(16,185,129,0.12)] hover:bg-emerald-500/14 hover:text-emerald-50",
+    },
+    decline: {
+      active:
+        "border-rose-300 bg-rose-400/28 text-rose-50 shadow-[0_0_0_1px_rgba(251,113,133,0.45),0_0_12px_rgba(244,63,94,0.35)]",
+      inactive:
+        "border-rose-500/35 bg-rose-500/8 text-rose-100/85 shadow-[0_0_0_1px_rgba(244,63,94,0.12)] hover:bg-rose-500/14 hover:text-rose-50",
+    },
+  } as const;
   const headerStatusChipClass = "inline-flex items-center rounded-full border border-app-warn/45 bg-app-warn/10 px-2.5 py-0.5 text-[11px] font-semibold text-app-warn";
   const headerMetaChipClass = "inline-flex items-center rounded-full border border-app-border bg-app-base/55 px-2.5 py-0.5 text-[11px] font-medium text-app-muted";
   const headerMetaText = useMemo(() => {
@@ -644,24 +660,30 @@ export default function QueueModal({
       ) : null}
 
       {mode === "READY_CHECK" ? (
-        <>
-          <button
-            type="button"
-            onClick={onDecline}
-            disabled={isPending || !readyCheck}
-            className={actionButtonClass}
-          >
-            거절
-          </button>
+        <div className="flex flex-wrap gap-1 leading-none">
+          {!readyCheck?.acceptedByMe ? (
+            <button
+              type="button"
+              onClick={onDecline}
+              disabled={isPending || !readyCheck}
+              className={`${readyDecisionButtonBaseClass} ${readyDecisionToneStyles.decline.inactive} disabled:cursor-not-allowed disabled:border-app-border disabled:bg-app-base disabled:text-app-dim disabled:shadow-none`}
+            >
+              거절
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onAccept}
             disabled={isPending || !readyCheck || readyCheck.acceptedByMe}
-            className={actionButtonClass}
+            className={`${readyDecisionButtonBaseClass} ${
+              readyCheck?.acceptedByMe
+                ? `${readyDecisionToneStyles.accept.active} min-w-[102px] justify-center`
+                : `${readyDecisionToneStyles.accept.inactive} disabled:cursor-not-allowed disabled:border-app-border disabled:bg-app-base disabled:text-app-dim disabled:shadow-none`
+            }`}
           >
             {readyCheck?.acceptedByMe ? "수락 완료" : "수락"}
           </button>
-        </>
+        </div>
       ) : null}
 
       {mode === "ROOM_READY" ? (
