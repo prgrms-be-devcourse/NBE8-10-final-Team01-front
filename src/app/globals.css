@@ -128,6 +128,24 @@ pre {
   100% { background-position: 200% center; }
 }
 
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--app-bg-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--app-border-strong);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--app-text-dim);
+}
+
 .skeleton {
   background: linear-gradient(
     90deg,
