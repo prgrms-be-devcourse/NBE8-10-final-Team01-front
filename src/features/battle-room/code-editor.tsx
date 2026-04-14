@@ -52,6 +52,7 @@ export default function BattleCodeEditor({
   className = "",
 }: BattleCodeEditorProps) {
   const monacoLanguage = language === "python3" ? "python" : language;
+  const runButtonText = runLabel === "Run" ? "Run" : runLabel;
 
   return (
     <div
@@ -73,27 +74,29 @@ export default function BattleCodeEditor({
             ))}
           </select>
           <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-app-muted">
-            ▼
+            ▾
           </span>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-3 flex items-center gap-2">
           <button
             type="button"
             onClick={onRun}
             disabled={runDisabled || !onRun}
-            className="rounded-md border border-app-border-strong bg-app-base px-2.5 py-1 text-xs font-semibold text-app-primary transition hover:border-app-border-strong disabled:cursor-not-allowed disabled:border-app-border disabled:text-app-dim"
+            className="inline-flex items-center gap-1.5 rounded-md border border-app-border-strong bg-app-base px-2.5 py-1 text-xs font-semibold text-app-primary transition hover:border-app-border-strong disabled:cursor-not-allowed disabled:border-app-border disabled:text-app-dim"
           >
-            {runLabel}
+            <span className="text-[10px] leading-none">▶</span>
+            <span>{runButtonText}</span>
           </button>
           <button
             type="button"
             onClick={onSubmit}
             disabled={submitDisabled || !onSubmit}
-            className="rounded-md border border-app-border bg-app-elevated px-2.5 py-1 text-xs font-semibold text-app-primary transition hover:bg-app-surface disabled:cursor-not-allowed disabled:border-app-border disabled:bg-app-base disabled:text-app-dim"
+            className="rounded-md border border-app-success/30 bg-app-success/10 px-2.5 py-1 text-xs font-bold text-app-success transition hover:border-app-success/40 hover:bg-app-success/15 disabled:cursor-not-allowed disabled:border-app-border disabled:bg-app-base disabled:text-app-dim"
           >
             {submitLabel}
           </button>
         </div>
+        <div className="flex-1" />
       </div>
       <div className="min-h-0 flex-1">
         <Editor
@@ -105,7 +108,10 @@ export default function BattleCodeEditor({
           theme="vs-dark"
           options={editorOptions}
           loading={
-            <div className="flex items-center justify-center text-sm text-app-secondary" style={{ height }}>
+            <div
+              className="flex items-center justify-center text-sm text-app-secondary"
+              style={{ height }}
+            >
               에디터를 불러오는 중입니다.
             </div>
           }

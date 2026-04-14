@@ -17,10 +17,7 @@ import type {
 } from "@/shared/api/contracts";
 import { useAppSession } from "@/features/layout/session-context";
 import {
-  CodeWindow,
   ConfirmDialog,
-  MetricCard,
-  MetricGrid,
   PageHero,
   Panel,
   StatusPill,
@@ -29,6 +26,18 @@ import {
 import { getSpectateRoom } from "./data";
 
 const SPECTATE_ACCESS_KEY = "spectate-from-hub";
+
+function getParticipantStatusTone(status: string) {
+  if (status === "PLAYING") {
+    return "success" as const;
+  }
+
+  if (status === "ABANDONED") {
+    return "danger" as const;
+  }
+
+  return "default" as const;
+}
 
 export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
   const router = useRouter();
@@ -47,7 +56,6 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
   const participantsRef = useRef<RoomResponse["participants"]>([]);
   const roomStatusRef = useRef<RoomResponse["status"] | null>(null);
 
-  // 허브를 통한 정상 진입 여부 확인 — 직접 URL 접근 차단
   useEffect(() => {
     if (accessCheckedRef.current) return;
     accessCheckedRef.current = true;
@@ -57,11 +65,11 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
       router.replace("/spectate");
       return;
     }
+
     sessionStorage.removeItem(SPECTATE_ACCESS_KEY);
     setAccessGranted(true);
   }, [router]);
 
-  // 세션 및 방 정보 로드
   useEffect(() => {
     if (!accessGranted || !sessionLoaded) {
       return;
@@ -71,17 +79,13 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
 
     void (async () => {
       if (!session.authenticated) {
-        if (!active) {
-          return;
-        }
+        if (!active) return;
         setRequiresLogin(true);
-        setMessage("관전 상세는 로그인 후 접근할 수 있습니다.");
+        setMessage("관전 상세 화면은 로그인 후 이용할 수 있습니다.");
         return;
       }
 
-      if (!active) {
-        return;
-      }
+      if (!active) return;
 
       setRequiresLogin(false);
 
@@ -91,11 +95,9 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
 
       if (response.status === 401) {
         void refreshSession();
-        if (!active) {
-          return;
-        }
+        if (!active) return;
         setRequiresLogin(true);
-        setMessage("관전 상세는 로그인 후 접근할 수 있습니다.");
+        setMessage("관전 상세 화면은 로그인 후 이용할 수 있습니다.");
         return;
       }
 
@@ -103,25 +105,20 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
         const fallback = getSpectateRoom(roomId);
 
         if (fallback) {
-          if (!active) {
-            return;
-          }
-          setMessage("백엔드 연결 실패로 샘플 관전 데이터를 표시합니다.");
+          if (!active) return;
+          setMessage("백엔드 연결에 실패해 샘플 관전 데이터를 표시합니다.");
           return;
         }
 
         const payload = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-        if (!active) {
-          return;
-        }
-        setError(payload?.message ?? "관전 상세를 불러오지 못했습니다.");
+        if (!active) return;
+        setError(payload?.message ?? "관전 상세 정보를 불러오지 못했습니다.");
         return;
       }
 
       const nextRoom = (await response.json()) as RoomResponse;
-      if (!active) {
-        return;
-      }
+      if (!active) return;
+
       setRoom(nextRoom);
       participantsRef.current = nextRoom.participants;
       roomStatusRef.current = nextRoom.status;
@@ -131,15 +128,11 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
       });
 
       if (problemResponse.ok) {
-        if (!active) {
-          return;
-        }
+        if (!active) return;
         setProblem((await problemResponse.json()) as ProblemDetailResponse);
       }
 
-      if (!active) {
-        return;
-      }
+      if (!active) return;
       setMessage("실시간 관전 중입니다.");
     })();
 
@@ -148,7 +141,6 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
     };
   }, [accessGranted, refreshSession, roomId, session.authenticated, sessionLoaded]);
 
-  // room이 로드됐을 때 WebSocket이 이미 연결된 경우 sync 요청 (race condition 보완)
   useEffect(() => {
     if (!room || !stompClientRef.current?.connected) return;
     if (roomStatusRef.current === "FINISHED") return;
@@ -162,18 +154,14 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
     }
   }, [room, roomId]);
 
-  // WebSocket: /topic/room/{roomId}/spectate 구독
   useEffect(() => {
     if (!session.authenticated) return;
 
     const client = new Client({
-      webSocketFactory: () => new SockJS(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/ws`),
+      webSocketFactory: () =>
+        new SockJS(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/ws`),
       reconnectDelay: 3000,
-      // 연결(및 재연결) 시마다 1회용 토큰을 새로 발급해 STOMP CONNECT 헤더에 주입.
-      // 토큰은 30초 TTL이고 1회 사용 후 폐기되므로 재연결 시에도 반드시 새 토큰이 필요.
-      // 토큰 발급 실패 시 쿠키 기반 인증(로컬 환경)으로 자동 폴백됨.
       beforeConnect: async () => {
-        // 재연결 시 이전 연결에서 소비된 토큰이 재사용되지 않도록 먼저 초기화
         client.connectHeaders = {};
         try {
           const res = await fetch("/api/v1/ws/token", { method: "POST" });
@@ -182,7 +170,7 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
             client.connectHeaders = { "X-WS-Token": data.token };
           }
         } catch {
-          console.warn("[WS] 토큰 발급 실패, 쿠키 기반 인증으로 폴백");
+          console.warn("[WS] 토큰 발급 실패, 쿠키 기반 인증으로 재시도합니다.");
         }
       },
       onConnect: () => {
@@ -193,6 +181,7 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
           } catch {
             return;
           }
+
           if (typeof payload !== "object" || payload === null || !("type" in payload)) {
             return;
           }
@@ -214,6 +203,7 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
                     : participant,
                 ),
               };
+
               participantsRef.current = nextRoom.participants;
               roomStatusRef.current = nextRoom.status;
               return nextRoom;
@@ -236,6 +226,7 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
                     ? msg.timerEnd
                     : current.timerEnd,
               };
+
               participantsRef.current = nextRoom.participants;
               roomStatusRef.current = nextRoom.status;
               return nextRoom;
@@ -254,6 +245,7 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
                 ...current,
                 status: "FINISHED" as const,
               };
+
               participantsRef.current = nextRoom.participants;
               roomStatusRef.current = nextRoom.status;
               return nextRoom;
@@ -270,11 +262,7 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
             return;
           }
 
-          if (
-            typeof payload !== "object" ||
-            payload === null ||
-            !("type" in payload)
-          ) {
+          if (typeof payload !== "object" || payload === null || !("type" in payload)) {
             return;
           }
 
@@ -282,13 +270,13 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
           if (type === "CODE_UPDATE" || type === "CODE_SYNC") {
             const msg = payload as CodeUpdateWsMessage | CodeSyncWsMessage;
             if (!msg.code) return;
+
             const now = new Date().toLocaleTimeString("ko-KR");
             setCodeByUserId((prev) => ({ ...prev, [msg.userId]: msg.code }));
             setLastUpdatedByUserId((prev) => ({ ...prev, [msg.userId]: now }));
           }
         });
 
-        // 구독 직후 모든 참여자의 최신 코드 동기화 요청 (방이 종료된 경우 코드가 삭제됐으므로 스킵)
         if (roomStatusRef.current !== "FINISHED") {
           for (const participant of participantsRef.current) {
             client.publish({
@@ -311,29 +299,31 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
 
   if (requiresLogin) {
     return (
-      <div className="space-y-8">
-        <PageHero
-          eyebrow="Spectate Room"
-          title="로그인 후 관전 상세를 볼 수 있습니다."
-          description="배틀 관련 API는 현재 보호된 상태입니다."
-          actions={<StatusPill tone="warn">로그인 필요</StatusPill>}
-        />
-        <Panel title="이동" description="보호 화면 진입 전 처리">
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href={`/login?next=${encodeURIComponent(`/spectate/rooms/${roomId}`)}`}
-              className="rounded-2xl bg-app-base px-4 py-3 text-sm font-medium text-white"
-            >
-              로그인하러 가기
-            </Link>
-            <Link
-              href="/spectate"
-              className="rounded-2xl border border-app-border bg-app-surface px-4 py-3 text-sm font-medium text-app-primary"
-            >
-              관전 목록으로 돌아가기
-            </Link>
-          </div>
-        </Panel>
+      <div className="h-full overflow-y-auto px-4 py-4 sm:px-6 lg:px-8 xl:px-10">
+        <div className="space-y-8">
+          <PageHero
+            eyebrow="Spectate Room"
+            title="로그인 후 관전 상세를 볼 수 있습니다."
+            description="보호된 관전 방은 인증된 사용자만 입장할 수 있습니다."
+            actions={<StatusPill tone="warn">로그인 필요</StatusPill>}
+          />
+          <Panel title="이동" description="로그인 또는 관전 목록으로 이동">
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href={`/login?next=${encodeURIComponent(`/spectate/rooms/${roomId}`)}`}
+                className="rounded-2xl bg-app-base px-4 py-3 text-sm font-medium text-white"
+              >
+                로그인하러 가기
+              </Link>
+              <Link
+                href="/spectate"
+                className="rounded-2xl border border-app-border bg-app-surface px-4 py-3 text-sm font-medium text-app-primary"
+              >
+                관전 목록으로 돌아가기
+              </Link>
+            </div>
+          </Panel>
+        </div>
       </div>
     );
   }
@@ -341,86 +331,128 @@ export default function SpectateRoomScreen({ roomId }: { roomId: string }) {
   const fallback = getSpectateRoom(roomId);
   const participants = room?.participants ?? fallback?.participants ?? [];
   const problemTitle = problem?.title ?? fallback?.problemTitle ?? `Room ${roomId}`;
+  const receivedCodeCount = Object.keys(codeByUserId).length;
+  const boardParticipants = participants.slice(0, 4);
+  const boardSlots = Array.from({ length: 4 }, (_, index) => boardParticipants[index] ?? null);
 
   if (!fallback && !room) {
     return (
-      <div className="space-y-8">
-        <PageHero
-          eyebrow="Spectate Room"
-          title="관전 상세를 열지 못했습니다."
-          description="현재 roomId에 해당하는 관전 대상을 찾을 수 없습니다."
-          actions={<StatusPill tone="danger">Load failed</StatusPill>}
-        />
-        <Panel title="오류" description="응답 메시지">
-          <p className="text-sm leading-7 text-app-secondary">{error ?? message}</p>
-        </Panel>
+      <div className="h-full overflow-y-auto px-4 py-4 sm:px-6 lg:px-8 xl:px-10">
+        <div className="space-y-8">
+          <PageHero
+            eyebrow="Spectate Room"
+            title="관전 상세 정보를 찾지 못했습니다."
+            description="현재 roomId에 해당하는 관전 방이 없거나 응답을 불러오지 못했습니다."
+            actions={<StatusPill tone="danger">Load failed</StatusPill>}
+          />
+          <Panel title="오류" description="응답 메시지">
+            <p className="text-sm leading-7 text-app-secondary">{error ?? message}</p>
+          </Panel>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      <ConfirmDialog
-        open={battleFinished}
-        title="배틀이 종료되었습니다"
-        description="참여자들의 최종 코드를 확인하거나 관전 목록으로 돌아갈 수 있습니다."
-        confirmLabel="관전 목록으로"
-        cancelLabel="계속 보기"
-        onConfirm={() => router.push("/spectate")}
-        onCancel={() => setBattleFinished(false)}
-      />
-      <PageHero
-        eyebrow="Spectate Room"
-        title={`관전 Room ${roomId} — ${problemTitle}`}
-        description="참여자들의 코드가 실시간으로 업데이트됩니다."
-        actions={
-          <>
-            <StatusPill tone="success">LIVE</StatusPill>
-            <StatusPill>{participants.length}명 참여 중</StatusPill>
-          </>
-        }
-      />
-
-      <div className="rounded-2xl border border-app-border bg-app-surface px-4 py-3 text-sm text-app-secondary">
-        {error ?? message}
-      </div>
-
-      <MetricGrid>
-        <MetricCard label="Room ID" value={roomId} />
-        <MetricCard label="Problem" value={problemTitle} />
-        <MetricCard label="Participants" value={participants.length} />
-        <MetricCard
-          label="수신된 코드 수"
-          value={Object.keys(codeByUserId).length}
+    <div className="h-full overflow-y-auto px-4 py-4 sm:px-6 lg:px-8 xl:px-10">
+      <div className="space-y-6">
+        <ConfirmDialog
+          open={battleFinished}
+          title="배틀이 종료되었습니다."
+          description="참가자들의 최종 코드를 계속 확인하거나 관전 목록으로 돌아갈 수 있습니다."
+          confirmLabel="관전 목록으로"
+          cancelLabel="계속 보기"
+          onConfirm={() => router.push("/spectate")}
+          onCancel={() => setBattleFinished(false)}
         />
-      </MetricGrid>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        {participants.map((participant) => {
-          const code =
-            codeByUserId[participant.userId] ??
-            `// ${participant.nickname}의 코드 업데이트를 기다리는 중...`;
-          const lastUpdated =
-            lastUpdatedByUserId[participant.userId] ?? "대기 중";
+        <section className="rounded-3xl border border-app-border bg-app-elevated px-5 py-4 sm:px-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-app-dim">
+                Spectate Board
+              </p>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-app-secondary">
+                <span className="text-lg font-semibold text-app-primary">{`Room ${roomId}`}</span>
+                <span>{problemTitle}</span>
+                <span>{`상태 ${room?.status ?? "PLAYING"}`}</span>
+                <span>{`참가자 ${participants.length}명`}</span>
+                <span>{`코드 수신 ${receivedCodeCount}`}</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Link
+                href="/spectate"
+                className="rounded-2xl border border-app-border bg-app-surface px-4 py-2 text-sm font-medium text-app-primary transition hover:bg-app-base"
+              >
+                관전 목록으로 돌아가기
+              </Link>
+              <StatusPill tone="success">LIVE</StatusPill>
+              <StatusPill>{participants.length}명 참여 중</StatusPill>
+            </div>
+          </div>
+          <div className="mt-4 rounded-2xl border border-app-border bg-app-surface px-4 py-3 text-sm text-app-secondary">
+            {error ?? message}
+          </div>
+        </section>
 
-          return (
-            <CodeWindow
-              key={participant.userId}
-              title={`${participant.nickname}  ·  ${lastUpdated}`}
-              code={code}
-              footer={<span>userId {participant.userId}</span>}
-            />
-          );
-        })}
-      </div>
+        <section className="rounded-[2rem] border border-app-border bg-app-surface p-3 sm:p-4">
+          <div className="overflow-hidden rounded-[1.75rem] border border-app-border bg-app-base">
+            <div className="grid grid-cols-1 lg:grid-cols-2">
+              {boardSlots.map((participant, index) => {
+                const isLeftColumn = index % 2 === 0;
+                const isTopRow = index < 2;
+                const code = participant
+                  ? codeByUserId[participant.userId] ??
+                    `// ${participant.nickname}의 코드 업데이트를 기다리는 중입니다.`
+                  : "// 참가자가 입장하면 이 영역에 실시간 코드가 표시됩니다.";
+                const lastUpdated = participant
+                  ? lastUpdatedByUserId[participant.userId] ?? "대기 중"
+                  : "빈 슬롯";
+                const status = participant?.status ?? "WAITING";
 
-      <div className="flex flex-wrap gap-3">
-        <Link
-          href="/spectate"
-          className="rounded-2xl border border-app-border bg-app-surface px-4 py-3 text-sm font-medium text-app-primary"
-        >
-          관전 목록으로 돌아가기
-        </Link>
+                return (
+                  <section
+                    key={participant?.userId ?? `empty-slot-${index}`}
+                    className={[
+                      "flex min-h-[420px] flex-col bg-app-base",
+                      isLeftColumn ? "lg:border-r lg:border-app-border" : "",
+                      isTopRow ? "border-b border-app-border" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    <header className="flex items-center gap-3 border-b border-app-border px-4 py-3 text-sm text-app-secondary">
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="h-3 w-3 rounded-full bg-[#c85a55]" aria-hidden="true" />
+                        <span className="h-3 w-3 rounded-full bg-[#c9a13d]" aria-hidden="true" />
+                        <span className="h-3 w-3 rounded-full bg-[#469a57]" aria-hidden="true" />
+                      </div>
+                      <div className="ml-auto flex shrink-0 items-center gap-3">
+                        <span className="min-w-0 truncate font-semibold text-app-primary">
+                          {participant?.nickname ?? `slot ${index + 1}`}
+                        </span>
+                        <span>{lastUpdated}</span>
+                        <StatusPill tone={getParticipantStatusTone(status)} variant="dark">
+                          {status}
+                        </StatusPill>
+                      </div>
+                    </header>
+
+                    <div className="flex flex-1 flex-col p-4">
+                      <div className="flex-1 rounded-2xl border border-app-border bg-app-surface p-4">
+                        <pre className="h-full overflow-auto text-sm leading-6 text-app-primary">
+                          <code>{code}</code>
+                        </pre>
+                      </div>
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
       </div>
     </div>
   );
