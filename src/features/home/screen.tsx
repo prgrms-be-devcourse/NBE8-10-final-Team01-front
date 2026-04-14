@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 
@@ -45,6 +45,7 @@ type SubscriptionHandle = { unsubscribe: () => void };
 const DEFAULT_FEEDBACK = "메인에서 바로 매칭을 시작할 수 있습니다.";
 const TAGS_CACHE_TTL_MS = 60_000;
 const MATCHING_PERSONAL_DESTINATION = "/user/queue/matching";
+const DIFFICULTY_ORDER: Difficulty[] = ["EASY", "MEDIUM", "HARD"];
 
 const defaultQueueState: QueueStateResponse = {
   inQueue: false,
@@ -66,6 +67,41 @@ let tagCategoriesCache: {
   categories: QueueCategoryOption[];
 } | null = null;
 let tagCategoriesInFlight: Promise<QueueCategoryOption[] | null> | null = null;
+
+function normalizeDifficultyValues(raw: unknown): Difficulty[] | undefined {
+  if (!Array.isArray(raw)) {
+    return undefined;
+  }
+
+  const incoming = new Set(
+    raw
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim().toUpperCase())
+      .filter((item): item is Difficulty => DIFFICULTY_ORDER.includes(item as Difficulty)),
+  );
+
+  return DIFFICULTY_ORDER.filter((item) => incoming.has(item));
+}
+
+function resolveAllowedDifficulties(
+  categories: QueueCategoryOption[],
+  targetCategory: QueueCategoryValue,
+) {
+  const matched = categories.find((item) => item.value === targetCategory);
+
+  if (!matched || !matched.difficulties || matched.difficulties.length === 0) {
+    return DIFFICULTY_ORDER;
+  }
+
+  const allowed = new Set(matched.difficulties);
+  const ordered = DIFFICULTY_ORDER.filter((item) => allowed.has(item));
+
+  if (ordered.length === 0) {
+    return DIFFICULTY_ORDER;
+  }
+
+  return ordered;
+}
 
 async function readQueueState() {
   const response = await fetch("/api/queue/me", {
@@ -118,11 +154,18 @@ async function readTagCategories() {
     }
 
     const normalized = payload
-      .map((item) => ({
-        value: (item.value ?? "").trim(),
-        label: (item.label ?? "").trim(),
-        disabled: item.disabled ?? false,
-      }))
+      .map((item) => {
+        const difficulties = normalizeDifficultyValues(item.difficulties);
+        const disabled =
+          item.disabled ?? (Array.isArray(item.difficulties) && (difficulties?.length ?? 0) === 0);
+
+        return {
+          value: (item.value ?? "").trim(),
+          label: (item.label ?? "").trim(),
+          disabled,
+          difficulties,
+        };
+      })
       .filter((item) => item.value.length > 0 && item.label.length > 0);
 
     if (normalized.length === 0) {
@@ -675,7 +718,7 @@ export default function HomeScreen() {
 
       setCategoryOptions(loadedCategories);
       setCategory((current) => {
-        if (loadedCategories.some((item) => item.value === current)) {
+        if (loadedCategories.some((item) => item.value === current && !item.disabled)) {
           return current;
         }
 
@@ -998,6 +1041,11 @@ export default function HomeScreen() {
       return;
     }
 
+    if (!availableDifficultyOptions.some((option) => option.value === difficulty)) {
+      setError("선택한 카테고리에서는 해당 난이도를 사용할 수 없습니다.");
+      return;
+    }
+
     if (modalMode && modalMode !== "TERMINAL") {
       setError("이미 진행 중인 매칭 흐름이 있습니다.");
       return;
@@ -1138,6 +1186,12 @@ export default function HomeScreen() {
   const countdownSeconds = getRemainingSeconds(matchState.readyCheck?.deadline ?? null, now);
   const canStartMatch = !(isBusy || (modalMode !== null && modalMode !== "TERMINAL"));
   const roomId = matchState.room?.roomId ?? null;
+  const availableDifficultyOptions = useMemo(() => {
+    const allowed = resolveAllowedDifficulties(categoryOptions, category);
+    const allowedSet = new Set(allowed);
+
+    return difficultyOptions.filter((option) => allowedSet.has(option.value));
+  }, [category, categoryOptions]);
   const editorLineNumbers = Array.from({ length: editorLineCount }, (_, index) => 41 + index);
   const editorLineStyle = {
     height: `${editorLineHeight}px`,
@@ -1150,6 +1204,30 @@ export default function HomeScreen() {
   const editorContentStyle = {
     fontSize: `${editorFontSize}px`,
   };
+
+  const handleCategoryChange = useCallback(
+    (nextCategory: QueueCategoryValue) => {
+      setCategory(nextCategory);
+      const allowed = resolveAllowedDifficulties(categoryOptions, nextCategory);
+
+      setDifficulty((current) => {
+        if (allowed.includes(current)) {
+          return current;
+        }
+
+        return allowed[0] ?? "EASY";
+      });
+    },
+    [categoryOptions],
+  );
+
+  useEffect(() => {
+    if (availableDifficultyOptions.some((item) => item.value === difficulty)) {
+      return;
+    }
+
+    setDifficulty(availableDifficultyOptions[0]?.value ?? "EASY");
+  }, [availableDifficultyOptions, difficulty]);
 
   return (
     <div className="relative h-full min-h-0">
@@ -1184,11 +1262,11 @@ export default function HomeScreen() {
           void handleStartMatch();
         }}
         category={category}
-        onCategoryChange={setCategory}
+        onCategoryChange={handleCategoryChange}
         categoryOptions={categoryOptions}
         difficulty={difficulty}
         onDifficultyChange={setDifficulty}
-        difficultyOptions={difficultyOptions}
+        difficultyOptions={availableDifficultyOptions}
         queueMemo={queueMemo}
         onQueueMemoChange={setQueueMemo}
         showStopQueueButton={modalMode === "SEARCHING"}
