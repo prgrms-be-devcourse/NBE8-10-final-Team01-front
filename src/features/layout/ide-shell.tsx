@@ -136,7 +136,7 @@ export default function IdeShell({
   const pathname = usePathname();
   const router = useRouter();
   const refreshInFlightRef = useRef<Promise<SessionResponse> | null>(null);
-  const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
+  const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(true);
   const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(true);
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -514,18 +514,13 @@ export default function IdeShell({
 
   const layoutColumnsClass = isQuickMenuOpen
     ? isPanelOpen
-      ? "grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_240px] xl:grid-cols-[260px_minmax(0,1fr)_280px] 2xl:grid-cols-[290px_minmax(0,1fr)_320px]"
-      : "grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_38px] xl:grid-cols-[260px_minmax(0,1fr)_38px] 2xl:grid-cols-[290px_minmax(0,1fr)_38px]"
+      ? "grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_240px] xl:grid-cols-[280px_minmax(0,1fr)_280px] 2xl:grid-cols-[320px_minmax(0,1fr)_320px]"
+      : "grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_44px] xl:grid-cols-[280px_minmax(0,1fr)_44px] 2xl:grid-cols-[320px_minmax(0,1fr)_44px]"
     : isPanelOpen
       ? "grid-cols-1 md:grid-cols-[48px_minmax(0,1fr)] lg:grid-cols-[48px_minmax(0,1fr)_240px] xl:grid-cols-[48px_minmax(0,1fr)_280px] 2xl:grid-cols-[48px_minmax(0,1fr)_320px]"
-      : "grid-cols-1 md:grid-cols-[48px_minmax(0,1fr)] lg:grid-cols-[48px_minmax(0,1fr)_38px] xl:grid-cols-[48px_minmax(0,1fr)_38px] 2xl:grid-cols-[48px_minmax(0,1fr)_38px]";
+      : "grid-cols-1 md:grid-cols-[48px_minmax(0,1fr)] lg:grid-cols-[48px_minmax(0,1fr)_44px] xl:grid-cols-[48px_minmax(0,1fr)_44px] 2xl:grid-cols-[48px_minmax(0,1fr)_44px]";
 
   const projectTreeItems = useMemo<QuickMenuTreeItem[]>(() => {
-    const isCurrent = (href: string) =>
-      href === "/"
-        ? pathname === "/"
-        : pathname === href || pathname.startsWith(`${href}/`);
-
     const items: QuickMenuTreeItem[] = [
       {
         key: "root",
@@ -535,62 +530,18 @@ export default function IdeShell({
         hasChildren: true,
         expanded: true,
       },
-      {
-        key: "quick-menu",
-        label: "퀵메뉴",
-        depth: 1,
-        icon: "folderAccent",
-        hasChildren: true,
-        expanded: true,
-        rowTone: "amber",
-      },
-      {
-        key: "home-screen",
-        label: "메인",
-        depth: 2,
-        icon: "class",
-        rowTone: isCurrent("/") ? "selected" : undefined,
-        href: "/",
-      },
-      {
-        key: "problem-list",
-        label: "문제 목록",
-        depth: 2,
-        icon: "class",
-        rowTone: isCurrent("/problems") ? "selected" : undefined,
-        href: "/problems",
-      },
-      {
-        key: "spectate-list",
-        label: "관전",
-        depth: 2,
-        icon: "class",
-        rowTone: isCurrent("/spectate") ? "selected" : undefined,
-        href: "/spectate",
-      },
-      {
-        key: "mypage",
-        label: "마이페이지",
-        depth: 2,
-        icon: "class",
-        rowTone: isCurrent("/mypage") ? "selected" : undefined,
-        href: "/mypage",
-      },
+      { key: "home-screen", label: "메인", depth: 1, icon: "class", href: "/" },
+      { key: "problem-list", label: "문제 목록", depth: 1, icon: "class", href: "/problems" },
+      { key: "spectate-list", label: "관전", depth: 1, icon: "class", href: "/spectate" },
+      { key: "mypage", label: "마이페이지", depth: 1, icon: "class", href: "/mypage" },
     ];
 
     if (session.member?.role === "ROLE_ADMIN") {
-      items.push({
-        key: "admin-page",
-        label: "관리자페이지",
-        depth: 2,
-        icon: "class",
-        rowTone: isCurrent("/admin") ? "selected" : undefined,
-        href: "/admin",
-      });
+      items.push({ key: "admin-page", label: "관리자페이지", depth: 1, icon: "class", href: "/admin" });
     }
 
     return items;
-  }, [pathname, session.member?.role]);
+  }, [session.member?.role]);
 
   const isFullBleedCenter =
     pathname === "/" ||
@@ -623,6 +574,7 @@ export default function IdeShell({
             onToggleQuickMenu={() => setIsQuickMenuOpen((current) => !current)}
             sessionAuthenticated={session.authenticated}
             projectTreeItems={projectTreeItems}
+            pathname={pathname}
           />
 
           <section className="h-full min-h-0 overflow-hidden bg-app-base">

@@ -734,7 +734,7 @@ export default function QueueModal({
 
             <div className="grid max-h-[65vh] grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_220px]">
               <div className="min-w-0 px-3 py-3">
-                <pre className="overflow-x-auto font-mono text-[16px] leading-[1.2] text-app-secondary">
+                <pre className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden font-mono text-[16px] leading-[1.2] text-app-secondary">
                   {SPRING_BOOT_BANNER}
                 </pre>
                 <p className="mt-2 font-mono text-sm text-app-success">

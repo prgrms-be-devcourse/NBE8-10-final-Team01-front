@@ -20,7 +20,7 @@ const ideDbRailTopItems = [
 const ideDbRailBottomItems = [{ icon: "hammer", title: "도구" }];
 
 function renderDbRailIcon(name: string) {
-  const baseClass = "h-4 w-4";
+  const baseClass = "h-5 w-5";
 
   switch (name) {
     case "notifications":
@@ -168,7 +168,7 @@ export default function ProfilePane({
 
   return (
     <aside className="min-h-0 bg-app-elevated md:col-span-2 lg:col-span-1">
-      <div className={`grid h-full ${isPanelOpen ? "grid-cols-[minmax(0,1fr)_38px]" : "grid-cols-[38px]"}`}>
+      <div className={`grid h-full ${isPanelOpen ? "grid-cols-[minmax(0,1fr)_44px]" : "grid-cols-[44px]"}`}>
         <div className={`min-h-0 ${isPanelOpen ? "block" : "hidden"}`}>
           {isNotificationPanelOpen ? (
             <>
@@ -370,6 +370,7 @@ export default function ProfilePane({
         <div className="flex min-h-0 flex-col items-center justify-between border-l border-app-border-strong/80 bg-app-rail py-2">
           <div className="flex flex-col items-center gap-2">
             {ideDbRailTopItems.map((item) => {
+              const isFunctional = item.icon === "database" || item.icon === "notifications";
               const isActive =
                 (item.icon === "database" && isProfilePanelOpen) ||
                 (item.icon === "notifications" && isNotificationPanelOpen);
@@ -388,8 +389,10 @@ export default function ProfilePane({
                 aria-label={item.title}
                 className={`relative h-8 w-8 rounded-md border transition ${
                   isActive
-                    ? "border-app-accent/70 bg-app-accent text-white shadow-[0_0_0_1px_var(--app-accent-glow)]"
-                    : "border-transparent text-app-muted hover:bg-app-elevated/90 hover:text-app-primary"
+                    ? "border-app-accent/70 bg-app-accent/15 text-app-accent-soft"
+                    : isFunctional
+                      ? "border-app-border-strong bg-app-elevated/95 text-app-primary"
+                      : "border-transparent text-app-muted hover:bg-app-elevated/90 hover:text-app-secondary"
                 }`}
               >
                 <span className="flex items-center justify-center">{renderDbRailIcon(item.icon)}</span>

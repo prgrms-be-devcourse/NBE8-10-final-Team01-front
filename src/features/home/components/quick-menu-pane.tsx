@@ -195,6 +195,7 @@ interface QuickMenuPaneProps {
   onToggleQuickMenu: () => void;
   sessionAuthenticated: boolean;
   projectTreeItems: QuickMenuTreeItem[];
+  pathname: string;
 }
 
 export default function QuickMenuPane({
@@ -202,7 +203,15 @@ export default function QuickMenuPane({
   onToggleQuickMenu,
   sessionAuthenticated,
   projectTreeItems,
+  pathname,
 }: QuickMenuPaneProps) {
+  const isCurrent = (href: string | undefined) => {
+    if (!href) return false;
+    return href === "/"
+      ? pathname === "/"
+      : pathname === href || pathname.startsWith(`${href}/`);
+  };
+
   return (
     <aside className="min-h-0 border-b border-app-border-strong/80 bg-app-elevated md:border-b-0 md:border-r">
       <div className={`grid h-full ${isQuickMenuOpen ? "grid-cols-[48px_minmax(0,1fr)]" : "grid-cols-[48px]"}`}>
@@ -221,8 +230,10 @@ export default function QuickMenuPane({
                 aria-label={item.title}
                 className={`h-8 w-8 rounded-md border text-[10px] font-semibold tracking-wide transition ${
                   item.icon === "project" && isQuickMenuOpen
-                    ? "border-app-border-strong bg-app-elevated/95 text-app-primary"
-                    : "border-transparent text-app-muted hover:bg-app-elevated/90 hover:text-app-secondary"
+                    ? "border-app-accent/70 bg-app-accent/15 text-app-accent-soft"
+                    : item.icon === "project"
+                      ? "border-app-border-strong bg-app-elevated/95 text-app-primary"
+                      : "border-transparent text-app-muted hover:bg-app-elevated/90 hover:text-app-secondary"
                 }`}
               >
                 <span className="flex items-center justify-center">{renderRailIcon(item.icon)}</span>
@@ -246,7 +257,7 @@ export default function QuickMenuPane({
 
         <div className={`min-h-0 flex-col ${isQuickMenuOpen ? "flex" : "hidden"}`}>
           <div className="flex h-12 items-center justify-between border-b border-app-border-strong/80 px-4">
-            <p className="text-sm font-semibold text-app-primary">퀵 메뉴</p>
+            <p className="text-sm font-semibold text-app-primary">BRACKET {}</p>
             <span className="text-xs text-app-dim">▼</span>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-3 font-mono text-sm text-app-secondary">
@@ -256,8 +267,8 @@ export default function QuickMenuPane({
                   ? "bg-app-warn/15"
                   : item.rowTone === "green"
                     ? "bg-app-success/15"
-                    : item.rowTone === "selected"
-                      ? "bg-app-elevated/70"
+                    : isCurrent(item.href)
+                      ? "bg-app-accent/20"
                       : "hover:bg-app-elevated/90";
 
               const content = (
