@@ -141,7 +141,7 @@ export default function LoginScreen() {
             <button
               type="submit"
               disabled={isPending}
-              className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-md bg-app-accent px-4 text-sm font-semibold text-white transition hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:bg-app-elevated disabled:text-app-secondary"
+              className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-md border border-app-accent/45 bg-app-accent px-4 text-sm font-semibold text-white transition hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:border-app-border disabled:bg-app-elevated disabled:text-app-secondary"
             >
               {isPending ? "로그인 중..." : "로그인"}
             </button>

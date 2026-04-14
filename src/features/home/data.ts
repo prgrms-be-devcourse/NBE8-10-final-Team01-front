@@ -6,6 +6,7 @@ export const DEFAULT_REQUIRED_COUNT = 4;
 export interface QueueCategoryOption {
   value: string;
   label: string;
+  difficulties?: Difficulty[];
   disabled?: boolean;
 }
 
