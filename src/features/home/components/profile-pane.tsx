@@ -349,13 +349,13 @@ export default function ProfilePane({
                 <>
                   <Link
                     href="/signup"
-                    className="block w-full rounded-md border border-app-border bg-app-base px-3 py-2 text-center text-sm font-medium text-app-primary transition hover:bg-app-elevated/90"
+                    className="block w-full rounded-md border border-app-border bg-app-base px-3 py-2 text-center text-sm font-semibold !text-white transition hover:bg-app-elevated/90"
                   >
                     회원가입
                   </Link>
                   <Link
                     href="/login?next=/"
-                    className="block w-full rounded-md bg-app-accent px-3 py-2 text-center text-sm font-semibold text-white transition hover:bg-app-accent-hover"
+                    className="block w-full rounded-md border border-app-accent/45 bg-app-accent px-3 py-2 text-center text-sm font-bold !text-white transition hover:bg-app-accent-hover"
                   >
                     로그인
                   </Link>

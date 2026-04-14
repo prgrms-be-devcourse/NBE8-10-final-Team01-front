@@ -852,11 +852,11 @@ export default function MyPageScreen() {
 
           {!session.authenticated ? (
             <div className="space-y-4 rounded-2xl border border-app-border bg-app-surface px-4 py-4">
-              <p className="text-sm text-app-secondary">{message}</p>
+              <p className="text-sm text-app-primary/90">{message}</p>
               <div className="flex flex-wrap gap-2">
                 <Link
                   href="/login?next=/mypage"
-                  className="inline-flex h-10 items-center justify-center rounded-md bg-app-accent px-4 text-sm font-semibold text-white transition hover:bg-app-accent-hover"
+                  className="inline-flex h-10 items-center justify-center rounded-md border border-app-accent/45 bg-app-accent px-4 text-sm font-semibold text-white transition hover:bg-app-accent-hover"
                 >
                   로그인
                 </Link>

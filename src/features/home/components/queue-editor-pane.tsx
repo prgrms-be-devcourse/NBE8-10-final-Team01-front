@@ -126,7 +126,7 @@ export default function QueueEditorPane({
             type="button"
             onClick={onStartMatch}
             disabled={!canStartMatch}
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-app-accent/45 bg-app-accent px-3 text-sm font-semibold text-white transition hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:border-app-border disabled:bg-app-elevated disabled:text-app-secondary"
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-app-accent/45 bg-app-accent px-3 text-sm font-bold text-[#f8faff] transition hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:border-app-border disabled:bg-app-elevated disabled:text-app-secondary"
             aria-label="매칭 시작"
           >
             <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4 text-app-syntax-icon">
