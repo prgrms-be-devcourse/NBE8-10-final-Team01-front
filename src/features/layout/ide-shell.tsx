@@ -600,7 +600,8 @@ export default function IdeShell({
     pathname.startsWith("/problems/") ||
     pathname.startsWith("/admin") ||
     pathname === "/mypage" ||
-    pathname.startsWith("/battle/rooms/");
+    pathname.startsWith("/battle/rooms/") ||
+    pathname.startsWith("/spectate/rooms/");
 
   return (
     <SessionContext.Provider
