@@ -230,8 +230,10 @@ export default function QuickMenuPane({
                 aria-label={item.title}
                 className={`h-8 w-8 rounded-md border text-[10px] font-semibold tracking-wide transition ${
                   item.icon === "project" && isQuickMenuOpen
-                    ? "border-app-border-strong bg-app-elevated/95 text-app-primary"
-                    : "border-transparent text-app-muted hover:bg-app-elevated/90 hover:text-app-secondary"
+                    ? "border-app-accent/70 bg-app-accent/15 text-app-accent-soft"
+                    : item.icon === "project"
+                      ? "border-app-border-strong bg-app-elevated/95 text-app-primary"
+                      : "border-transparent text-app-muted hover:bg-app-elevated/90 hover:text-app-secondary"
                 }`}
               >
                 <span className="flex items-center justify-center">{renderRailIcon(item.icon)}</span>

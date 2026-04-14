@@ -514,11 +514,11 @@ export default function IdeShell({
 
   const layoutColumnsClass = isQuickMenuOpen
     ? isPanelOpen
-      ? "grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_240px] xl:grid-cols-[260px_minmax(0,1fr)_280px] 2xl:grid-cols-[290px_minmax(0,1fr)_320px]"
-      : "grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_38px] xl:grid-cols-[260px_minmax(0,1fr)_38px] 2xl:grid-cols-[290px_minmax(0,1fr)_38px]"
+      ? "grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_240px] xl:grid-cols-[280px_minmax(0,1fr)_280px] 2xl:grid-cols-[320px_minmax(0,1fr)_320px]"
+      : "grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)_44px] xl:grid-cols-[280px_minmax(0,1fr)_44px] 2xl:grid-cols-[320px_minmax(0,1fr)_44px]"
     : isPanelOpen
       ? "grid-cols-1 md:grid-cols-[48px_minmax(0,1fr)] lg:grid-cols-[48px_minmax(0,1fr)_240px] xl:grid-cols-[48px_minmax(0,1fr)_280px] 2xl:grid-cols-[48px_minmax(0,1fr)_320px]"
-      : "grid-cols-1 md:grid-cols-[48px_minmax(0,1fr)] lg:grid-cols-[48px_minmax(0,1fr)_38px] xl:grid-cols-[48px_minmax(0,1fr)_38px] 2xl:grid-cols-[48px_minmax(0,1fr)_38px]";
+      : "grid-cols-1 md:grid-cols-[48px_minmax(0,1fr)] lg:grid-cols-[48px_minmax(0,1fr)_44px] xl:grid-cols-[48px_minmax(0,1fr)_44px] 2xl:grid-cols-[48px_minmax(0,1fr)_44px]";
 
   const projectTreeItems = useMemo<QuickMenuTreeItem[]>(() => {
     const items: QuickMenuTreeItem[] = [
