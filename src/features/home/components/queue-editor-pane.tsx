@@ -76,7 +76,6 @@ export default function QueueEditorPane({
   onDifficultyChange,
   difficultyOptions,
   queueMemo,
-  onQueueMemoChange,
   showStopQueueButton,
   onCancelQueue,
   isBusy,
@@ -89,13 +88,17 @@ export default function QueueEditorPane({
     36,
     Math.max(18, Math.ceil(estimateTextWidth(selectedCategoryLabel) + 8)),
   );
-  const trimmedMemo = queueMemo.trim();
-  const memoSample = trimmedMemo.length > 0 ? trimmedMemo : "메모";
-  const memoContentWidthCh = Math.ceil(estimateTextWidth(memoSample));
-  const memoWidthCh =
-    trimmedMemo.length > 0
-      ? Math.min(72, Math.max(24, memoContentWidthCh + 5))
-      : 24;
+  const memoText = queueMemo.trim();
+  const javaSyntaxTone = {
+    "--app-syntax-default": "#a9b7c6",
+    "--app-syntax-comment": "#808080",
+    "--app-syntax-keyword": "#cc7832",
+    "--app-syntax-name": "#3b9ef4",
+    "--app-syntax-operator": "#a9b7c6",
+    "--app-syntax-string": "#6aab73",
+    "--app-syntax-value": "#a9b7c6",
+    "--app-syntax-constant": "#c77dbb",
+  } as CSSProperties;
 
   return (
     <main className="h-full overflow-hidden border-b border-app-border/80 bg-app-base lg:border-b-0 lg:border-r">
@@ -114,7 +117,7 @@ export default function QueueEditorPane({
                   <circle cx="6.4" cy="10.8" r="0.7" fill="currentColor" />
                 </svg>
               </span>
-              <span>.env.queue.match</span>
+              <span>Main.java</span>
               <span className="text-app-dim">×</span>
               <span className="absolute inset-x-0 bottom-0 h-[2px] bg-app-border-strong" />
             </div>
@@ -154,25 +157,67 @@ export default function QueueEditorPane({
                 </div>
               ))}
             </div>
-            <div className="px-4 py-4 text-app-syntax-default">
+            <div className="px-4 py-4 text-app-syntax-default" style={javaSyntaxTone}>
               <div className="whitespace-nowrap text-app-syntax-comment" style={editorLineStyle}>
-                # queue config
+                {"// queue config"}
               </div>
-              <div className="whitespace-nowrap text-app-syntax-comment" style={editorLineStyle}>
-                <span className="font-semibold text-app-syntax-keyword"># TODO:</span>
-                <span className="text-app-syntax-keyword">
+              <div className="whitespace-nowrap" style={editorLineStyle}>
+                <span className="text-app-syntax-comment">{"// "}</span>
+                <span className="font-semibold" style={{ color: "#8cb34a" }}>
+                  {"TODO:"}
+                </span>
+                <span style={{ color: "#8cb34a" }}>
                   {" "}
                   카테고리와 난이도를 선택하고 매칭 시작을 눌러 대기열에 참가합니다.
                 </span>
               </div>
-              <div className="flex items-center gap-2" style={editorRowStyle}>
-                <span className="w-40 shrink-0 text-app-syntax-name">QUEUE_CATEGORY</span>
-                <span className="w-4 shrink-0 text-center text-app-syntax-operator">=</span>
-                <div className="relative w-fit max-w-full leading-none">
+              <div className="whitespace-nowrap" style={editorLineStyle}>
+                <span style={{ color: "#bbb529" }}>@BracketApplication</span>
+                <span className="ml-3 inline-flex items-center gap-1 text-[11px] text-app-syntax-comment">
+                  <svg viewBox="0 0 16 16" fill="none" className="h-3 w-3">
+                    <circle cx="8" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.2" />
+                    <path d="M3.5 12.5a4.5 4.5 0 0 1 9 0" stroke="currentColor" strokeWidth="1.2" />
+                  </svg>
+                  <span>BracCo *</span>
+                </span>
+              </div>
+              <div className="whitespace-nowrap" style={editorLineStyle}>
+                <span className="text-app-syntax-keyword">public class </span>
+                <span className="text-app-syntax-value">QueueMatchMain </span>
+                <span className="text-app-syntax-operator">{"{"}</span>
+              </div>
+              <div className="whitespace-nowrap pl-6" style={editorLineStyle}>
+                <span className="text-app-syntax-keyword">public static void </span>
+                <span className="text-app-syntax-name">main</span>
+                <span className="text-app-syntax-operator">(</span>
+                <span className="text-app-syntax-value">String</span>
+                <span className="text-app-syntax-operator">[] </span>
+                <span className="text-app-syntax-value">args</span>
+                <span className="text-app-syntax-operator">)</span>
+                <span className="text-app-syntax-operator"> {"{"}</span>
+              </div>
+              <div className="whitespace-nowrap pl-12" style={editorLineStyle}>
+                <span className="text-app-syntax-value">QueueConfig</span>
+                <span className="text-app-syntax-default"> </span>
+                <span className="text-app-syntax-value">queue</span>
+                <span className="text-app-syntax-default"> </span>
+                <span className="text-app-syntax-operator">=</span>
+                <span className="text-app-syntax-default"> </span>
+                <span className="text-app-syntax-value">QueueConfig</span>
+                <span className="text-app-syntax-operator">.</span>
+                <span className="text-app-syntax-default italic">builder</span>
+                <span className="text-app-syntax-operator">()</span>
+              </div>
+              <div className="flex items-center whitespace-nowrap pl-16" style={editorRowStyle}>
+                <span className="text-app-syntax-operator">.</span>
+                <span className="text-app-syntax-default">category</span>
+                <span className="text-app-syntax-operator">(</span>
+                <span className="text-app-syntax-string">{'"'}</span>
+                <div className="relative ml-0.5 w-fit max-w-full leading-none">
                   <select
                     value={category}
                     onChange={(event) => onCategoryChange(event.target.value as QueueCategoryValue)}
-                    className="h-7 w-full appearance-none rounded-sm border border-app-border bg-app-elevated px-2 pr-6 text-xs text-app-syntax-string outline-none transition focus:border-app-accent/60"
+                    className="h-7 w-full cursor-pointer appearance-none rounded-sm border border-app-border/70 bg-app-elevated/35 px-2 pr-6 text-xs text-app-syntax-string outline-none transition hover:border-app-syntax-selected-border/65 focus:border-app-syntax-selected-border/85"
                     style={{ width: `calc(${categoryWidthCh}ch + 0.75rem)`, maxWidth: "100%" }}
                   >
                     {categoryOptions.map((item) => (
@@ -185,15 +230,18 @@ export default function QueueEditorPane({
                       </option>
                     ))}
                   </select>
-                  <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-app-dim">
+                  <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-app-syntax-string/80">
                     ▾
                   </span>
                 </div>
+                <span className="ml-0.5 text-app-syntax-string">{'"'}</span>
+                <span className="text-app-syntax-operator">)</span>
               </div>
-              <div className="flex items-center gap-2" style={editorRowStyle}>
-                <span className="w-40 shrink-0 text-app-syntax-name">QUEUE_LEVEL</span>
-                <span className="w-4 shrink-0 text-center text-app-syntax-operator">=</span>
-                <div className="flex flex-wrap gap-1 leading-none">
+              <div className="flex items-center whitespace-nowrap pl-16" style={editorRowStyle}>
+                <span className="text-app-syntax-operator">.</span>
+                <span className="text-app-syntax-default">level</span>
+                <span className="text-app-syntax-operator">(</span>
+                <div className="ml-1 flex flex-wrap gap-1 leading-none">
                   {difficultyOptions.map((option) => (
                     <label
                       key={option.value}
@@ -215,29 +263,43 @@ export default function QueueEditorPane({
                     </label>
                   ))}
                 </div>
+                <span className="text-app-syntax-operator">)</span>
               </div>
-              <div className="flex items-center gap-2" style={editorRowStyle}>
-                <span className="w-40 shrink-0 text-app-syntax-name">QUEUE_PARTY_SIZE</span>
-                <span className="w-4 shrink-0 text-center text-app-syntax-operator">=</span>
+              <div className="flex items-center whitespace-nowrap pl-16" style={editorRowStyle}>
+                <span className="text-app-syntax-operator">.</span>
+                <span className="text-app-syntax-default">partySize</span>
+                <span className="text-app-syntax-operator">(</span>
+                <span className="text-app-syntax-string">{'"'}</span>
                 <span
                   title="배틀 규칙상 4인 고정"
-                  className="inline-flex min-w-8 items-center justify-center rounded-sm border border-app-border bg-app-elevated px-2 text-xs font-semibold text-app-syntax-constant"
+                  className="inline-flex min-w-[8ch] items-center px-0.5 text-xs font-medium text-app-syntax-string"
                 >
                   4인 고정
                 </span>
+                <span className="text-app-syntax-string">{'"'}</span>
+                <span className="text-app-syntax-operator">)</span>
               </div>
-              <div className="flex items-center gap-2" style={editorRowStyle}>
-                <span className="w-40 shrink-0 text-app-syntax-name">QUEUE_MEMO</span>
-                <span className="w-4 shrink-0 text-center text-app-syntax-operator">=</span>
-                <div className="w-fit max-w-full">
-                  <input
-                    type="text"
-                    value={queueMemo}
-                    onChange={(event) => onQueueMemoChange(event.target.value)}
-                    className="h-7 w-full rounded-sm border border-app-border bg-app-elevated px-2 text-xs text-app-syntax-string outline-none transition focus:border-app-accent/60"
-                    style={{ width: `calc(${memoWidthCh}ch + 1.25rem)`, maxWidth: "100%" }}
-                  />
-                </div>
+              <div className="flex items-center whitespace-nowrap pl-16" style={editorRowStyle}>
+                <span className="text-app-syntax-operator">.</span>
+                <span className="text-app-syntax-default">memo</span>
+                <span className="text-app-syntax-operator">(</span>
+                <span className="text-app-syntax-string">{'"'}</span>
+                <span className="text-xs font-medium text-app-syntax-string">
+                  {memoText.length > 0 ? memoText : "메인에서 바로 매칭을 시작할 수 있습니다."}
+                </span>
+                <span className="text-app-syntax-string">{'"'}</span>
+                <span className="text-app-syntax-operator">)</span>
+              </div>
+              <div className="whitespace-nowrap pl-16" style={editorLineStyle}>
+                <span className="text-app-syntax-operator">.</span>
+                <span className="text-app-syntax-default">build</span>
+                <span className="text-app-syntax-operator">();</span>
+              </div>
+              <div className="whitespace-nowrap pl-6 text-app-syntax-operator" style={editorLineStyle}>
+                {"}"}
+              </div>
+              <div className="whitespace-nowrap text-app-syntax-operator" style={editorLineStyle}>
+                {"}"}
               </div>
 
               <div className="mt-2 text-app-syntax-comment" style={editorLineStyle}>
