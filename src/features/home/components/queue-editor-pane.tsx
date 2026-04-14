@@ -28,6 +28,33 @@ interface QueueEditorPaneProps {
   terminalMessage: string | null;
 }
 
+const difficultyToneStyles: Record<
+  Difficulty,
+  {
+    active: string;
+    inactive: string;
+  }
+> = {
+  EASY: {
+    active:
+      "border-emerald-300 bg-emerald-400/30 text-emerald-50 shadow-[0_0_0_1px_rgba(52,211,153,0.45),0_0_12px_rgba(16,185,129,0.35)]",
+    inactive:
+      "border-emerald-500/20 bg-emerald-500/5 text-emerald-200/55 opacity-75 hover:bg-emerald-500/12 hover:opacity-100",
+  },
+  MEDIUM: {
+    active:
+      "border-amber-300 bg-amber-400/28 text-amber-50 shadow-[0_0_0_1px_rgba(251,191,36,0.45),0_0_12px_rgba(245,158,11,0.35)]",
+    inactive:
+      "border-amber-500/20 bg-amber-500/5 text-amber-200/55 opacity-75 hover:bg-amber-500/12 hover:opacity-100",
+  },
+  HARD: {
+    active:
+      "border-rose-300 bg-rose-400/28 text-rose-50 shadow-[0_0_0_1px_rgba(251,113,133,0.45),0_0_12px_rgba(244,63,94,0.35)]",
+    inactive:
+      "border-rose-500/20 bg-rose-500/5 text-rose-200/55 opacity-75 hover:bg-rose-500/12 hover:opacity-100",
+  },
+};
+
 export default function QueueEditorPane({
   editorPaneRef,
   editorContentStyle,
@@ -149,10 +176,10 @@ export default function QueueEditorPane({
                   {difficultyOptions.map((option) => (
                     <label
                       key={option.value}
-                      className={`rounded-sm border px-2 py-1 text-xs transition ${
+                      className={`cursor-pointer select-none rounded-sm border px-2 py-1 text-xs font-medium transition ${
                         difficulty === option.value
-                          ? "border-app-syntax-selected-border/60 bg-app-syntax-selected-bg text-app-syntax-selected-text"
-                          : "border-app-border bg-app-elevated text-app-syntax-value hover:bg-app-elevated/90"
+                          ? `${difficultyToneStyles[option.value].active} translate-y-[-1px] font-semibold`
+                          : difficultyToneStyles[option.value].inactive
                       }`}
                     >
                       <input
