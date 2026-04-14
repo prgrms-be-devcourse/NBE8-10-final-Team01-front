@@ -60,7 +60,9 @@ export default async function RootLayout({
                 href="/"
                 className="text-sm font-semibold tracking-tight text-app-primary"
               >
-                BRACKET C{"{ }"}DE
+                BRACKET C
+                <span className="text-app-accent">{"{ }"}</span>
+                DE
               </Link>
             </div>
           </header>
